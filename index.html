@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Space Rider</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// CMD Space Rider — Browser terminal preview
+// Faithful port of the CLI game rendered as a canvas-based character grid
+
+const {PI,sin,cos,sqrt,abs,max,min,floor,random,atan2}=Math;
+const TAU=PI*2;
+const rand=(a=0,b=1)=>a+random()*(b-a);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,lo,hi)=>max(lo,min(hi,v));
+
+// ===== ANSI 256 color palette → hex =====
+const ANSI256 = (function(){
+  const c = new Array(256);
+  // Standard 16 colors (approximate xterm defaults)
+  const base16 = [
+    '#000000','#aa0000','#00aa00','#aa5500',
+    '#0000aa','#aa00aa','#00aaaa','#aaaaaa',
+    '#555555','#ff5555','#55ff55','#ffff55',
+    '#5555ff','#ff55ff','#55ffff','#ffffff',
+  ];
+  for(let i=0;i<16;i++) c[i]=base16[i];
+  // 216-color cube (indices 16-231)
+  const vals=[0,0x5f,0x87,0xaf,0xd7,0xff];
+  for(let i=0;i<216;i++){
+    const r=vals[floor(i/36)];
+    const g=vals[floor(i/6)%6];
+    const b=vals[i%6];
+    c[16+i]='#'+(r<<16|g<<8|b).toString(16).padStart(6,'0');
+  }
+  // Grayscale ramp (indices 232-255)
+  for(let i=0;i<24;i++){
+    const v=8+i*10;
+    c[232+i]='#'+(v<<16|v<<8|v).toString(16).padStart(6,'0');
+  }
+  return c;
+})();
+
+// Color constants (matching types.ts)
+const C={
+  BLACK:0,RED:1,GREEN:2,YELLOW:3,BLUE:4,MAGENTA:5,CYAN:6,WHITE:7,
+  GRAY:8,BRIGHT_RED:9,BRIGHT_GREEN:10,BRIGHT_YELLOW:11,
+  BRIGHT_BLUE:12,BRIGHT_MAGENTA:13,BRIGHT_CYAN:14,BRIGHT_WHITE:15,
+  DARK_BLUE:17,DARK_CYAN:23,DARK_GREEN:22,
+  NEON_CYAN:51,NEON_GREEN:46,NEON_MAGENTA:201,NEON_RED:196,ORANGE:208,
+};
+
+// ===== ScreenBuffer (canvas-backed) =====
+class ScreenBuffer{
+  constructor(w,h){this.resize(w,h)}
+  resize(w,h){
+    this.width=w;this.height=h;
+    const sz=w*h;
+    this.chars=new Array(sz).fill(' ');
+    this.fg=new Array(sz).fill(7);
+    this.bg=new Array(sz).fill(0);
+  }
+  clear(bgColor=0){this.chars.fill(' ');this.fg.fill(7);this.bg.fill(bgColor)}
+  put(x,y,ch,fgColor=7,bgColor=0){
+    x=floor(x);y=floor(y);
+    if(x<0||x>=this.width||y<0||y>=this.height)return;
+    const i=y*this.width+x;
+    this.chars[i]=ch;this.fg[i]=fgColor;this.bg[i]=bgColor;
+  }
+  putString(x,y,str,fgColor=7,bgColor=0){
+    for(let i=0;i<str.length;i++)this.put(x+i,y,str[i],fgColor,bgColor);
+  }
+  putStringCenter(y,str,fgColor=7,bgColor=0){
+    const x=floor((this.width-str.length)/2);
+    this.putString(x,y,str,fgColor,bgColor);
+  }
+  fillRect(x,y,w,h,ch,fgColor,bgColor){
+    for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++)this.put(x+dx,y+dy,ch,fgColor,bgColor);
+  }
+  hLine(x,y,len,ch,fgColor,bgColor=0){
+    for(let i=0;i<len;i++)this.put(x+i,y,ch,fgColor,bgColor);
+  }
+  vLine(x,y,len,ch,fgColor,bgColor=0){
+    for(let i=0;i<len;i++)this.put(x,y+i,ch,fgColor,bgColor);
+  }
+  render(ctx,cellW,cellH,font){
+    ctx.textBaseline='top';
+    ctx.font=font;
+    for(let y=0;y<this.height;y++){
+      for(let x=0;x<this.width;x++){
+        const i=y*this.width+x;
+        const px=x*cellW;
+        const py=y*cellH;
+        // Background
+        const bgHex=ANSI256[this.bg[i]]||'#000000';
+        if(this.bg[i]!==0){
+          ctx.fillStyle=bgHex;
+          ctx.fillRect(px,py,cellW+1,cellH+1);
+        }
+        // Character
+        const ch=this.chars[i];
+        if(ch!==' '){
+          ctx.fillStyle=ANSI256[this.fg[i]]||'#aaaaaa';
+          ctx.fillText(ch,px,py);
+        }
+      }
+    }
+  }
+}
+
+// ===== Game Constants =====
+const NUM_RINGS=30;
+const RECYCLE_Z=NUM_RINGS*14;
+const HUD_ROWS=3;
+const FOOTER_ROWS=2;
+const Y_FACTOR=0.4;
+const SHIP_HALF_W=1;
+const SHIP_HALF_H=1;
+
+const DEBUG_MODES=['mines','orbs','obstacleCollision','mineCollision','chaos'];
+const DEBUG_MODE_NAMES={
+  mines:'MINE FIELD',orbs:'ORB HARVEST',
+  obstacleCollision:'COLLISION COURSE',mineCollision:'MINE SWEEPER',chaos:'CHAOS PROTOCOL',
+};
+const DEBUG_MODE_DESCS={
+  mines:'Only mines. Pure evasion.',orbs:'Only orbs. Collect them all.',
+  obstacleCollision:'Hit obstacles. Track every impact.',
+  mineCollision:'Ram mines. Log collisions.',chaos:'Everything. Everywhere. All at once.',
+};
+
+// ===== Game Engine (port of game.ts) =====
+class Game{
+  constructor(){this.state=this.createInitialState()}
+  createInitialState(){
+    return{
+      mode:'menu',debugMode:null,score:0,distance:0,shield:100,bestScore:0,
+      speed:0.3,baseSpeed:0.3,boostSpeed:0.55,
+      shipX:0,shipY:0,shipRoll:0,time:0,gameTime:0,
+      obstacles:[],orbs:[],mines:[],bullets:[],particles:[],stars:[],
+      tunnelRadius:8,maxViewZ:200,
+      lastObstacleIncreaseMinute:0,mineTrackTime:0,minesToPresent:0,
+      mineSpawnTimers:[],firstMinuteElapsed:false,
+      trackerCount:0,debugMenuSelected:0,chaosFireTimer:0,
+      damageFlash:0,collectFlash:0,boosting:false,
+      screenWidth:80,screenHeight:24,
+    };
+  }
+  toScreen(gx,gy,gz){
+    const s=this.state;
+    const sw=s.screenWidth,sh=s.screenHeight;
+    const gameTop=HUD_ROWS;
+    const gameBottom=sh-FOOTER_ROWS;
+    const gameH=gameBottom-gameTop;
+    const t=max(0,min(1,(gz+s.maxViewZ)/s.maxViewZ));
+    const scale=0.15+t*0.85;
+    const baseRow=gameTop+t*(gameH-2);
+    const colRange=(sw-6)/2;
+    const col=sw/2+(gx/s.tunnelRadius)*colRange*scale;
+    const rowOffset=-(gy/s.tunnelRadius)*gameH*Y_FACTOR*scale;
+    const row=baseRow+rowOffset;
+    return{col:floor(col),row:floor(row),scale};
+  }
+  initStars(w,h){
+    this.state.stars=[];
+    const starChars=['.','\u00B7','*','+'];
+    const starColors=[8,7,15,8,7];
+    for(let i=0;i<40;i++){
+      this.state.stars.push({
+        x:floor(random()*w),y:floor(random()*h),
+        speed:rand(0.3,1.5),
+        char:starChars[floor(random()*starChars.length)],
+        color:starColors[floor(random()*starColors.length)],
+      });
+    }
+  }
+  showDebugMenu(){this.state.mode='debugMenu';this.state.debugMenuSelected=0}
+  startGame(mode){
+    const s=this.state;
+    s.debugMode=mode||null;s.mode='playing';
+    s.score=0;s.distance=0;s.shield=100;
+    s.baseSpeed=0.3;s.boostSpeed=0.55;s.speed=s.baseSpeed;
+    s.shipX=0;s.shipY=1;s.shipRoll=0;
+    s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.mines=[];
+    s.gameTime=0;s.lastObstacleIncreaseMinute=0;
+    s.mineTrackTime=0;s.minesToPresent=0;s.mineSpawnTimers=[];
+    s.firstMinuteElapsed=false;s.trackerCount=0;s.chaosFireTimer=0;
+    s.damageFlash=0;s.collectFlash=0;s.boosting=false;
+
+    if(s.debugMode==='mines'){
+      for(let i=0;i<40;i++)this.spawnMine(-i*10-30);
+    }else if(s.debugMode==='orbs'){
+      for(let i=0;i<100;i++)this.spawnOrb(-i*8-15);
+    }else if(s.debugMode==='obstacleCollision'){
+      for(let i=0;i<60;i++)this.spawnObstacle(-i*14-30);
+    }else if(s.debugMode==='mineCollision'){
+      for(let i=0;i<40;i++)this.spawnMine(-i*10-30);
+    }else if(s.debugMode==='chaos'){
+      for(let i=0;i<120;i++)this.spawnObstacle(-i*7-20);
+      for(let i=0;i<50;i++)this.spawnOrb(-i*10-15);
+      for(let i=0;i<25;i++)this.spawnMine(-i*12-30);
+    }else{
+      for(let i=0;i<60;i++){
+        this.spawnObstacle(-i*14-30);
+        if(random()<0.4)this.spawnOrb(-i*14-20);
+      }
+    }
+  }
+  endGame(){
+    const s=this.state;
+    s.mode='dead';s.bestScore=max(s.bestScore,s.score);
+  }
+  spawnObstacle(z){
+    this.state.obstacles.push({
+      x:rand(-4.5,4.5),y:rand(0.5,4.5),z,
+      rot:rand(0,TAU),rotSpeed:rand(-2,2),scale:rand(0.6,1.5),
+    });
+  }
+  spawnOrb(z){
+    this.state.orbs.push({x:rand(-4.5,4.5),y:rand(0.5,4.5),z,collected:false});
+  }
+  spawnMine(z){
+    this.state.mines.push({
+      x:rand(-4.5,4.5),y:rand(0.5,4.5),z,
+      rot:rand(0,TAU),rotSpeed:rand(-2,2),scale:rand(0.66,1.65),hp:5,
+    });
+  }
+  spawnParticles(x,y,z,color,count){
+    for(let i=0;i<count;i++){
+      this.state.particles.push({
+        x,y,z,vx:rand(-3,3),vy:rand(-3,3),vz:rand(-1,2),
+        life:rand(0.3,0.8),maxLife:0.8,color,
+      });
+    }
+  }
+  handleMenuInput(justPressed){
+    const s=this.state;
+    if(s.mode==='menu'||s.mode==='dead'){
+      if(justPressed.ENTER)this.startGame();
+    }
+    if(s.mode==='debugMenu'){
+      if(justPressed.UP)s.debugMenuSelected=(s.debugMenuSelected-1+DEBUG_MODES.length)%DEBUG_MODES.length;
+      if(justPressed.DOWN)s.debugMenuSelected=(s.debugMenuSelected+1)%DEBUG_MODES.length;
+      if(justPressed.ENTER)this.startGame(DEBUG_MODES[s.debugMenuSelected]);
+      for(let i=0;i<5;i++){
+        if(justPressed['DIGIT_'+(i+1)])this.startGame(DEBUG_MODES[i]);
+      }
+    }
+  }
+  update(dt,keys,justPressed){
+    const s=this.state;
+    s.time+=dt;
+    s.damageFlash=max(0,s.damageFlash-dt*8);
+    s.collectFlash=max(0,s.collectFlash-dt*8);
+    if(s.mode==='playing')this.updatePlaying(dt,keys,justPressed);
+  }
+  updatePlaying(dt,keys,justPressed){
+    const s=this.state;
+    const moveSpeed=8;
+    if(keys.A||keys.LEFT){s.shipX-=moveSpeed*dt}
+    if(keys.D||keys.RIGHT){s.shipX+=moveSpeed*dt}
+    if(keys.W||keys.UP){s.shipY+=moveSpeed*dt}
+    if(keys.S||keys.DOWN){s.shipY-=moveSpeed*dt}
+
+    s.boosting=false;
+    if(s.debugMode==='chaos'){
+      s.speed=lerp(s.speed,s.boostSpeed,3*dt);s.boosting=true;
+    }else if(keys.F||keys.SHIFT){
+      s.speed=lerp(s.speed,s.boostSpeed,3*dt);s.boosting=true;
+    }else{
+      s.speed=lerp(s.speed,s.baseSpeed,2*dt);
+    }
+
+    const maxR=s.tunnelRadius-1.5;
+    s.shipX=max(-maxR,min(maxR,s.shipX));
+    s.shipY=max(0,min(maxR,s.shipY));
+
+    if(justPressed.SPACE){
+      s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
+      s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
+      s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+    }
+
+    if(s.debugMode==='chaos'){
+      s.chaosFireTimer+=dt;
+      if(s.chaosFireTimer>=0.12){
+        s.chaosFireTimer=0;
+        s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
+        s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
+        s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+      }
+    }
+
+    const advance=s.speed*60*dt;
+    s.distance+=advance;
+
+    if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision'){
+      s.score+=floor(advance*10*(s.speed/s.baseSpeed));
+    }
+
+    s.baseSpeed=0.3+s.distance*0.00002;
+    s.boostSpeed=s.baseSpeed*1.8;
+    s.gameTime+=dt;
+
+    this.updateObstacleScaling();
+    this.updateMineSpawning(dt);
+    this.updateObstacles(advance,dt);
+    this.updateOrbs(advance);
+    this.updateMines(advance,dt);
+    this.updateBullets(dt,advance);
+    this.updateParticles(dt,advance);
+    this.updateStars(dt);
+  }
+  updateObstacleScaling(){
+    const s=this.state;
+    if(!s.debugMode||s.debugMode==='obstacleCollision'||s.debugMode==='chaos'){
+      const currentMinute=floor(s.gameTime/60);
+      if(currentMinute>s.lastObstacleIncreaseMinute){
+        const newCount=Math.ceil(s.obstacles.length*0.1);
+        for(let i=0;i<newCount;i++)this.spawnObstacle(-rand(30,RECYCLE_Z));
+        s.lastObstacleIncreaseMinute=currentMinute;
+      }
+    }
+  }
+  updateMineSpawning(dt){
+    const s=this.state;
+    if(s.debugMode&&s.debugMode!=='mines'&&s.debugMode!=='mineCollision'&&s.debugMode!=='chaos')return;
+    if(s.debugMode==='mines'||s.debugMode==='mineCollision'||s.debugMode==='chaos'){
+      s.mineTrackTime+=dt;
+      if(s.mineTrackTime>=5){
+        s.mineTrackTime=0;
+        const count=s.debugMode==='chaos'?3:2;
+        for(let i=0;i<count;i++)this.spawnMine(-rand(30,60));
+      }
+    }else{
+      s.mineTrackTime+=dt;
+      if(!s.firstMinuteElapsed){
+        if(s.mineTrackTime>=60){
+          s.firstMinuteElapsed=true;s.mineTrackTime=0;
+          s.minesToPresent+=1;s.mineSpawnTimers=[];
+          for(let i=0;i<s.minesToPresent;i++)s.mineSpawnTimers.push(floor(30*random()));
+        }
+      }else{
+        if(s.mineTrackTime>=30){
+          s.mineTrackTime=0;s.minesToPresent+=1;s.mineSpawnTimers=[];
+          for(let i=0;i<s.minesToPresent;i++)s.mineSpawnTimers.push(floor(30*random()));
+        }
+        for(let i=s.mineSpawnTimers.length-1;i>=0;i--){
+          if(s.mineTrackTime>=s.mineSpawnTimers[i]){
+            this.spawnMine(-rand(30,60));s.mineSpawnTimers.splice(i,1);
+          }
+        }
+      }
+    }
+  }
+  updateObstacles(advance,dt){
+    const s=this.state;
+    if(s.debugMode&&s.debugMode!=='obstacleCollision'&&s.debugMode!=='chaos')return;
+    const shipScr=this.toScreen(s.shipX,s.shipY,0);
+    for(let i=s.obstacles.length-1;i>=0;i--){
+      const o=s.obstacles[i];
+      o.z+=advance;o.rot+=o.rotSpeed*dt;
+      if(o.z>10){o.z-=RECYCLE_Z;o.x=rand(-4.5,4.5);o.y=rand(0.5,4.5);o.scale=rand(0.6,1.5)}
+      if(o.z>-20&&o.z<5){
+        const oScr=this.toScreen(o.x,o.y,o.z);
+        const size=max(1,floor(oScr.scale*2.5));
+        const half=floor(size/2);
+        const dy=shipScr.row-oScr.row;
+        if(abs(shipScr.col-oScr.col)<=SHIP_HALF_W+half&&
+           dy<=2+half&&dy>=-(1+half)){
+          if(s.debugMode==='obstacleCollision'){
+            s.trackerCount++;s.damageFlash=0.5;
+            this.spawnParticles(o.x,o.y,o.z,208,8);
+            o.z=-RECYCLE_Z+rand(-10,10);
+          }else if(s.debugMode==='chaos'){
+            s.damageFlash=0.3;this.spawnParticles(o.x,o.y,o.z,208,8);
+            o.z=-RECYCLE_Z+rand(-10,10);
+          }else{
+            s.shield-=25;s.damageFlash=0.8;
+            this.spawnParticles(o.x,o.y,o.z,9,8);
+            o.z=-RECYCLE_Z+rand(-10,10);
+            if(s.shield<=0){s.shield=0;this.endGame();return}
+          }
+        }
+      }
+    }
+  }
+  updateOrbs(advance){
+    const s=this.state;
+    if(s.debugMode&&s.debugMode!=='orbs'&&s.debugMode!=='chaos')return;
+    const shipScr=this.toScreen(s.shipX,s.shipY,0);
+    for(let i=s.orbs.length-1;i>=0;i--){
+      const o=s.orbs[i];
+      o.z+=advance;
+      if(o.z>10){o.z-=RECYCLE_Z;o.x=rand(-4.5,4.5);o.y=rand(0.5,4.5);o.collected=false}
+      if(!o.collected&&o.z>-20&&o.z<5){
+        const oScr=this.toScreen(o.x,o.y,o.z);
+        const size=max(1,floor(oScr.scale*2));
+        const half=floor(size/2);
+        const dy=shipScr.row-oScr.row;
+        if(abs(shipScr.col-oScr.col)<=SHIP_HALF_W+half&&
+           dy<=2+half&&dy>=-(1+half)){
+          o.collected=true;s.score+=500;
+          s.shield=min(100,s.shield+10);s.collectFlash=0.6;
+          this.spawnParticles(o.x,o.y,o.z,10,10);
+        }
+      }
+    }
+  }
+  updateMines(advance,dt){
+    const s=this.state;
+    if(s.debugMode&&s.debugMode!=='mines'&&s.debugMode!=='mineCollision'&&s.debugMode!=='chaos')return;
+    const shipScr=this.toScreen(s.shipX,s.shipY,0);
+    for(let i=s.mines.length-1;i>=0;i--){
+      const m=s.mines[i];
+      m.z+=advance;m.rot+=m.rotSpeed*dt;
+      if(m.z>10){
+        if(s.debugMode==='mines'||s.debugMode==='mineCollision'){
+          m.z=-rand(30,60);m.x=rand(-4.5,4.5);m.y=rand(0.5,4.5);m.hp=5;continue;
+        }
+        s.mines.splice(i,1);continue;
+      }
+      if(m.z>-20&&m.z<5){
+        const mScr=this.toScreen(m.x,m.y,m.z);
+        const size=max(1,floor(mScr.scale*2.5));
+        const half=floor(size/2);
+        const dy=shipScr.row-mScr.row;
+        if(abs(shipScr.col-mScr.col)<=SHIP_HALF_W+half&&
+           dy<=2+half&&dy>=-(1+half)){
+          if(s.debugMode==='mineCollision'){
+            s.trackerCount++;s.damageFlash=0.5;
+            this.spawnParticles(m.x,m.y,m.z,9,8);
+            m.z=-rand(30,60);m.x=rand(-4.5,4.5);m.y=rand(0.5,4.5);m.hp=5;
+          }else if(s.debugMode==='chaos'){
+            s.damageFlash=0.5;this.spawnParticles(m.x,m.y,m.z,9,15);
+            s.mines.splice(i,1);
+          }else{
+            s.shield-=35;s.damageFlash=1.0;
+            this.spawnParticles(m.x,m.y,m.z,9,15);s.mines.splice(i,1);
+            if(s.shield<=0){s.shield=0;this.endGame();return}
+          }
+        }
+      }
+    }
+  }
+  updateBullets(dt,advance){
+    const s=this.state;
+    for(let i=s.bullets.length-1;i>=0;i--){
+      const b=s.bullets[i];
+      b.z-=60*dt;b.life-=dt;
+      if(b.life<=0){s.bullets.splice(i,1);continue}
+      const bScr=this.toScreen(b.x,b.y,b.z);
+      let hit=false;
+      if(!s.debugMode||s.debugMode==='obstacleCollision'||s.debugMode==='chaos'){
+        for(let j=s.obstacles.length-1;j>=0;j--){
+          const o=s.obstacles[j];
+          if(abs(b.z-o.z)>10)continue;
+          const oScr=this.toScreen(o.x,o.y,o.z);
+          const size=max(1,floor(oScr.scale*2.5));
+          const half=floor(size/2);
+          if(abs(bScr.col-oScr.col)<=half&&
+             bScr.row>=oScr.row-half&&bScr.row-1<=oScr.row+half){
+            this.spawnParticles(o.x,o.y,o.z,208,12);
+            if(s.debugMode==='chaos')s.trackerCount++;
+            if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')s.score+=200;
+            o.z=-RECYCLE_Z+rand(-10,10);
+            s.bullets.splice(i,1);hit=true;break;
+          }
+        }
+      }
+      if(hit)continue;
+      if(!s.debugMode||s.debugMode==='mines'||s.debugMode==='mineCollision'||s.debugMode==='chaos'){
+        for(let j=s.mines.length-1;j>=0;j--){
+          const m=s.mines[j];
+          if(abs(b.z-m.z)>10)continue;
+          const mScr=this.toScreen(m.x,m.y,m.z);
+          const size=max(1,floor(mScr.scale*2.5));
+          const half=floor(size/2);
+          if(abs(bScr.col-mScr.col)<=half&&
+             bScr.row>=mScr.row-half&&bScr.row-1<=mScr.row+half){
+            m.hp-=1;this.spawnParticles(m.x,m.y,m.z,9,5);
+            if(m.hp<=0){
+              this.spawnParticles(m.x,m.y,m.z,9,20);
+              if(s.debugMode==='chaos')s.trackerCount++;
+              if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')s.score+=500;
+              s.mines.splice(j,1);
+            }
+            s.bullets.splice(i,1);break;
+          }
+        }
+      }
+    }
+  }
+  updateParticles(dt,advance){
+    const s=this.state;
+    for(let i=s.particles.length-1;i>=0;i--){
+      const p=s.particles[i];
+      p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=(p.vz+advance)*dt;
+      p.life-=dt;
+      if(p.life<=0)s.particles.splice(i,1);
+    }
+  }
+  updateStars(dt){
+    const s=this.state;
+    const speedMul=s.speed/s.baseSpeed;
+    for(const star of s.stars)star.y+=star.speed*speedMul*dt*30;
+  }
+}
+
+// ===== Rendering (port of render.ts) =====
+
+function gameToScreen(gx,gy,gz,sw,sh,gameTop,gameBottom,tunnelRadius,maxZ){
+  const gameH=gameBottom-gameTop;
+  const t=clamp((gz+maxZ)/maxZ,0,1);
+  const scale=0.15+t*0.85;
+  const baseRow=gameTop+t*(gameH-2);
+  const colRange=(sw-6)/2;
+  const col=sw/2+(gx/tunnelRadius)*colRange*scale;
+  const rowOffset=-(gy/tunnelRadius)*(gameH*0.4)*scale;
+  const row=baseRow+rowOffset;
+  return{col:floor(col),row:floor(row),scale};
+}
+
+function renderGame(screen,state){
+  const w=screen.width,h=screen.height;
+  const gameTop=HUD_ROWS,gameBottom=h-FOOTER_ROWS;
+  screen.clear(C.BLACK);
+  drawStarfield(screen,state,gameTop,gameBottom);
+  drawTunnel(screen,state,gameTop,gameBottom);
+  drawEntitiesFar(screen,state,gameTop,gameBottom);
+  drawBullets(screen,state,gameTop,gameBottom);
+  drawParticles(screen,state,gameTop,gameBottom);
+  drawShip(screen,state,gameTop,gameBottom);
+  drawHUD(screen,state);
+  drawFooter(screen,state);
+  drawEffects(screen,state);
+}
+
+function drawStarfield(screen,state,gameTop,gameBottom){
+  const h=screen.height,w=screen.width;
+  for(const star of state.stars){
+    const sy=star.y%h;
+    const y=sy<0?sy+h:sy;
+    if(y>=gameTop&&y<gameBottom){
+      screen.put(floor(star.x)%w,floor(y),star.char,star.color,C.BLACK);
+    }
+  }
+}
+
+function drawTunnel(screen,state,gameTop,gameBottom){
+  const w=screen.width;
+  const gameH=gameBottom-gameTop;
+  const center=floor(w/2);
+  const ringSpacing=4;
+  const ringOffset=floor(state.distance*0.3)%ringSpacing;
+  for(let row=gameTop;row<gameBottom;row++){
+    const t=(row-gameTop)/gameH;
+    const halfSpan=floor(3+t*(center-4));
+    const leftWall=center-halfSpan;
+    const rightWall=center+halfSpan;
+    const thickness=max(1,floor(t*3));
+    let wallChar,wallColor;
+    const pulse=sin(state.time*3+row*0.15)*0.3+0.7;
+    if(t<0.2){wallChar='\u2591';wallColor=pulse>0.6?C.DARK_BLUE:C.BLUE}
+    else if(t<0.5){wallChar='\u2592';wallColor=pulse>0.6?C.BLUE:C.BRIGHT_BLUE}
+    else if(t<0.8){wallChar='\u2593';wallColor=pulse>0.6?C.BRIGHT_BLUE:C.CYAN}
+    else{wallChar='\u2588';wallColor=pulse>0.6?C.CYAN:C.BRIGHT_CYAN}
+    for(let dx=0;dx<thickness;dx++){
+      screen.put(leftWall-dx,row,wallChar,wallColor,C.BLACK);
+      screen.put(rightWall+dx,row,wallChar,wallColor,C.BLACK);
+    }
+    const isRing=(row-gameTop+ringOffset)%ringSpacing===0;
+    if(isRing&&t>0.1){
+      const ringColor=t>0.5?C.BRIGHT_CYAN:C.CYAN;
+      screen.put(leftWall,row,'\u2563',ringColor,C.BLACK);
+      screen.put(rightWall,row,'\u2560',ringColor,C.BLACK);
+      if(t>0.3){
+        for(let x=leftWall+2;x<rightWall;x+=4)
+          screen.put(x,row,'\u00B7',C.DARK_BLUE,C.BLACK);
+      }
+    }
+  }
+}
+
+function drawEntitiesFar(screen,state,gameTop,gameBottom){
+  const w=screen.width,h=screen.height;
+  for(const o of state.obstacles){
+    if(o.z<-state.maxViewZ||o.z>5)continue;
+    const pos=gameToScreen(o.x,o.y,o.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row<gameTop||pos.row>=gameBottom)continue;
+    const size=max(1,floor(pos.scale*2.5));
+    const glow=sin(state.time*3+o.z)*0.3+0.5;
+    const color=glow>0.5?C.BRIGHT_RED:C.RED;
+    const ch=size>=2?'\u2593':'\u25A0';
+    drawBlock(screen,pos.col,pos.row,size,ch,color,gameTop,gameBottom);
+  }
+  for(const m of state.mines){
+    if(m.z<-state.maxViewZ||m.z>5)continue;
+    const pos=gameToScreen(m.x,m.y,m.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row<gameTop||pos.row>=gameBottom)continue;
+    const size=max(1,floor(pos.scale*2.5));
+    const blink=sin(state.time*8)>0;
+    const color=blink?C.BRIGHT_RED:C.GRAY;
+    const ch=blink?'\u25C8':'\u25A0';
+    drawBlock(screen,pos.col,pos.row,size,ch,color,gameTop,gameBottom);
+  }
+  for(const o of state.orbs){
+    if(o.collected||o.z<-state.maxViewZ||o.z>5)continue;
+    const pos=gameToScreen(o.x,o.y+sin(state.time*4+o.x)*0.3,o.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row<gameTop||pos.row>=gameBottom)continue;
+    const size=max(1,floor(pos.scale*2));
+    const pulse=sin(state.time*5)*0.3+0.7;
+    const color=pulse>0.6?C.BRIGHT_GREEN:C.GREEN;
+    const ch=size>=2?'\u25C6':'\u2666';
+    drawBlock(screen,pos.col,pos.row,size,ch,color,gameTop,gameBottom);
+  }
+}
+
+function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom){
+  const half=floor(size/2);
+  for(let dy=-half;dy<=half;dy++){
+    for(let dx=-half;dx<=half;dx++){
+      const y=cy+dy;
+      if(y>=gameTop&&y<gameBottom)screen.put(cx+dx,y,ch,color,C.BLACK);
+    }
+  }
+}
+
+function drawBullets(screen,state,gameTop,gameBottom){
+  const w=screen.width,h=screen.height;
+  for(const b of state.bullets){
+    const pos=gameToScreen(b.x,b.y,b.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row>=gameTop&&pos.row<gameBottom){
+      screen.put(pos.col,pos.row,'\u2502',C.BRIGHT_CYAN,C.BLACK);
+      if(pos.row-1>=gameTop)screen.put(pos.col,pos.row-1,'\u2502',C.CYAN,C.BLACK);
+    }
+  }
+}
+
+function drawParticles(screen,state,gameTop,gameBottom){
+  const w=screen.width,h=screen.height;
+  const particleChars=['*','+','\u00B7','.'];
+  for(const p of state.particles){
+    const pos=gameToScreen(p.x,p.y,p.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row>=gameTop&&pos.row<gameBottom&&pos.col>=0&&pos.col<w){
+      const fade=p.life/p.maxLife;
+      const ch=particleChars[floor((1-fade)*(particleChars.length-1))];
+      const color=fade>0.5?p.color:C.GRAY;
+      screen.put(pos.col,pos.row,ch,color,C.BLACK);
+    }
+  }
+}
+
+function drawShip(screen,state,gameTop,gameBottom){
+  const w=screen.width,h=screen.height;
+  const pos=gameToScreen(state.shipX,state.shipY,0,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+  const cx=pos.col,cy=pos.row;
+  if(cy-1>=gameTop&&cy+1<gameBottom){
+    screen.put(cx,cy-1,'\u25B2',C.BRIGHT_CYAN,C.BLACK);
+    screen.put(cx-1,cy,'<',C.BRIGHT_BLUE,C.BLACK);
+    screen.put(cx,cy,'\u2588',C.BRIGHT_CYAN,C.BLACK);
+    screen.put(cx+1,cy,'>',C.BRIGHT_BLUE,C.BLACK);
+    screen.put(cx-1,cy+1,'\u2568',C.CYAN,C.BLACK);
+    screen.put(cx+1,cy+1,'\u2568',C.CYAN,C.BLACK);
+    const engineGlow=sin(state.time*20)>0;
+    const glowColor=state.boosting?C.BRIGHT_MAGENTA:C.BRIGHT_BLUE;
+    if(engineGlow&&cy+2<gameBottom){
+      screen.put(cx-1,cy+2,'\u2502',glowColor,C.BLACK);
+      screen.put(cx+1,cy+2,'\u2502',glowColor,C.BLACK);
+    }
+  }
+}
+
+function drawHUD(screen,state){
+  const w=screen.width;
+  screen.put(0,0,'\u2554',C.CYAN,C.BLACK);
+  screen.hLine(1,0,w-2,'\u2550',C.CYAN,C.BLACK);
+  screen.put(w-1,0,'\u2557',C.CYAN,C.BLACK);
+  const title=' SPACE RIDER ';
+  const titleX=floor((w-title.length)/2);
+  screen.putString(titleX,0,title,C.BRIGHT_CYAN,C.BLACK);
+  screen.put(0,1,'\u2551',C.CYAN,C.BLACK);
+  screen.put(w-1,1,'\u2551',C.CYAN,C.BLACK);
+  const scoreStr=state.debugMode==='obstacleCollision'||state.debugMode==='mineCollision'
+    ?'SCORE: ---':`SCORE: ${state.score}`;
+  const distStr=`DIST: ${(state.distance/10).toFixed(1)} km`;
+  const shieldStr=`SHIELD: ${Math.round(state.shield)}%`;
+  screen.putString(2,1,scoreStr,C.BRIGHT_CYAN,C.BLACK);
+  screen.putStringCenter(1,distStr,C.BRIGHT_MAGENTA,C.BLACK);
+  screen.putString(w-shieldStr.length-2,1,shieldStr,
+    state.shield<30?C.BRIGHT_RED:C.BRIGHT_GREEN,C.BLACK);
+  screen.put(0,2,'\u2551',C.CYAN,C.BLACK);
+  screen.put(w-1,2,'\u2551',C.CYAN,C.BLACK);
+  const barWidth=w-4;
+  const barStart=2;
+  const filled=floor(barWidth*state.shield/100);
+  const barColor=state.shield<30?C.BRIGHT_RED:C.BRIGHT_GREEN;
+  for(let i=0;i<barWidth;i++){
+    if(i<filled)screen.put(barStart+i,2,'\u2588',barColor,C.BLACK);
+    else screen.put(barStart+i,2,'\u2591',C.GRAY,C.BLACK);
+  }
+  if(state.debugMode&&state.mode==='playing'){
+    const label=`[ DEBUG: ${DEBUG_MODE_NAMES[state.debugMode]} ]`;
+    screen.putStringCenter(HUD_ROWS,label,C.BRIGHT_MAGENTA,C.BLACK);
+    if(state.debugMode==='obstacleCollision'||state.debugMode==='mineCollision'){
+      const tracker=`Collisions: ${state.trackerCount}`;
+      screen.putString(w-tracker.length-2,HUD_ROWS,tracker,C.BRIGHT_GREEN,C.BLACK);
+    }else if(state.debugMode==='chaos'){
+      const tracker=`Destruction: ${state.trackerCount}`;
+      screen.putString(w-tracker.length-2,HUD_ROWS,tracker,C.BRIGHT_GREEN,C.BLACK);
+    }
+  }
+}
+
+function drawFooter(screen,state){
+  const w=screen.width,h=screen.height;
+  const footerY=h-FOOTER_ROWS;
+  screen.put(0,footerY,'\u2560',C.CYAN,C.BLACK);
+  screen.hLine(1,footerY,w-2,'\u2550',C.CYAN,C.BLACK);
+  screen.put(w-1,footerY,'\u2563',C.CYAN,C.BLACK);
+  screen.put(0,footerY+1,'\u255A',C.CYAN,C.BLACK);
+  screen.hLine(1,footerY+1,w-2,'\u2550',C.CYAN,C.BLACK);
+  screen.put(w-1,footerY+1,'\u255D',C.CYAN,C.BLACK);
+  const hints='Arrows:Move  SPACE:Fire  F:Boost  ESC:Quit';
+  const hintX=floor((w-hints.length)/2);
+  screen.putString(hintX,footerY,hints,C.GRAY,C.BLACK);
+}
+
+function drawEffects(screen,state){
+  const w=screen.width,h=screen.height;
+  if(state.damageFlash>0.1){
+    screen.hLine(1,0,w-2,'\u2550',C.BRIGHT_RED,C.BLACK);
+    screen.put(0,0,'\u2554',C.BRIGHT_RED,C.BLACK);
+    screen.put(w-1,0,'\u2557',C.BRIGHT_RED,C.BLACK);
+  }
+  if(state.collectFlash>0.1){
+    screen.hLine(1,0,w-2,'\u2550',C.BRIGHT_GREEN,C.BLACK);
+    screen.put(0,0,'\u2554',C.BRIGHT_GREEN,C.BLACK);
+    screen.put(w-1,0,'\u2557',C.BRIGHT_GREEN,C.BLACK);
+  }
+  if(state.boosting){
+    for(let row=HUD_ROWS+1;row<h-FOOTER_ROWS;row+=3){
+      const offset=floor(state.time*30+row)%5;
+      if(offset===0){
+        screen.put(1,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
+        screen.put(w-2,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
+      }
+    }
+  }
+}
+
+// ===== Menu Rendering (port of menu.ts) =====
+
+const TITLE_ART=[
+  ' ___  ___   _   ___ ___   ___ ___ ___  ___ ___ ',
+  '/ __|/ _ \\ / \\ / __| __| | _ \\_ _|   \\| __| _ \\',
+  '\\__ \\ ___// _ \\ (_| _|  |   /| || |) | _||   /',
+  '|___/|_| /_/ \\_\\___|___| |_|_\\___|___/|___|_|_\\',
+];
+
+function renderTitleScreen(screen,state){
+  const w=screen.width,h=screen.height;
+  screen.clear(C.BLACK);
+  drawBorder(screen,w,h);
+  const artY=floor(h*0.15);
+  for(let i=0;i<TITLE_ART.length;i++){
+    const line=TITLE_ART[i];
+    if(line.length<w-4){
+      const pulse=sin(state.time*2+i*0.3)*0.5+0.5;
+      const color=pulse>0.5?C.BRIGHT_CYAN:C.CYAN;
+      screen.putStringCenter(artY+i,line,color,C.BLACK);
+    }
+  }
+  const subY=artY+TITLE_ART.length+2;
+  const subtitle='WARP TUNNEL PROTOCOL v2.7';
+  const subPulse=sin(state.time*1.5)*0.5+0.5;
+  screen.putStringCenter(subY,subtitle,subPulse>0.5?C.BRIGHT_MAGENTA:C.MAGENTA,C.BLACK);
+  const instY=subY+3;
+  const instructions=[
+    ['WASD',' or ','ARROWS',' \u2014 steer ship'],
+    ['F',' \u2014 boost  |  ','SPACE',' \u2014 fire pulse cannon'],
+    ['Q / E',' \u2014 barrel roll'],
+    ['','Dodge obstacles \u2022 Collect energy orbs \u2022 Survive!','',''],
+  ];
+  for(let i=0;i<instructions.length;i++){
+    const parts=instructions[i];
+    let line='';for(const p of parts)line+=p;
+    const x=floor((w-line.length)/2);
+    let cx=x;
+    for(let j=0;j<parts.length;j++){
+      const color=j%2===0&&parts[j].length>0?C.BRIGHT_CYAN:C.GRAY;
+      screen.putString(cx,instY+i,parts[j],color,C.BLACK);
+      cx+=parts[j].length;
+    }
+  }
+  const promptY=instY+instructions.length+3;
+  const prompt='[ PRESS ENTER TO LAUNCH ]';
+  const promptPulse=sin(state.time*3)*0.5+0.5;
+  const promptColor=promptPulse>0.3?C.BRIGHT_GREEN:C.GREEN;
+  screen.putStringCenter(promptY,prompt,promptColor,C.BLACK);
+  drawMenuStars(screen,state,w,h);
+}
+
+function renderDebugMenu(screen,state){
+  const w=screen.width,h=screen.height;
+  screen.clear(C.BLACK);
+  drawBorder(screen,w,h);
+  const titleY=floor(h*0.12);
+  for(let i=0;i<TITLE_ART.length;i++){
+    if(TITLE_ART[i].length<w-4)
+      screen.putStringCenter(titleY+i,TITLE_ART[i],C.BRIGHT_CYAN,C.BLACK);
+  }
+  const subY=titleY+TITLE_ART.length+1;
+  screen.putStringCenter(subY,'DEBUG PROTOCOL v0.1',C.BRIGHT_MAGENTA,C.BLACK);
+  const menuY=subY+3;
+  for(let i=0;i<DEBUG_MODES.length;i++){
+    const mode=DEBUG_MODES[i];
+    const selected=i===state.debugMenuSelected;
+    const prefix=`[${i+1}] `;
+    const name=DEBUG_MODE_NAMES[mode];
+    const desc=`    ${DEBUG_MODE_DESCS[mode]}`;
+    const y=menuY+i*3;
+    const x=floor((w-40)/2);
+    if(selected){
+      screen.putString(x-3,y,'\u25B6',C.BRIGHT_CYAN,C.BLACK);
+      screen.putString(x,y,prefix,C.BRIGHT_MAGENTA,C.BLACK);
+      screen.putString(x+prefix.length,y,name,C.BRIGHT_CYAN,C.BLACK);
+      screen.putString(x,y+1,desc,C.CYAN,C.BLACK);
+      const bw=42,bx=x-2;
+      screen.put(bx,y-1,'\u250C',C.CYAN,C.BLACK);
+      screen.hLine(bx+1,y-1,bw,'\u2500',C.CYAN,C.BLACK);
+      screen.put(bx+bw+1,y-1,'\u2510',C.CYAN,C.BLACK);
+    }else{
+      screen.putString(x,y,prefix,C.MAGENTA,C.BLACK);
+      screen.putString(x+prefix.length,y,name,C.GRAY,C.BLACK);
+      screen.putString(x,y+1,desc,C.GRAY,C.BLACK);
+    }
+  }
+  const navY=menuY+DEBUG_MODES.length*3+1;
+  const navPulse=sin(state.time*3)*0.5+0.5;
+  screen.putStringCenter(navY,'[ \u2191\u2193 SELECT \u2022 ENTER LAUNCH ]',
+    navPulse>0.3?C.BRIGHT_GREEN:C.GREEN,C.BLACK);
+  drawMenuStars(screen,state,w,h);
+}
+
+function renderGameOver(screen,state){
+  const w=screen.width,h=screen.height;
+  screen.clear(C.BLACK);
+  drawBorder(screen,w,h);
+  const titleY=floor(h*0.2);
+  screen.putStringCenter(titleY,'W A R P   F A I L E D',C.BRIGHT_RED,C.BLACK);
+  screen.putStringCenter(titleY+2,'SHIP INTEGRITY COMPROMISED',C.BRIGHT_MAGENTA,C.BLACK);
+  const statsY=titleY+5;
+  if(state.debugMode==='obstacleCollision'||state.debugMode==='mineCollision'){
+    screen.putStringCenter(statsY,`${state.trackerCount}`,C.BRIGHT_MAGENTA,C.BLACK);
+    screen.putStringCenter(statsY+2,`Collisions Detected: ${state.trackerCount}`,C.BRIGHT_CYAN,C.BLACK);
+    screen.putStringCenter(statsY+3,`Distance: ${(state.distance/10).toFixed(1)} km`,C.BRIGHT_CYAN,C.BLACK);
+  }else if(state.debugMode==='chaos'){
+    screen.putStringCenter(statsY,`${state.score}`,C.BRIGHT_MAGENTA,C.BLACK);
+    screen.putStringCenter(statsY+2,`Total Destruction: ${state.trackerCount}`,C.BRIGHT_CYAN,C.BLACK);
+    screen.putStringCenter(statsY+3,`Score: ${state.score}`,C.BRIGHT_CYAN,C.BLACK);
+    screen.putStringCenter(statsY+4,`Distance: ${(state.distance/10).toFixed(1)} km`,C.BRIGHT_CYAN,C.BLACK);
+  }else{
+    screen.putStringCenter(statsY,`${state.score}`,C.BRIGHT_MAGENTA,C.BLACK);
+    screen.putStringCenter(statsY+2,`Distance: ${(state.distance/10).toFixed(1)} km`,C.BRIGHT_CYAN,C.BLACK);
+    screen.putStringCenter(statsY+3,`Best Score: ${state.bestScore}`,C.BRIGHT_CYAN,C.BLACK);
+  }
+  const promptY=statsY+7;
+  const pulse=sin(state.time*3)*0.5+0.5;
+  screen.putStringCenter(promptY,'[ PRESS ENTER TO RELAUNCH ]',
+    pulse>0.3?C.BRIGHT_GREEN:C.GREEN,C.BLACK);
+  drawMenuStars(screen,state,w,h);
+}
+
+function drawBorder(screen,w,h){
+  screen.put(0,0,'\u2554',C.CYAN,C.BLACK);
+  screen.hLine(1,0,w-2,'\u2550',C.CYAN,C.BLACK);
+  screen.put(w-1,0,'\u2557',C.CYAN,C.BLACK);
+  for(let y=1;y<h-1;y++){
+    screen.put(0,y,'\u2551',C.CYAN,C.BLACK);
+    screen.put(w-1,y,'\u2551',C.CYAN,C.BLACK);
+  }
+  screen.put(0,h-1,'\u255A',C.CYAN,C.BLACK);
+  screen.hLine(1,h-1,w-2,'\u2550',C.CYAN,C.BLACK);
+  screen.put(w-1,h-1,'\u255D',C.CYAN,C.BLACK);
+}
+
+function drawMenuStars(screen,state,w,h){
+  for(const star of state.stars){
+    const sy=star.y%h;
+    const y=floor(sy<0?sy+h:sy);
+    const x=floor(star.x)%w;
+    if(y>0&&y<h-1&&x>0&&x<w-1)
+      screen.put(x,y,star.char,star.color,C.BLACK);
+  }
+}
+
+// ===== Canvas Setup & Sizing =====
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+const FONT_SIZE=16;
+const FONT=`${FONT_SIZE}px 'Courier New', 'Consolas', monospace`;
+let cellW,cellH;
+
+function measureCell(){
+  ctx.font=FONT;
+  const m=ctx.measureText('M');
+  cellW=Math.ceil(m.width);
+  cellH=FONT_SIZE+2;
+}
+
+let termWidth,termHeight;
+let screen;
+const game=new Game();
+
+const MIN_WIDTH=60;
+const MIN_HEIGHT=20;
+
+function handleResize(){
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  measureCell();
+  termWidth=max(MIN_WIDTH,floor(canvas.width/cellW));
+  termHeight=max(MIN_HEIGHT,floor(canvas.height/cellH));
+  screen=new ScreenBuffer(termWidth,termHeight);
+  game.initStars(termWidth,termHeight);
+  game.state.screenWidth=termWidth;
+  game.state.screenHeight=termHeight;
+}
+
+window.addEventListener('resize',handleResize);
+handleResize();
+
+// ===== URL params for debug =====
+const params=new URLSearchParams(window.location.search);
+const wantsDebug=params.has('debug');
+const explicitMode=params.get('mode');
+if(explicitMode){
+  const validModes=['mines','orbs','obstacleCollision','mineCollision','chaos'];
+  if(validModes.includes(explicitMode))game.startGame(explicitMode);
+}else if(wantsDebug){
+  game.showDebugMenu();
+}
+
+// ===== Input handling =====
+const keys={};
+const justPressed={};
+
+function mapKey(e){
+  switch(e.code){
+    case'ArrowUp':return'UP';case'ArrowDown':return'DOWN';
+    case'ArrowLeft':return'LEFT';case'ArrowRight':return'RIGHT';
+    case'KeyW':return'W';case'KeyA':return'A';case'KeyS':return'S';case'KeyD':return'D';
+    case'KeyQ':return'Q';case'KeyE':return'E';case'KeyF':return'F';
+    case'Space':return'SPACE';case'Enter':return'ENTER';
+    case'Escape':return'ESCAPE';case'Tab':return'TAB';
+    case'ShiftLeft':case'ShiftRight':return'SHIFT';
+    case'Digit1':return'DIGIT_1';case'Digit2':return'DIGIT_2';
+    case'Digit3':return'DIGIT_3';case'Digit4':return'DIGIT_4';
+    case'Digit5':return'DIGIT_5';
+    default:return null;
+  }
+}
+
+window.addEventListener('keydown',e=>{
+  const k=mapKey(e);
+  if(k){
+    e.preventDefault();
+    if(!keys[k])justPressed[k]=true;
+    keys[k]=true;
+  }
+});
+window.addEventListener('keyup',e=>{
+  const k=mapKey(e);
+  if(k){e.preventDefault();keys[k]=false}
+});
+
+// ===== Main loop =====
+let lastTime=performance.now();
+const TARGET_FPS=30;
+const FRAME_MS=1000/TARGET_FPS;
+let accumulator=0;
+
+function frame(now){
+  requestAnimationFrame(frame);
+  const elapsed=now-lastTime;
+  lastTime=now;
+  accumulator+=elapsed;
+  if(accumulator<FRAME_MS)return;
+  accumulator-=FRAME_MS;
+  if(accumulator>FRAME_MS*2)accumulator=0; // prevent spiral
+
+  const dt=min(FRAME_MS/1000,0.05);
+
+  // Handle menu input
+  game.handleMenuInput(justPressed);
+
+  // ESC
+  if(justPressed.ESCAPE){
+    if(game.state.mode==='playing'||game.state.mode==='dead'||game.state.mode==='debugMenu'){
+      game.state.mode='menu';
+    }
+  }
+
+  // Update
+  game.update(dt,keys,justPressed);
+
+  // Clear canvas
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Render to screen buffer
+  switch(game.state.mode){
+    case'menu':renderTitleScreen(screen,game.state);break;
+    case'debugMenu':renderDebugMenu(screen,game.state);break;
+    case'playing':renderGame(screen,game.state);break;
+    case'dead':renderGameOver(screen,game.state);break;
+  }
+
+  // Flush screen buffer to canvas
+  screen.render(ctx,cellW,cellH,FONT);
+
+  // Clear justPressed
+  for(const k of Object.keys(justPressed))delete justPressed[k];
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

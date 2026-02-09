@@ -1,0 +1,37 @@
+{
+  "name": "cmd-space-rider",
+  "displayName": "Space Rider",
+  "description": "A retro DOS-style terminal space tunnel game. Pilot your ship through neon tunnels, dodge obstacles, collect energy orbs, and chase the high score — right in your command line.",
+  "version": "0.1.0",
+  "publisher": "isocialPractice",
+  "license": "MIT",
+  "bin": {
+    "space-rider": "./out/index.js"
+  },
+  "main": "./out/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node out/index.js",
+    "dev": "tsc && node out/index.js",
+    "debug": "tsc && node out/index.js --debug",
+    "watch": "tsc -w"
+  },
+  "keywords": [
+    "game",
+    "terminal",
+    "cli",
+    "space",
+    "dos",
+    "retro",
+    "ascii",
+    "tunnel"
+  ],
+  "dependencies": {
+    "terminal-kit": "^3.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/terminal-kit": "^2.5.6",
+    "typescript": "^5.3.0"
+  }
+}

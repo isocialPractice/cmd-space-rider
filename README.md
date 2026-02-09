@@ -1,0 +1,152 @@
+![hero image](hero.png)
+
+# CMD Space Rider
+
+A retro DOS-style terminal space tunnel game. Pilot your ship through an endless neon warp tunnel, dodge obstacles, collect energy orbs, and chase the high score &mdash; right in your command line or browser.
+
+`Ctrl + click` to play [game](index.html) in the browser.
+
+## Features
+
+- **DOS terminal graphics** &mdash; Pseudo-3D tunnel rendered with Unicode block elements, box-drawing characters, and 256-color ANSI palette. No graphical window required.
+- **Browser preview** &mdash; Open `index.html` in any browser to play the same game rendered as a canvas-based terminal emulator. No build step, no server, no dependencies.
+- **Cross-platform** &mdash; Runs on Windows, macOS, and Linux. Any terminal that supports 256 colors and Unicode.
+- **Neon warp tunnel** &mdash; Fly through a perspective-scrolling tunnel with pulsing neon walls, animated ring stripes, and a parallax starfield.
+- **Ship controls** &mdash; Steer, boost, and fire a pulse cannon.
+- **Obstacles and mines** &mdash; Dodge rotating obstacle blocks and blinking mines that deal shield damage on contact.
+- **Energy orbs** &mdash; Collect glowing orbs to gain score and restore shield.
+- **Progressive difficulty** &mdash; Speed gradually increases with distance. Obstacle density grows every minute. Mines begin spawning after the first minute and escalate over time.
+- **HUD** &mdash; Live score, distance traveled, shield percentage, and shield bar rendered in the terminal.
+- **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
+
+## Getting Started
+
+### Play in Browser (no install)
+
+Open `index.html` in any modern browser. That's it.
+
+URL parameters for debug modes:
+
+```
+index.html?debug                   Open the debug scenario menu
+index.html?mode=chaos              Start a specific debug mode directly
+index.html?mode=mines              Mine Field mode
+index.html?mode=orbs               Orb Harvest mode
+index.html?mode=obstacleCollision  Collision Course mode
+index.html?mode=mineCollision      Mine Sweeper mode
+```
+
+### Play in Terminal
+
+#### Prerequisites
+
+- [Node.js](https://nodejs.org/) v16 or later
+
+#### Install from source
+
+```bash
+git clone <repository-url>
+cd cmd-space-rider
+npm install
+npm run build
+```
+
+#### Run the game
+
+```bash
+npm start
+```
+
+Or directly:
+
+```bash
+node out/index.js
+```
+
+## Usage (CLI)
+
+```
+space-rider                          Start in normal mode
+space-rider --debug                  Open the debug scenario menu
+space-rider --mode <mode>            Start a specific debug mode directly
+space-rider --help                   Show help
+```
+
+### Controls
+
+| Input | Action |
+|---|---|
+| `W` / `A` / `S` / `D` or Arrow keys | Steer ship |
+| `F` or `Shift` (browser) | Boost |
+| `Space` | Fire pulse cannon |
+| `Q` / `E` | Barrel roll |
+| `Enter` | Launch / relaunch |
+| `Esc` | Return to menu / quit |
+| `Ctrl+C` | Quit immediately (terminal) |
+
+### Gameplay
+
+- **Dodge obstacles** &mdash; Red rotating blocks deal 25 shield damage.
+- **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
+- **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
+- **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
+- **Survive** &mdash; The game ends when shield reaches 0.
+
+### Debug Modes
+
+Access via `--debug` (CLI) or `?debug` (browser):
+
+| # | Mode | CLI flag / URL param | Description |
+|---|---|---|---|
+| 1 | **Mine Field** | `mines` | Only mines. Pure evasion. |
+| 2 | **Orb Harvest** | `orbs` | Only orbs. Collect them all. |
+| 3 | **Collision Course** | `obstacleCollision` | Hit obstacles. Track every impact. |
+| 4 | **Mine Sweeper** | `mineCollision` | Ram mines. Log collisions. |
+| 5 | **Chaos Protocol** | `chaos` | Everything at once with permanent boost and auto-fire. |
+
+Navigate the debug menu with arrow keys or number keys, then press `Enter` to launch.
+
+## Project Structure
+
+```
+cmd-space-rider/
+  index.html        # Browser version (canvas terminal emulator, zero dependencies)
+  src/
+    index.ts        # CLI entry point, terminal setup, main loop, input handling
+    game.ts         # Game engine: state, physics, collision, entity management
+    render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
+    menu.ts         # Menu screens: title, debug menu, game over
+    screen.ts       # Double-buffered ANSI screen buffer
+    types.ts        # Type definitions and color constants
+  hero.png          # Hero banner graphic
+  icon.png          # App icon graphic
+  package.json      # CLI tool manifest and dependencies
+  tsconfig.json     # TypeScript configuration
+```
+
+## Development
+
+```bash
+npm run build      # Compile TypeScript to out/
+npm run start      # Run the compiled game
+npm run dev        # Build and run in one step
+npm run debug      # Build and run in debug mode
+npm run watch      # Watch mode for development
+```
+
+## Terminal Requirements
+
+- **Minimum size**: 60 columns x 20 rows
+- **Color support**: 256-color ANSI (most modern terminals)
+- **Unicode support**: Box-drawing and block element characters
+- **Recommended terminals**: Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty
+
+## How It Works
+
+### Terminal Version
+
+The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode with a key-decay timer to simulate key-down/key-up behavior (terminals only provide key-press events, not key-release).
+
+### Browser Version
+
+The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
