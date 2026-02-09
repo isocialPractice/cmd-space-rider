@@ -4,7 +4,7 @@
 
 A retro DOS-style terminal space tunnel game. Pilot your ship through an endless neon warp tunnel, dodge obstacles, collect energy orbs, and chase the high score &mdash; right in your command line or browser.
 
-`Ctrl + click` to play [game](index.html) in the browser.
+`Ctrl + click` to play [game](https://isocialpractice.github.io/cmd-space-rider/) in the browser.
 
 ## Features
 
