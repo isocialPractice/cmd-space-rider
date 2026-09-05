@@ -3,6 +3,7 @@
 import {
   GameState, GameMode, DebugMode, DEBUG_MODES,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
+  BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
@@ -35,8 +36,8 @@ export class Game {
       distance: 0,
       shield: 100,
       bestScore: 0,
-      speed: 0.3,
-      baseSpeed: 0.3,
+      speed: BASE_SPEED_START,
+      baseSpeed: BASE_SPEED_START,
       boostSpeed: 0.55,
       shipX: 0,
       shipY: 0,
@@ -62,6 +63,11 @@ export class Game {
       damageFlash: 0,
       collectFlash: 0,
       boosting: false,
+      paused: false,
+      muted: false,
+      shake: 0,
+      newBestFlash: 0,
+      newBestShown: false,
       screenWidth: 80,
       screenHeight: 24,
     };
@@ -112,7 +118,7 @@ export class Game {
     s.score = 0;
     s.distance = 0;
     s.shield = 100;
-    s.baseSpeed = 0.3;
+    s.baseSpeed = BASE_SPEED_START;
     s.boostSpeed = 0.55;
     s.speed = s.baseSpeed;
     s.shipX = 0;
@@ -133,6 +139,10 @@ export class Game {
     s.damageFlash = 0;
     s.collectFlash = 0;
     s.boosting = false;
+    s.paused = false;
+    s.shake = 0;
+    s.newBestFlash = 0;
+    s.newBestShown = false;
 
     if (s.debugMode === 'mines') {
       for (let i = 0; i < 40; i++) this.spawnMine(-i * 10 - 30);
@@ -157,8 +167,19 @@ export class Game {
   private endGame(): void {
     const s = this.state;
     s.mode = 'dead';
-    s.bestScore = max(s.bestScore, s.score);
+    // Debug scenarios are diagnostics rather than scored runs, so they never
+    // set the best score. Only a normal run can beat it.
+    if (s.debugMode === null && s.score > s.bestScore) {
+      s.bestScore = s.score;
+      this.persistBestScore(s.bestScore);
+    }
   }
+
+  /**
+   * Hook for storing the best score across sessions. The terminal build keeps
+   * it in memory only; the browser build writes it to localStorage.
+   */
+  protected persistBestScore(_best: number): void { /* no persistence in the terminal build */ }
 
   private spawnObstacle(z: number): void {
     this.state.obstacles.push({
@@ -217,11 +238,21 @@ export class Game {
 
   update(dt: number, keys: Record<string, boolean>, justPressed: Record<string, boolean>): void {
     const s = this.state;
+
+    // M is a global setting toggle, so it works in every mode. P only pauses a
+    // run in progress.
+    if (justPressed['M']) s.muted = !s.muted;
+    if (s.mode === 'playing' && justPressed['P']) s.paused = !s.paused;
+
+    // Presentation timers keep running while paused so an in-flight flash or
+    // shake finishes instead of freezing on screen.
     s.time += dt;
     s.damageFlash = max(0, s.damageFlash - dt * 8);
     s.collectFlash = max(0, s.collectFlash - dt * 8);
+    s.newBestFlash = max(0, s.newBestFlash - dt);
+    s.shake = max(0, s.shake - dt);
 
-    if (s.mode === 'playing') {
+    if (s.mode === 'playing' && !s.paused) {
       this.updatePlaying(dt, keys, justPressed);
     }
   }
@@ -280,8 +311,15 @@ export class Game {
       s.score += floor(advance * 10 * (s.speed / s.baseSpeed));
     }
 
+    // First crossing of the stored best in a normal run raises the HUD banner.
+    // A best of 0 means there is nothing to beat yet, so the first run is quiet.
+    if (s.debugMode === null && !s.newBestShown && s.bestScore > 0 && s.score > s.bestScore) {
+      s.newBestShown = true;
+      s.newBestFlash = NEW_BEST_FLASH_TIME;
+    }
+
     // Difficulty scaling
-    s.baseSpeed = 0.3 + s.distance * 0.00002;
+    s.baseSpeed = BASE_SPEED_START + s.distance * 0.00002;
     s.boostSpeed = s.baseSpeed * 1.8;
     s.gameTime += dt;
 
@@ -376,6 +414,7 @@ export class Game {
         const dy = shipScr.row - oScr.row;
         if (abs(shipScr.col - oScr.col) <= SHIP_HALF_W + half &&
             dy <= 2 + half && dy >= -(1 + half)) {
+          s.shake = SHAKE_TIME; // every branch below is an impact
           if (s.debugMode === 'obstacleCollision') {
             s.trackerCount++;
             s.damageFlash = 0.5;
@@ -461,6 +500,7 @@ export class Game {
         const dy = shipScr.row - mScr.row;
         if (abs(shipScr.col - mScr.col) <= SHIP_HALF_W + half &&
             dy <= 2 + half && dy >= -(1 + half)) {
+          s.shake = SHAKE_TIME; // every branch below is an impact
           if (s.debugMode === 'mineCollision') {
             s.trackerCount++;
             s.damageFlash = 0.5;

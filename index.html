@@ -125,6 +125,39 @@ const Y_FACTOR=0.4;
 const SHIP_HALF_W=1;
 const SHIP_HALF_H=1;
 
+// Speed a run starts at. The HUD speed readout is a multiple of this.
+const BASE_SPEED_START=0.3;
+// Seconds the screen shake lasts after the ship takes damage.
+const SHAKE_TIME=0.2;
+// Seconds the "NEW BEST" HUD banner stays on screen.
+const NEW_BEST_FLASH_TIME=2;
+// Peak canvas offset of the damage shake, in pixels.
+const SHAKE_PIXELS=5;
+
+// ===== Best score persistence =====
+// localStorage throws rather than returning null in some privacy modes and
+// file:// sandboxes, so every access is guarded and falls back to no history.
+const BEST_SCORE_KEY='cmdSpaceRider.bestScore';
+
+function loadBestScore(){
+  try{
+    const raw=localStorage.getItem(BEST_SCORE_KEY);
+    if(raw===null)return 0;
+    const n=parseInt(raw,10);
+    return Number.isFinite(n)&&n>0?n:0;
+  }catch(e){
+    return 0;
+  }
+}
+
+function saveBestScore(best){
+  try{
+    localStorage.setItem(BEST_SCORE_KEY,String(best));
+  }catch(e){
+    /* score stays for this session only */
+  }
+}
+
 const DEBUG_MODES=['mines','orbs','obstacleCollision','mineCollision','chaos'];
 const DEBUG_MODE_NAMES={
   mines:'MINE FIELD',orbs:'ORB HARVEST',
@@ -141,8 +174,9 @@ class Game{
   constructor(){this.state=this.createInitialState()}
   createInitialState(){
     return{
-      mode:'menu',debugMode:null,score:0,distance:0,shield:100,bestScore:0,
-      speed:0.3,baseSpeed:0.3,boostSpeed:0.55,
+      mode:'menu',debugMode:null,score:0,distance:0,shield:100,
+      bestScore:loadBestScore(),
+      speed:BASE_SPEED_START,baseSpeed:BASE_SPEED_START,boostSpeed:0.55,
       shipX:0,shipY:0,shipRoll:0,time:0,gameTime:0,
       obstacles:[],orbs:[],mines:[],bullets:[],particles:[],stars:[],
       tunnelRadius:8,maxViewZ:200,
@@ -150,6 +184,7 @@ class Game{
       mineSpawnTimers:[],firstMinuteElapsed:false,
       trackerCount:0,debugMenuSelected:0,chaosFireTimer:0,
       damageFlash:0,collectFlash:0,boosting:false,
+      paused:false,muted:false,shake:0,newBestFlash:0,newBestShown:false,
       screenWidth:80,screenHeight:24,
     };
   }
@@ -186,13 +221,14 @@ class Game{
     const s=this.state;
     s.debugMode=mode||null;s.mode='playing';
     s.score=0;s.distance=0;s.shield=100;
-    s.baseSpeed=0.3;s.boostSpeed=0.55;s.speed=s.baseSpeed;
+    s.baseSpeed=BASE_SPEED_START;s.boostSpeed=0.55;s.speed=s.baseSpeed;
     s.shipX=0;s.shipY=1;s.shipRoll=0;
     s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.mines=[];
     s.gameTime=0;s.lastObstacleIncreaseMinute=0;
     s.mineTrackTime=0;s.minesToPresent=0;s.mineSpawnTimers=[];
     s.firstMinuteElapsed=false;s.trackerCount=0;s.chaosFireTimer=0;
     s.damageFlash=0;s.collectFlash=0;s.boosting=false;
+    s.paused=false;s.shake=0;s.newBestFlash=0;s.newBestShown=false;
 
     if(s.debugMode==='mines'){
       for(let i=0;i<40;i++)this.spawnMine(-i*10-30);
@@ -215,7 +251,13 @@ class Game{
   }
   endGame(){
     const s=this.state;
-    s.mode='dead';s.bestScore=max(s.bestScore,s.score);
+    s.mode='dead';
+    // Debug scenarios are diagnostics rather than scored runs, so they never
+    // set the best score. Only a normal run can beat it.
+    if(s.debugMode===null&&s.score>s.bestScore){
+      s.bestScore=s.score;
+      saveBestScore(s.bestScore);
+    }
   }
   spawnObstacle(z){
     this.state.obstacles.push({
@@ -256,10 +298,21 @@ class Game{
   }
   update(dt,keys,justPressed){
     const s=this.state;
+
+    // M is a global setting toggle, so it works in every mode. P only pauses a
+    // run in progress.
+    if(justPressed.M)s.muted=!s.muted;
+    if(s.mode==='playing'&&justPressed.P)s.paused=!s.paused;
+
+    // Presentation timers keep running while paused so an in-flight flash or
+    // shake finishes instead of freezing on screen.
     s.time+=dt;
     s.damageFlash=max(0,s.damageFlash-dt*8);
     s.collectFlash=max(0,s.collectFlash-dt*8);
-    if(s.mode==='playing')this.updatePlaying(dt,keys,justPressed);
+    s.newBestFlash=max(0,s.newBestFlash-dt);
+    s.shake=max(0,s.shake-dt);
+
+    if(s.mode==='playing'&&!s.paused)this.updatePlaying(dt,keys,justPressed);
   }
   updatePlaying(dt,keys,justPressed){
     const s=this.state;
@@ -305,7 +358,14 @@ class Game{
       s.score+=floor(advance*10*(s.speed/s.baseSpeed));
     }
 
-    s.baseSpeed=0.3+s.distance*0.00002;
+    // First crossing of the stored best in a normal run raises the HUD banner.
+    // A best of 0 means there is nothing to beat yet, so the first run is quiet.
+    if(s.debugMode===null&&!s.newBestShown&&s.bestScore>0&&s.score>s.bestScore){
+      s.newBestShown=true;
+      s.newBestFlash=NEW_BEST_FLASH_TIME;
+    }
+
+    s.baseSpeed=BASE_SPEED_START+s.distance*0.00002;
     s.boostSpeed=s.baseSpeed*1.8;
     s.gameTime+=dt;
 
@@ -375,6 +435,7 @@ class Game{
         const dy=shipScr.row-oScr.row;
         if(abs(shipScr.col-oScr.col)<=SHIP_HALF_W+half&&
            dy<=2+half&&dy>=-(1+half)){
+          s.shake=SHAKE_TIME; // every branch below is an impact
           if(s.debugMode==='obstacleCollision'){
             s.trackerCount++;s.damageFlash=0.5;
             this.spawnParticles(o.x,o.y,o.z,208,8);
@@ -434,6 +495,7 @@ class Game{
         const dy=shipScr.row-mScr.row;
         if(abs(shipScr.col-mScr.col)<=SHIP_HALF_W+half&&
            dy<=2+half&&dy>=-(1+half)){
+          s.shake=SHAKE_TIME; // every branch below is an impact
           if(s.debugMode==='mineCollision'){
             s.trackerCount++;s.damageFlash=0.5;
             this.spawnParticles(m.x,m.y,m.z,9,8);
@@ -541,6 +603,22 @@ function renderGame(screen,state){
   drawHUD(screen,state);
   drawFooter(screen,state);
   drawEffects(screen,state);
+  // The damage shake is a canvas offset applied in frame(), not a grid change,
+  // so the character buffer itself needs nothing here.
+  if(state.paused)drawPauseOverlay(screen,state);
+}
+
+/**
+ * Damage screen shake as a canvas pixel offset, fading with the shake timer.
+ * Returns the {x,y} translation to apply before drawing the character grid.
+ */
+function shakeOffset(state){
+  if(state.shake<=0)return{x:0,y:0};
+  const strength=state.shake/SHAKE_TIME;
+  return{
+    x:sin(state.time*90)*SHAKE_PIXELS*strength,
+    y:cos(state.time*70)*SHAKE_PIXELS*0.8*strength,
+  };
 }
 
 function drawStarfield(screen,state,gameTop,gameBottom){
@@ -717,6 +795,13 @@ function drawHUD(screen,state){
       screen.putString(w-tracker.length-2,HUD_ROWS,tracker,C.BRIGHT_GREEN,C.BLACK);
     }
   }
+
+  // NEW BEST banner. It only fires on normal runs, so it never shares this row
+  // with the debug label above.
+  if(state.newBestFlash>0){
+    const blink=sin(state.time*10)>0;
+    screen.putStringCenter(HUD_ROWS,'[ NEW BEST ]',blink?C.BRIGHT_YELLOW:C.BRIGHT_WHITE,C.BLACK);
+  }
 }
 
 function drawFooter(screen,state){
@@ -728,9 +813,46 @@ function drawFooter(screen,state){
   screen.put(0,footerY+1,'\u255A',C.CYAN,C.BLACK);
   screen.hLine(1,footerY+1,w-2,'\u2550',C.CYAN,C.BLACK);
   screen.put(w-1,footerY+1,'\u255D',C.CYAN,C.BLACK);
-  const hints='Arrows:Move  SPACE:Fire  F:Boost  ESC:Quit';
+  // Fall back to the compact hint list on a narrow viewport so it never runs
+  // into the border corners.
+  const hintsFull='Arrows:Move  SPACE:Fire  F:Boost  P:Pause  M:Mute  ESC:Quit';
+  const hintsShort='Move  Fire  Boost  P:Pause  M:Mute  ESC';
+  const hints=hintsFull.length<=w-4?hintsFull:hintsShort;
   const hintX=floor((w-hints.length)/2);
   screen.putString(hintX,footerY,hints,C.GRAY,C.BLACK);
+
+  // Status strip set into the bottom border: speed multiplier and mute state.
+  const spd=` SPD: ${(state.speed/BASE_SPEED_START).toFixed(1)}x `;
+  screen.putString(2,footerY+1,spd,
+    state.boosting?C.BRIGHT_MAGENTA:C.BRIGHT_CYAN,C.BLACK);
+
+  if(state.muted){
+    const mute=' MUTED ';
+    screen.putString(w-mute.length-2,footerY+1,mute,C.BRIGHT_YELLOW,C.BLACK);
+  }
+}
+
+function drawPauseOverlay(screen,state){
+  const w=screen.width,h=screen.height;
+  const label='[ PAUSED ]';
+  const hint='P to resume';
+  const boxW=max(label.length,hint.length)+6;
+  const boxX=floor((w-boxW)/2);
+  const boxY=floor(h/2)-2;
+
+  screen.fillRect(boxX,boxY,boxW,5,' ',C.WHITE,C.BLACK);
+  screen.put(boxX,boxY,'\u250C',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(boxX+1,boxY,boxW-2,'\u2500',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(boxX+boxW-1,boxY,'\u2510',C.BRIGHT_CYAN,C.BLACK);
+  screen.vLine(boxX,boxY+1,3,'\u2502',C.BRIGHT_CYAN,C.BLACK);
+  screen.vLine(boxX+boxW-1,boxY+1,3,'\u2502',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(boxX,boxY+4,'\u2514',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(boxX+1,boxY+4,boxW-2,'\u2500',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(boxX+boxW-1,boxY+4,'\u2518',C.BRIGHT_CYAN,C.BLACK);
+
+  const pulse=sin(state.time*3)*0.5+0.5;
+  screen.putStringCenter(boxY+1,label,pulse>0.3?C.BRIGHT_YELLOW:C.YELLOW,C.BLACK);
+  screen.putStringCenter(boxY+3,hint,C.GRAY,C.BLACK);
 }
 
 function drawEffects(screen,state){
@@ -960,6 +1082,7 @@ function mapKey(e){
     case'ArrowLeft':return'LEFT';case'ArrowRight':return'RIGHT';
     case'KeyW':return'W';case'KeyA':return'A';case'KeyS':return'S';case'KeyD':return'D';
     case'KeyQ':return'Q';case'KeyE':return'E';case'KeyF':return'F';
+    case'KeyP':return'P';case'KeyM':return'M';
     case'Space':return'SPACE';case'Enter':return'ENTER';
     case'Escape':return'ESCAPE';case'Tab':return'TAB';
     case'ShiftLeft':case'ShiftRight':return'SHIFT';
@@ -1025,8 +1148,13 @@ function frame(now){
     case'dead':renderGameOver(screen,game.state);break;
   }
 
-  // Flush screen buffer to canvas
+  // Flush screen buffer to canvas, jolted by the damage shake. Translating the
+  // whole grid leaves black at the edges, which is the shake reading as impact.
+  const shake=shakeOffset(game.state);
+  ctx.save();
+  ctx.translate(shake.x,shake.y);
   screen.render(ctx,cellW,cellH,FONT);
+  ctx.restore();
 
   // Clear justPressed
   for(const k of Object.keys(justPressed))delete justPressed[k];

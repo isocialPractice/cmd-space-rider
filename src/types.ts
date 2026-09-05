@@ -54,6 +54,15 @@ export interface Star {
   x: number; y: number; speed: number; char: string; color: number;
 }
 
+/** Speed a run starts at. The HUD speed readout is a multiple of this. */
+export const BASE_SPEED_START = 0.3;
+
+/** Seconds the screen shake lasts after the ship takes damage. */
+export const SHAKE_TIME = 0.2;
+
+/** Seconds the "NEW BEST" HUD banner stays on screen. */
+export const NEW_BEST_FLASH_TIME = 2;
+
 export interface GameState {
   mode: GameMode;
   debugMode: DebugMode | null;
@@ -93,6 +102,12 @@ export interface GameState {
   damageFlash: number;
   collectFlash: number;
   boosting: boolean;
+
+  paused: boolean;
+  muted: boolean;
+  shake: number;
+  newBestFlash: number;
+  newBestShown: boolean;
 
   screenWidth: number;
   screenHeight: number;

@@ -1,9 +1,9 @@
 // src/render.ts — Terminal renderer: tunnel, ship, entities, HUD, effects
 
 import { ScreenBuffer } from './screen';
-import { GameState, C, DEBUG_MODE_NAMES } from './types';
+import { GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME } from './types';
 
-const { sin, cos, floor, max, min, abs, sqrt } = Math;
+const { sin, cos, floor, round, max, min, abs, sqrt } = Math;
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const clamp = (v: number, lo: number, hi: number): number => max(lo, min(hi, v));
 
@@ -41,9 +41,23 @@ export function renderGame(screen: ScreenBuffer, state: GameState): void {
   drawBullets(screen, state, gameTop, gameBottom);
   drawParticles(screen, state, gameTop, gameBottom);
   drawShip(screen, state, gameTop, gameBottom);
+  // Jolt the play area only, so the HUD and border stay anchored.
+  screen.shiftRows(gameTop, gameBottom, shakeColumns(state));
   drawHUD(screen, state);
   drawFooter(screen, state);
   drawEffects(screen, state);
+  if (state.paused) drawPauseOverlay(screen, state);
+}
+
+/**
+ * Damage screen shake as a whole-column offset. The terminal has no subpixel
+ * positioning, so the jolt is one character cell either way, fading with the
+ * shake timer.
+ */
+export function shakeColumns(state: GameState): number {
+  if (state.shake <= 0) return 0;
+  const strength = state.shake / SHAKE_TIME;
+  return round(sin(state.time * 40) * 1.5 * strength);
 }
 
 function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
@@ -292,6 +306,13 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
       screen.putString(w - tracker.length - 2, HUD_ROWS, tracker, C.BRIGHT_GREEN, C.BLACK);
     }
   }
+
+  // NEW BEST banner. It only fires on normal runs, so it never shares this row
+  // with the debug label above.
+  if (state.newBestFlash > 0) {
+    const blink = sin(state.time * 10) > 0;
+    screen.putStringCenter(HUD_ROWS, '[ NEW BEST ]', blink ? C.BRIGHT_YELLOW : C.BRIGHT_WHITE, C.BLACK);
+  }
 }
 
 function drawFooter(screen: ScreenBuffer, state: GameState): void {
@@ -309,9 +330,47 @@ function drawFooter(screen: ScreenBuffer, state: GameState): void {
   screen.hLine(1, footerY + 1, w - 2, '\u2550', C.CYAN, C.BLACK);
   screen.put(w - 1, footerY + 1, '\u255D', C.CYAN, C.BLACK); // ╝
 
-  const hints = 'Arrows:Move  SPACE:Fire  F:Boost  ESC:Quit';
+  // Fall back to the compact hint list on a narrow terminal so it never runs
+  // into the border corners.
+  const hintsFull = 'Arrows:Move  SPACE:Fire  F:Boost  P:Pause  M:Mute  ESC:Quit';
+  const hintsShort = 'Move  Fire  Boost  P:Pause  M:Mute  ESC';
+  const hints = hintsFull.length <= w - 4 ? hintsFull : hintsShort;
   const hintX = floor((w - hints.length) / 2);
   screen.putString(hintX, footerY, hints, C.GRAY, C.BLACK);
+
+  // Status strip set into the bottom border: speed multiplier and mute state.
+  const spd = ` SPD: ${(state.speed / BASE_SPEED_START).toFixed(1)}x `;
+  screen.putString(2, footerY + 1, spd,
+    state.boosting ? C.BRIGHT_MAGENTA : C.BRIGHT_CYAN, C.BLACK);
+
+  if (state.muted) {
+    const mute = ' MUTED ';
+    screen.putString(w - mute.length - 2, footerY + 1, mute, C.BRIGHT_YELLOW, C.BLACK);
+  }
+}
+
+function drawPauseOverlay(screen: ScreenBuffer, state: GameState): void {
+  const w = screen.width;
+  const h = screen.height;
+  const label = '[ PAUSED ]';
+  const hint = 'P to resume';
+  const boxW = max(label.length, hint.length) + 6;
+  const boxX = floor((w - boxW) / 2);
+  const boxY = floor(h / 2) - 2;
+
+  screen.fillRect(boxX, boxY, boxW, 5, ' ', C.WHITE, C.BLACK);
+  screen.put(boxX, boxY, '\u250C', C.BRIGHT_CYAN, C.BLACK);                  // ┌
+  screen.hLine(boxX + 1, boxY, boxW - 2, '\u2500', C.BRIGHT_CYAN, C.BLACK);  // ─
+  screen.put(boxX + boxW - 1, boxY, '\u2510', C.BRIGHT_CYAN, C.BLACK);       // ┐
+  screen.vLine(boxX, boxY + 1, 3, '\u2502', C.BRIGHT_CYAN, C.BLACK);         // │
+  screen.vLine(boxX + boxW - 1, boxY + 1, 3, '\u2502', C.BRIGHT_CYAN, C.BLACK);
+  screen.put(boxX, boxY + 4, '\u2514', C.BRIGHT_CYAN, C.BLACK);              // └
+  screen.hLine(boxX + 1, boxY + 4, boxW - 2, '\u2500', C.BRIGHT_CYAN, C.BLACK);
+  screen.put(boxX + boxW - 1, boxY + 4, '\u2518', C.BRIGHT_CYAN, C.BLACK);   // ┘
+
+  const pulse = sin(state.time * 3) * 0.5 + 0.5;
+  screen.putStringCenter(boxY + 1, label, pulse > 0.3 ? C.BRIGHT_YELLOW : C.YELLOW, C.BLACK);
+  screen.putStringCenter(boxY + 3, hint, C.GRAY, C.BLACK);
 }
 
 function drawEffects(screen: ScreenBuffer, state: GameState): void {

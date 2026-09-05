@@ -72,6 +72,37 @@ export class ScreenBuffer {
     }
   }
 
+  /**
+   * Shift rows y0 (inclusive) to y1 (exclusive) horizontally by dx columns,
+   * blanking the columns vacated at the edge. Used for the damage screen
+   * shake, which jolts the play area while the HUD and border stay put.
+   */
+  shiftRows(y0: number, y1: number, dx: number): void {
+    if (dx === 0) return;
+    const from = Math.max(0, y0);
+    const to = Math.min(this.height, y1);
+    for (let y = from; y < to; y++) {
+      const row = y * this.width;
+      // Walk away from the destination edge so a cell is read before overwrite.
+      const start = dx > 0 ? this.width - 1 : 0;
+      const step = dx > 0 ? -1 : 1;
+      for (let n = 0; n < this.width; n++) {
+        const x = start + step * n;
+        const src = x - dx;
+        const i = row + x;
+        if (src >= 0 && src < this.width) {
+          this.chars[i] = this.chars[row + src];
+          this.fg[i] = this.fg[row + src];
+          this.bg[i] = this.bg[row + src];
+        } else {
+          this.chars[i] = ' ';
+          this.fg[i] = 7;
+          this.bg[i] = 0;
+        }
+      }
+    }
+  }
+
   flush(): void {
     let out = '';
     let lastFg = -1;

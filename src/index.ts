@@ -29,6 +29,8 @@ if (args.includes('--help') || args.includes('-h')) {
     '    SPACE              Fire pulse cannon',
     '    F                  Boost',
     '    Q / E              Barrel roll',
+    '    P                  Pause / resume',
+    '    M                  Mute toggle',
     '    ENTER              Launch / relaunch',
     '    ESC / Ctrl+C       Quit',
     '',
@@ -112,7 +114,7 @@ stdin.on('data', (data: string) => {
   if (!data.includes('\x1b')) {
     for (const ch of data) {
       const upper = ch.toUpperCase();
-      if ('WASDQEF'.includes(upper)) pressKey(upper);
+      if ('WASDQEFPM'.includes(upper)) pressKey(upper);
       if (ch >= '1' && ch <= '9') pressKey(`DIGIT_${ch}`);
     }
   }

@@ -16,7 +16,10 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Obstacles and mines** &mdash; Dodge rotating obstacle blocks and blinking mines that deal shield damage on contact.
 - **Energy orbs** &mdash; Collect glowing orbs to gain score and restore shield.
 - **Progressive difficulty** &mdash; Speed gradually increases with distance. Obstacle density grows every minute. Mines begin spawning after the first minute and escalate over time.
-- **HUD** &mdash; Live score, distance traveled, shield percentage, and shield bar rendered in the terminal.
+- **HUD** &mdash; Live score, distance traveled, shield percentage, shield bar, and a speed readout showing the current multiple of the starting speed.
+- **High score persistence** &mdash; The browser version saves your best score and restores it on load. A `[ NEW BEST ]` banner flashes the moment a run passes it.
+- **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. Useful in the browser, where there is no terminal interrupt.
+- **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second, leaving the HUD and border anchored.
 - **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
 
 ## Getting Started
@@ -80,9 +83,14 @@ space-rider --help                   Show help
 | `F` or `Shift` (browser) | Boost |
 | `Space` | Fire pulse cannon |
 | `Q` / `E` | Barrel roll |
+| `P` | Pause / resume a run |
+| `M` | Mute toggle |
 | `Enter` | Launch / relaunch |
 | `Esc` | Return to menu / quit |
 | `Ctrl+C` | Quit immediately (terminal) |
+
+`M` sets a mute flag and shows a `MUTED` indicator in the footer. The game has no
+sound yet, so the flag currently drives nothing.
 
 ### Gameplay
 
@@ -91,6 +99,7 @@ space-rider --help                   Show help
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
 - **Survive** &mdash; The game ends when shield reaches 0.
+- **Chase your best** &mdash; Only normal runs count toward the best score. Debug scenarios are diagnostics and never record one.
 
 ### Debug Modes
 
@@ -117,7 +126,12 @@ cmd-space-rider/
     render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
     menu.ts         # Menu screens: title, debug menu, game over
     screen.ts       # Double-buffered ANSI screen buffer
-    types.ts        # Type definitions and color constants
+    types.ts        # Type definitions, shared constants, color constants
+  test/
+    helpers.mjs                 # Shared test rigging
+    browser-engine.test.mjs     # Browser build behaviour
+    terminal-engine.test.mjs    # Terminal build behaviour
+    parity.test.mjs             # Both builds agree
   hero.png          # Hero banner graphic
   icon.png          # App icon graphic
   package.json      # CLI tool manifest and dependencies
@@ -132,7 +146,19 @@ npm run start      # Run the compiled game
 npm run dev        # Build and run in one step
 npm run debug      # Build and run in debug mode
 npm run watch      # Watch mode for development
+npm test           # Build, then run the test suite
 ```
+
+### Tests
+
+The suite uses the Node built-in test runner and adds no dependencies. It covers
+both builds and the agreement between them.
+
+The terminal tests import the compiled output from `out/`, which is why `npm test`
+builds first. The browser build is a single self-contained `index.html` with no
+module boundary to import, so those tests read the file and evaluate its inline
+script up to the point where it starts touching the DOM. Everything above that
+line is game logic and rendering, which is what gets exercised.
 
 ## Terminal Requirements
 
@@ -150,3 +176,5 @@ The game uses a custom double-buffered screen renderer built on raw ANSI escape 
 ### Browser Version
 
 The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
+
+Two things differ, both because the medium demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead.
