@@ -18,8 +18,8 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Progressive difficulty** &mdash; Speed gradually increases with distance. Obstacle density grows every minute. Mines begin spawning after the first minute and escalate over time.
 - **HUD** &mdash; Live score, distance traveled, shield percentage, shield bar, and a speed readout showing the current multiple of the starting speed.
 - **High score persistence** &mdash; The browser version saves your best score and restores it on load. A `[ NEW BEST ]` banner flashes the moment a run passes it.
-- **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. Useful in the browser, where there is no terminal interrupt.
-- **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second, leaving the HUD and border anchored.
+- **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. The world freezes with it, so once an in-flight flash or shake has finished, the pulsing overlay label is all that still moves. Useful in the browser, where there is no terminal interrupt.
+- **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second. The browser build offsets the whole canvas; the terminal build jolts only the play area, leaving the HUD and border anchored.
 - **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
 
 ## Getting Started
@@ -121,7 +121,8 @@ Navigate the debug menu with arrow keys or number keys, then press `Enter` to la
 cmd-space-rider/
   index.html        # Browser version (canvas terminal emulator, zero dependencies)
   src/
-    index.ts        # CLI entry point, terminal setup, main loop, input handling
+    index.ts        # CLI entry point, terminal setup, main loop
+    input.ts        # Key tables, raw stdin decoding, and key decay windows
     game.ts         # Game engine: state, physics, collision, entity management
     render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
     menu.ts         # Menu screens: title, debug menu, game over
@@ -131,6 +132,7 @@ cmd-space-rider/
     helpers.mjs                 # Shared test rigging
     browser-engine.test.mjs     # Browser build behaviour
     terminal-engine.test.mjs    # Terminal build behaviour
+    input.test.mjs              # Terminal input decoding and key repeat
     parity.test.mjs             # Both builds agree
   hero.png          # Hero banner graphic
   icon.png          # App icon graphic
@@ -171,7 +173,7 @@ line is game logic and rendering, which is what gets exercised.
 
 ### Terminal Version
 
-The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode with a key-decay timer to simulate key-down/key-up behavior (terminals only provide key-press events, not key-release).
+The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode. Terminals only provide key-press events, not key-release, so a key counts as held until its characters stop arriving, and the decay window is checked once per frame. Keys that act on the press rather than the hold get a longer window than the movement keys, so that the first character of an OS auto-repeat is not read as a second press.
 
 ### Browser Version
 

@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.2.1-alpha] - 2026-09-06
+
+### Fixed
+
+- Pausing now stops the world. One animation clock drove the whole render layer
+  and kept running through a pause, so tunnel walls cycled colour, mines blinked
+  between glyphs, orbs bobbed and pulsed, and the engine glow flickered on what
+  was meant to be a still image. The pulsing `[ PAUSED ]` label was lost among
+  it and carried no signal. The clock is now split in two, and the label pulse is
+  the only motion left on a paused screen.
+- Holding `P` or `M` in the terminal build no longer toggles twice. The key decay
+  window was shorter than every platform's delay before the first repeat
+  character, so that character read as a fresh press and a run paused and
+  immediately resumed. Toggle keys now hold a window that outlasts the repeat
+  delay, while the movement and fire keys keep the short window, where re-arming
+  on repeat is what a held direction wants. The browser build never had the
+  fault, since its handler is gated on a key state only `keyup` clears.
+- Holding `ESC` in the terminal build no longer quits the game. The first press
+  backs a run out to the title screen, and the first auto-repeat character was
+  read as a second press, which took the quit branch from that title screen and
+  ended the process. `ESC` now shares the repeat-suppression window the pause
+  and mute keys use. The browser build has no quit branch and never had it.
+- The feature list no longer claims the screen shake leaves the HUD and border
+  anchored in both builds. That is the terminal build's behaviour; the browser
+  build translates the whole canvas, as the Browser Version section already said.
+
+### Added
+
+- `uiTime` game state field: the presentation clock behind the screen shake, the
+  `[ NEW BEST ]` blink, and the `[ PAUSED ]` pulse. Those three effects are meant
+  to outlive a pause, and everything else now freezes with the run.
+- Tests covering the paused screen freezing in both builds, the two builds
+  freezing the same cells, the label still pulsing while paused, an in-flight
+  shake still decaying to no offset, and the terminal input layer's decoding,
+  decay windows, and repeat suppression for every key that acts on the press.
+
+### Changed
+
+- The terminal key tables, raw stdin decoding, and key decay moved out of
+  `src/index.ts` into `src/input.ts`. The entry point claims the TTY and starts
+  the loop at import time, so nothing in it could be reached by a test; the
+  input layer now can be. Decay is checked once per frame against a supplied
+  clock rather than on a timer, which leaves no pending handles behind.
+- The pause gate names the mode as well as the flag. The title screen, debug
+  menu, and game over screen animate off the world clock and are not a run in
+  progress, so they keep moving while a paused run does not.
+
 ## [0.2.0-alpha] - 2026-09-05
 
 ### Added

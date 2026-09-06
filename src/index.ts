@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// src/index.ts — CMD Space Rider: Entry point, terminal setup, main loop, input
+// src/index.ts — CMD Space Rider: Entry point, terminal setup, main loop
 
 import { Game } from './game';
 import { ScreenBuffer } from './screen';
 import { renderGame } from './render';
 import { renderTitleScreen, renderDebugMenu, renderGameOver } from './menu';
+import { InputState } from './input';
 
 // ----- CLI argument parsing -----
 const args = process.argv.slice(2);
@@ -80,44 +81,19 @@ stdout.on('resize', () => {
 });
 
 // ----- Input handling -----
-// Terminal raw mode doesn't have key-up events, so we use a decay timer approach:
-// A key is "held" as long as we receive repeats within KEY_DECAY_MS.
-const KEY_DECAY_MS = 150;
-const keys: Record<string, boolean> = {};
-const justPressed: Record<string, boolean> = {};
-const keyTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+// The key tables and their decay live in ./input, which the test suite can
+// import. This file only wires stdin to them.
+const input = new InputState();
+const keys = input.keys;
+const justPressed = input.justPressed;
 
 if (stdin.setRawMode) stdin.setRawMode(true);
 stdin.resume();
 stdin.setEncoding('utf8');
 
-function pressKey(key: string): void {
-  if (!keys[key]) justPressed[key] = true;
-  keys[key] = true;
-  if (keyTimers[key]) clearTimeout(keyTimers[key]);
-  keyTimers[key] = setTimeout(() => { keys[key] = false; }, KEY_DECAY_MS);
-}
-
 stdin.on('data', (data: string) => {
-  // Handle escape sequences
   if (data === '\x03') cleanup(); // Ctrl+C
-  if (data === '\x1b' && data.length === 1) pressKey('ESCAPE');
-  if (data.includes('\x1b[A') || data.includes('\x1bOA')) pressKey('UP');
-  if (data.includes('\x1b[B') || data.includes('\x1bOB')) pressKey('DOWN');
-  if (data.includes('\x1b[C') || data.includes('\x1bOC')) pressKey('RIGHT');
-  if (data.includes('\x1b[D') || data.includes('\x1bOD')) pressKey('LEFT');
-  if (data === '\r' || data === '\n') pressKey('ENTER');
-  if (data === ' ') pressKey('SPACE');
-  if (data === '\t') pressKey('TAB');
-
-  // Only process individual characters if not an escape sequence
-  if (!data.includes('\x1b')) {
-    for (const ch of data) {
-      const upper = ch.toUpperCase();
-      if ('WASDQEFPM'.includes(upper)) pressKey(upper);
-      if (ch >= '1' && ch <= '9') pressKey(`DIGIT_${ch}`);
-    }
-  }
+  input.feed(data);
 });
 
 // ----- Game and rendering initialization -----
@@ -159,9 +135,12 @@ function frame(): void {
     screen.putStringCenter(Math.floor(termHeight / 2), `Need ${MIN_WIDTH}x${MIN_HEIGHT}, have ${termWidth}x${termHeight}`, 7, 0);
     screen.putStringCenter(Math.floor(termHeight / 2) + 1, 'Please resize your terminal.', 7, 0);
     screen.flush();
-    clearJustPressed();
+    input.clearJustPressed();
     return;
   }
+
+  // Release keys that have gone quiet since the last frame.
+  input.expire();
 
   // Handle menu input
   game.handleMenuInput(justPressed);
@@ -195,13 +174,7 @@ function frame(): void {
   }
 
   screen.flush();
-  clearJustPressed();
-}
-
-function clearJustPressed(): void {
-  for (const key of Object.keys(justPressed)) {
-    delete justPressed[key];
-  }
+  input.clearJustPressed();
 }
 
 // Start the loop
