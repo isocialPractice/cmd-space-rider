@@ -18,30 +18,43 @@ its origin survives archiving into `## Complete`.
 - [ ] **Combo scoring** — Track rapid successive hits. Display a combo counter ("x3", "x5") that multiplies score for quick kills. Resets after 2 seconds without a hit.
   - From: Medium Effort
 
-### UI/UX Override - pause leaves the world animating
+### UI/UX Override - menu screens clipped and speckled
+
+Both found while verifying the 0.2.1-alpha pause fix in the browser. That fix
+passed every check, so nothing here is a regression from it; these are separate
+defects on the menu screens, in both builds.
 
 #### Found Issues
 
-- [ ] **Pause freezes positions but not animation**
-  - **Issue**: Pausing a run stops the simulation correctly, but the screen keeps moving. Over 3s of pause the browser build logged 22 glyph changes and 413 non-label colour changes in a normal run, and 1156 glyph changes in `?mode=mines`: the tunnel walls cycle colour, mines blink between `■` and `◈`, orbs bob a row and pulse, and the ship's engine glow flickers. The `[ PAUSED ]` label pulse is meant to be the only motion, so that it reads as paused rather than crashed, and it is lost among the rest. Cause: `s.time += dt` sits above the pause gate (`index.html:309`, `src/game.ts:249`) and is the animation clock for the whole render layer, not just the three effects meant to outlive a pause. Both builds share the structure.
-  - **Goal**: Resolve to [pause-animation-clock.prompt.md](.claude/prompts/pause-animation-clock.prompt.md)
-  - From: UI/UX Override - pause leaves the world animating
+- [ ] **Debug menu is clipped at the documented minimum screen size**
+  - **Issue**: `renderDebugMenu` places the navigation hint at
+    `menuY + DEBUG_MODES.length * 3 + 1` and never clamps it to the screen, and
+    `ScreenBuffer.put` drops out-of-range writes without complaint. Rendered
+    with the starfield suppressed and swept over height, the hint is missing
+    below 28 rows and the fifth mode is missing below 23 rows, identically at
+    60 and 80 columns. `README.md` gives the minimum as 60x20, where the menu
+    loses both `CHAOS PROTOCOL` and the line saying the arrows select and Enter
+    launches. The hint is also the only animated thing on that screen, so a
+    clipped debug menu is completely still. Shared by `index.html` and
+    `src/menu.ts:124`.
+  - **Goal**: Resolve to [debug-menu-nav-hint-clipped.prompt.md](.claude/prompts/debug-menu-nav-hint-clipped.prompt.md)
+  - From: UI/UX Override - menu screens clipped and speckled
 
-### Code Review Override - terminal key repeat double-toggles P and M
-
-#### Resolve Issues
-
-- [ ] **Pause support** - Press `P` to pause the game. Show a "PAUSED" overlay. Useful for the browser version where there's no terminal interrupt.
-  - **Issue**: In the terminal build, holding `P` for longer than the OS key-repeat delay toggles pause twice, so the run pauses and immediately resumes and the player sees nothing happen. `KEY_DECAY_MS` is 150ms (`src/index.ts:85`) and every platform's repeat delay is longer than that (Windows 250-750ms, X11 660ms), so `keys['P']` has already decayed to false when the first auto-repeat character arrives, `pressKey` re-arms `justPressed['P']` (`src/index.ts:95`), and `Game.update` flips `s.paused` a second time (`src/game.ts:245`). `M` has the same fault (`src/game.ts:244`), as would any toggle key added later. The browser build is correct and does not share it: its `keydown` handler is gated on `keys[k]`, which only `keyup` clears (`index.html:1096-1107`), so repeat never re-arms the press. The parity suite cannot see the difference because it feeds `justPressed` to `update()` directly and never exercises either input layer.
-  - **Goal**: Make `P` and `M` edge-triggered in `src/index.ts` independently of the movement decay timer - a repeat-suppression window longer than any platform's key-repeat delay for toggle keys, leaving `KEY_DECAY_MS` as it is for the held movement and fire keys, where re-arming is what those keys want. Verifying it first needs `pressKey` and the key tables lifted out of `src/index.ts` into a module the suite can import, since `src/index.ts` claims the TTY and starts the loop at import time; do that, then cover the repeat case in `test/`.
-  - From: Quick Wins
-
-#### Found Issues
-
-- [ ] **README overstates the screen shake for the browser build**
-  - **Issue**: `README.md:22` says taking damage jolts the view "leaving the HUD and border anchored". That holds for the terminal build, which shifts only the play-area rows, but not for the browser build, which translates the whole canvas in `frame()` (`index.html:1153-1157`) so the HUD and border move with everything else. The Browser Version section lower down describes the pixel-offset difference but never corrects the blanket claim, and the browser build is what the README's deployed link opens.
-  - **Goal**: Reword the feature bullet so the anchored HUD reads as the terminal build's behaviour rather than the game's, matching the accurate wording already in `CHANGELOG.md` for 0.2.0-alpha.
-  - From: Code Review Override - terminal key repeat double-toggles P and M
+- [ ] **Menu starfield is drawn over the menu text instead of behind it**
+  - **Issue**: `drawMenuStars` is the last call in `renderTitleScreen`,
+    `renderDebugMenu` and `renderGameOver`, so stars overwrite whatever the
+    screen already drew. On a real 100x31 browser render the debug menu showed
+    `[3] COLLISION COURSE` as `+3]`, `Log collisions.` as `Lo* collisions.`,
+    a star inside the brackets of the navigation hint, and two punched into the
+    title art. Comparing starred against starless renders over 300 seeds, all
+    300 lost drawn cells at 100x30, mean 5.4 and up to 12 of the 40 stars, with
+    287 of 300 at 128x44 and 294 of 300 on the title screen. Both builds.
+  - **Goal**: Draw the starfield before the text on all three screens, or have
+    `drawMenuStars` skip any cell whose character is not blank. The three call
+    sites are `index.html:935`, `index.html:977`, `index.html:1006` and their
+    counterparts in `src/menu.ts`; keep both builds identical, as
+    `test/parity.test.mjs` expects.
+  - From: UI/UX Override - menu screens clipped and speckled
 
 ## Quick Wins
 
@@ -107,3 +120,15 @@ the roadmap section each one came from.
   - From: Quick Wins
 - [x] **Screen shake on damage** — Offset the canvas rendering by a few pixels for ~200ms when the ship takes damage. Simple, impactful juice.
   - From: Quick Wins
+- [x] **Pause freezes positions but not animation**
+  - **Issue**: Pausing a run stops the simulation correctly, but the screen keeps moving. Over 3s of pause the browser build logged 22 glyph changes and 413 non-label colour changes in a normal run, and 1156 glyph changes in `?mode=mines`: the tunnel walls cycle colour, mines blink between `■` and `◈`, orbs bob a row and pulse, and the ship's engine glow flickers. The `[ PAUSED ]` label pulse is meant to be the only motion, so that it reads as paused rather than crashed, and it is lost among the rest. Cause: `s.time += dt` sits above the pause gate (`index.html:309`, `src/game.ts:249`) and is the animation clock for the whole render layer, not just the three effects meant to outlive a pause. Both builds share the structure.
+  - **Goal**: Resolve to [pause-animation-clock.prompt.md](.claude/prompts/pause-animation-clock.prompt.md)
+  - From: UI/UX Override - pause leaves the world animating
+- [x] **Pause support** - Press `P` to pause the game. Show a "PAUSED" overlay. Useful for the browser version where there's no terminal interrupt.
+  - **Issue**: In the terminal build, holding `P` for longer than the OS key-repeat delay toggles pause twice, so the run pauses and immediately resumes and the player sees nothing happen. `KEY_DECAY_MS` is 150ms (`src/index.ts:85`) and every platform's repeat delay is longer than that (Windows 250-750ms, X11 660ms), so `keys['P']` has already decayed to false when the first auto-repeat character arrives, `pressKey` re-arms `justPressed['P']` (`src/index.ts:95`), and `Game.update` flips `s.paused` a second time (`src/game.ts:245`). `M` has the same fault (`src/game.ts:244`), as would any toggle key added later. The browser build is correct and does not share it: its `keydown` handler is gated on `keys[k]`, which only `keyup` clears (`index.html:1096-1107`), so repeat never re-arms the press. The parity suite cannot see the difference because it feeds `justPressed` to `update()` directly and never exercises either input layer.
+  - **Goal**: Make `P` and `M` edge-triggered in `src/index.ts` independently of the movement decay timer - a repeat-suppression window longer than any platform's key-repeat delay for toggle keys, leaving `KEY_DECAY_MS` as it is for the held movement and fire keys, where re-arming is what those keys want. Verifying it first needs `pressKey` and the key tables lifted out of `src/index.ts` into a module the suite can import, since `src/index.ts` claims the TTY and starts the loop at import time; do that, then cover the repeat case in `test/`.
+  - From: Quick Wins
+- [x] **README overstates the screen shake for the browser build**
+  - **Issue**: `README.md:22` says taking damage jolts the view "leaving the HUD and border anchored". That holds for the terminal build, which shifts only the play-area rows, but not for the browser build, which translates the whole canvas in `frame()` (`index.html:1153-1157`) so the HUD and border move with everything else. The Browser Version section lower down describes the pixel-offset difference but never corrects the blanket claim, and the browser build is what the README's deployed link opens.
+  - **Goal**: Reword the feature bullet so the anchored HUD reads as the terminal build's behaviour rather than the game's, matching the accurate wording already in `CHANGELOG.md` for 0.2.0-alpha.
+  - From: Code Review Override - terminal key repeat double-toggles P and M
