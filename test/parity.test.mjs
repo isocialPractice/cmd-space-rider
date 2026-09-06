@@ -8,11 +8,16 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { REPO_ROOT, loadBrowserEngine, fakeStorage, FRAME } from './helpers.mjs';
+import {
+  REPO_ROOT, loadBrowserEngine, fakeStorage,
+  screenCells, changedCells, stageAnimatedWorld, FRAME,
+} from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const terminalTypes = require(join(REPO_ROOT, 'out', 'types.js'));
+const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
+const { renderGame: terminalRender } = require(join(REPO_ROOT, 'out', 'render.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
 
@@ -78,5 +83,44 @@ test('both builds refuse to record a debug run as the best score', () => {
     game.state.score = 500000;
     game.endGame();
     assert.equal(game.state.bestScore, 0);
+  }
+});
+
+test('both builds freeze the same cells while paused', () => {
+  // The starfields are seeded from Math.random, so the two screens never match
+  // cell for cell. What has to match is which cells move while paused: the
+  // PAUSED label pulses in both builds and nothing else may.
+  const movedBy = (game, screen, renderGame) => {
+    game.startGame();
+    game.state.screenWidth = screen.width;
+    game.state.screenHeight = screen.height;
+    game.initStars(screen.width, screen.height);
+    stageAnimatedWorld(game.state);
+    game.update(FRAME, {}, { P: true });
+
+    const read = () => {
+      renderGame(screen, game.state);
+      return screenCells(screen);
+    };
+
+    const before = read();
+    // Long enough to cross the label pulse trough. sin(uiTime*3) only drops
+    // under the colour threshold past ~1.2s, so a shorter sweep would find
+    // nothing moving and pass whether the label pulsed or not.
+    for (let i = 0; i < 40; i++) game.update(FRAME, {}, {});
+    return changedCells(before, read()).sort();
+  };
+
+  const W = 80;
+  const H = 24;
+  const terminalMoved = movedBy(new TerminalGame(), new TerminalScreen(W, H), terminalRender);
+  const browserMoved = movedBy(new browser.Game(), new browser.ScreenBuffer(W, H), browser.renderGame);
+
+  assert.deepEqual(browserMoved, terminalMoved);
+  assert.ok(terminalMoved.length > 0, 'the PAUSED label should still be pulsing');
+
+  const labelRow = Math.floor(H / 2) - 1;
+  for (const cell of terminalMoved) {
+    assert.equal(Number(cell.split(',')[1]), labelRow, `only the label row moves, saw ${cell}`);
   }
 });

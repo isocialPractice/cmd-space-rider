@@ -177,7 +177,7 @@ class Game{
       mode:'menu',debugMode:null,score:0,distance:0,shield:100,
       bestScore:loadBestScore(),
       speed:BASE_SPEED_START,baseSpeed:BASE_SPEED_START,boostSpeed:0.55,
-      shipX:0,shipY:0,shipRoll:0,time:0,gameTime:0,
+      shipX:0,shipY:0,shipRoll:0,time:0,uiTime:0,gameTime:0,
       obstacles:[],orbs:[],mines:[],bullets:[],particles:[],stars:[],
       tunnelRadius:8,maxViewZ:200,
       lastObstacleIncreaseMinute:0,mineTrackTime:0,minesToPresent:0,
@@ -306,7 +306,12 @@ class Game{
 
     // Presentation timers keep running while paused so an in-flight flash or
     // shake finishes instead of freezing on screen.
-    s.time+=dt;
+    s.uiTime+=dt;
+    // The world's clock stops with the world, so a paused screen is a still
+    // image. The gate names the mode as well as the flag: the title screen,
+    // debug menu and game over screen animate off this clock and are not a
+    // run in progress, so a bare `!s.paused` would freeze them too.
+    if(!(s.mode==='playing'&&s.paused))s.time+=dt;
     s.damageFlash=max(0,s.damageFlash-dt*8);
     s.collectFlash=max(0,s.collectFlash-dt*8);
     s.newBestFlash=max(0,s.newBestFlash-dt);
@@ -616,8 +621,8 @@ function shakeOffset(state){
   if(state.shake<=0)return{x:0,y:0};
   const strength=state.shake/SHAKE_TIME;
   return{
-    x:sin(state.time*90)*SHAKE_PIXELS*strength,
-    y:cos(state.time*70)*SHAKE_PIXELS*0.8*strength,
+    x:sin(state.uiTime*90)*SHAKE_PIXELS*strength,
+    y:cos(state.uiTime*70)*SHAKE_PIXELS*0.8*strength,
   };
 }
 
@@ -799,7 +804,7 @@ function drawHUD(screen,state){
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
   // with the debug label above.
   if(state.newBestFlash>0){
-    const blink=sin(state.time*10)>0;
+    const blink=sin(state.uiTime*10)>0;
     screen.putStringCenter(HUD_ROWS,'[ NEW BEST ]',blink?C.BRIGHT_YELLOW:C.BRIGHT_WHITE,C.BLACK);
   }
 }
@@ -850,7 +855,7 @@ function drawPauseOverlay(screen,state){
   screen.hLine(boxX+1,boxY+4,boxW-2,'\u2500',C.BRIGHT_CYAN,C.BLACK);
   screen.put(boxX+boxW-1,boxY+4,'\u2518',C.BRIGHT_CYAN,C.BLACK);
 
-  const pulse=sin(state.time*3)*0.5+0.5;
+  const pulse=sin(state.uiTime*3)*0.5+0.5;
   screen.putStringCenter(boxY+1,label,pulse>0.3?C.BRIGHT_YELLOW:C.YELLOW,C.BLACK);
   screen.putStringCenter(boxY+3,hint,C.GRAY,C.BLACK);
 }

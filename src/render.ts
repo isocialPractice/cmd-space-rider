@@ -57,7 +57,7 @@ export function renderGame(screen: ScreenBuffer, state: GameState): void {
 export function shakeColumns(state: GameState): number {
   if (state.shake <= 0) return 0;
   const strength = state.shake / SHAKE_TIME;
-  return round(sin(state.time * 40) * 1.5 * strength);
+  return round(sin(state.uiTime * 40) * 1.5 * strength);
 }
 
 function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
@@ -310,7 +310,7 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
   // with the debug label above.
   if (state.newBestFlash > 0) {
-    const blink = sin(state.time * 10) > 0;
+    const blink = sin(state.uiTime * 10) > 0;
     screen.putStringCenter(HUD_ROWS, '[ NEW BEST ]', blink ? C.BRIGHT_YELLOW : C.BRIGHT_WHITE, C.BLACK);
   }
 }
@@ -368,7 +368,7 @@ function drawPauseOverlay(screen: ScreenBuffer, state: GameState): void {
   screen.hLine(boxX + 1, boxY + 4, boxW - 2, '\u2500', C.BRIGHT_CYAN, C.BLACK);
   screen.put(boxX + boxW - 1, boxY + 4, '\u2518', C.BRIGHT_CYAN, C.BLACK);   // ┘
 
-  const pulse = sin(state.time * 3) * 0.5 + 0.5;
+  const pulse = sin(state.uiTime * 3) * 0.5 + 0.5;
   screen.putStringCenter(boxY + 1, label, pulse > 0.3 ? C.BRIGHT_YELLOW : C.YELLOW, C.BLACK);
   screen.putStringCenter(boxY + 3, hint, C.GRAY, C.BLACK);
 }

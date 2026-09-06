@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 
 import {
   loadBrowserEngine, fakeStorage, hostileStorage,
-  rowText, screenText, stageCollision, FRAME,
+  rowText, screenText, screenCells, changedCells,
+  stageCollision, stageAnimatedWorld, FRAME,
 } from './helpers.mjs';
 
 const KEY = 'cmdSpaceRider.bestScore';
@@ -192,16 +193,37 @@ test('pause holds the ship still even with the stick held over', () => {
   assert.equal(s.shipX, shipX);
 });
 
-test('animation time keeps running while paused so the overlay pulses', () => {
+test('a pause stops the world clock and leaves the presentation clock running', () => {
   const engine = loadBrowserEngine(fakeStorage());
   const game = new engine.Game();
 
   game.startGame();
   game.update(FRAME, {}, { P: true });
-  const t = game.state.time;
+  const { time, uiTime } = game.state;
 
   game.update(FRAME, {}, {});
-  assert.ok(game.state.time > t);
+  assert.equal(game.state.time, time, 'the world clock is frozen by the pause');
+  assert.ok(game.state.uiTime > uiTime, 'the presentation clock carries on');
+
+  game.update(FRAME, {}, { P: true });
+  game.update(FRAME, {}, {});
+  assert.ok(game.state.time > time, 'resuming restarts the world clock');
+});
+
+test('the world clock keeps running outside a run, whatever the pause flag says', () => {
+  const engine = loadBrowserEngine(fakeStorage());
+
+  // The title screen, debug menu and game over screen all animate off the world
+  // clock, so the pause gate has to name the mode as well as the flag.
+  for (const mode of ['menu', 'debugMenu', 'dead']) {
+    const game = new engine.Game();
+    game.state.mode = mode;
+    game.state.paused = true;
+
+    const t = game.state.time;
+    game.update(FRAME, {}, {});
+    assert.ok(game.state.time > t, mode + ' keeps animating');
+  }
 });
 
 test('an in-flight shake finishes rather than freezing on a pause', () => {
@@ -216,6 +238,136 @@ test('an in-flight shake finishes rather than freezing on a pause', () => {
 
   for (let i = 0; i < 20; i++) game.update(FRAME, {}, {});
   assert.equal(s.shake, 0);
+});
+
+test('a paused screen is a still image apart from the PAUSED label', () => {
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game);
+
+  game.startGame();
+  stageAnimatedWorld(game.state);
+  game.update(FRAME, {}, { P: true });
+  assert.equal(game.state.paused, true);
+
+  engine.renderGame(screen, game.state);
+  const before = screenCells(screen);
+
+  for (let i = 0; i < 10; i++) game.update(FRAME, {}, {});
+  engine.renderGame(screen, game.state);
+  const after = screenCells(screen);
+
+  // The label pulse is the one thing meant to move, so it reads as paused
+  // rather than crashed. Everything else - tunnel walls, mine blink, orb bob,
+  // engine glow - freezes with the world.
+  const moved = changedCells(before, after);
+  const labelRow = Math.floor(screen.height / 2) - 1;
+  const strays = moved.filter((cell) => Number(cell.split(',')[1]) !== labelRow);
+  assert.deepEqual(strays, [], 'nothing outside the label row may animate while paused');
+});
+
+test('the same staged world does move when it is not paused', () => {
+  // Control for the test above. On its own that assertion would hold just as
+  // well against a screen that had stopped drawing the world at all, so the rig
+  // is shown catching motion before it is trusted to prove stillness.
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game);
+
+  game.startGame();
+  stageAnimatedWorld(game.state);
+
+  engine.renderGame(screen, game.state);
+  const before = screenCells(screen);
+
+  for (let i = 0; i < 10; i++) game.update(FRAME, {}, {});
+  engine.renderGame(screen, game.state);
+  const after = screenCells(screen);
+
+  const labelRow = Math.floor(screen.height / 2) - 1;
+  const moved = changedCells(before, after)
+    .filter((cell) => Number(cell.split(',')[1]) !== labelRow);
+  assert.ok(moved.length > 0, 'a running world should move cells outside the label row');
+});
+
+test('the screens outside a run keep redrawing, not just ticking', () => {
+  // The clock test above proves state.time advances on these screens. This one
+  // proves it reaches the buffer: a pause gate written as a bare `!paused`
+  // would leave the title screen a still image, which reads as a hang rather
+  // than as a pause.
+  const engine = loadBrowserEngine(fakeStorage());
+  const screens = [
+    ['title screen', 'menu', engine.renderTitleScreen],
+    ['debug menu', 'debugMenu', engine.renderDebugMenu],
+    ['game over screen', 'dead', engine.renderGameOver],
+  ];
+
+  for (const [name, mode, render] of screens) {
+    const game = new engine.Game();
+    // Staged taller than this file's 80x24 default on purpose: the debug menu
+    // needs 28 rows before its navigation hint is drawn, and that hint is the
+    // only thing on that screen that animates. See the clipping item in TODO.
+    const screen = stage(engine, game, 100, 30);
+    game.startGame();
+    game.state.mode = mode;
+    // Left over from the run that just ended, which is the state a gate
+    // written as a bare `!paused` would freeze these screens in.
+    game.state.paused = true;
+
+    // Sampled across the window rather than end to end. These pulses are
+    // periodic, and the debug menu's sin(time*3) lands back above its colour
+    // threshold two seconds on, so comparing only the first and last frame
+    // finds a screen that animated the whole way through unchanged.
+    let moved = 0;
+    render(screen, game.state);
+    let previous = screenCells(screen);
+    for (let sample = 0; sample < 6; sample++) {
+      for (let i = 0; i < 10; i++) game.update(FRAME, {}, {});
+      render(screen, game.state);
+      const current = screenCells(screen);
+      moved += changedCells(previous, current).length;
+      previous = current;
+    }
+
+    assert.ok(moved > 0, `the ${name} should still be animating`);
+  }
+});
+
+test('the PAUSED label still pulses across paused frames', () => {
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game);
+
+  game.startGame();
+  game.update(FRAME, {}, { P: true });
+
+  // Sweep a full pulse cycle and collect the label colours. sin(uiTime*3)
+  // crosses the 0.3 threshold within ~1s, so a second of frames is enough.
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) {
+    game.update(FRAME, {}, {});
+    engine.renderGame(screen, game.state);
+    const labelRow = Math.floor(screen.height / 2) - 1;
+    const mid = labelRow * screen.width + Math.floor(screen.width / 2);
+    seen.add(screen.fg[mid]);
+  }
+  assert.ok(seen.size > 1, `the label should change colour while paused, saw ${[...seen]}`);
+});
+
+test('a shake caught by a pause still decays and settles at no offset', () => {
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const s = game.state;
+
+  game.startGame();
+  s.shake = engine.SHAKE_TIME;
+  game.update(FRAME, {}, { P: true });
+  assert.equal(s.paused, true);
+  assert.ok(s.shake > 0, 'the shake is still in flight when the pause lands');
+
+  for (let i = 0; i < 20; i++) game.update(FRAME, {}, {});
+  assert.equal(s.shake, 0, 'the shake finishes rather than freezing mid-offset');
+  assert.deepEqual(engine.shakeOffset(s), { x: 0, y: 0 }, 'and settles back to centre');
 });
 
 test('P does nothing outside a run', () => {
@@ -321,7 +473,7 @@ test('the shake offset is bounded and settles back to zero', () => {
   s.shake = engine.SHAKE_TIME;
   let sawMovement = false;
   for (let i = 0; i < 40; i++) {
-    s.time = i * FRAME;
+    s.uiTime = i * FRAME;
     const off = engine.shakeOffset(s);
     assert.ok(Math.abs(off.x) <= engine.SHAKE_PIXELS + 1e-9, `x within bounds, got ${off.x}`);
     assert.ok(Math.abs(off.y) <= engine.SHAKE_PIXELS + 1e-9, `y within bounds, got ${off.y}`);

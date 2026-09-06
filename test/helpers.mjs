@@ -18,7 +18,7 @@ const DOM_MARKER = '// ===== Canvas Setup & Sizing =====';
 /** Names the harness pulls out of the evaluated browser script. */
 const EXPORTS = [
   'Game', 'ScreenBuffer', 'C',
-  'renderGame', 'renderTitleScreen', 'renderGameOver', 'drawPauseOverlay',
+  'renderGame', 'renderTitleScreen', 'renderDebugMenu', 'renderGameOver', 'drawPauseOverlay',
   'shakeOffset', 'loadBestScore', 'saveBestScore',
   'HUD_ROWS', 'FOOTER_ROWS', 'SHAKE_TIME', 'NEW_BEST_FLASH_TIME',
   'BASE_SPEED_START', 'SHAKE_PIXELS', 'BEST_SCORE_KEY',
@@ -77,6 +77,53 @@ export function screenText(screen) {
   const rows = [];
   for (let y = 0; y < screen.height; y++) rows.push(rowText(screen, y));
   return rows.join('\n');
+}
+
+/**
+ * Read the whole buffer back as cells of `char|fg|bg`, which is what a freeze
+ * test has to compare: the paused defect moved colours as well as glyphs, and
+ * screenText() alone would not have seen the tunnel wall pulse.
+ */
+export function screenCells(screen) {
+  const cells = [];
+  for (let y = 0; y < screen.height; y++) {
+    for (let x = 0; x < screen.width; x++) {
+      const i = y * screen.width + x;
+      cells.push({ x, y, key: `${screen.chars[i]}|${screen.fg[i]}|${screen.bg[i]}` });
+    }
+  }
+  return cells;
+}
+
+/** Coordinates whose char or colour differs between two buffer readings. */
+export function changedCells(before, after) {
+  const out = [];
+  for (let i = 0; i < before.length; i++) {
+    if (before[i].key !== after[i].key) out.push(`${before[i].x},${before[i].y}`);
+  }
+  return out;
+}
+
+/**
+ * Fill a run with one of everything that animates, at fixed positions, so a
+ * paused frame is reproducible. Placing the entities rather than waiting for
+ * spawns keeps the test off the RNG and off the spawn timers.
+ */
+export function stageAnimatedWorld(state) {
+  state.obstacles = [
+    { x: -3, y: 1, z: 30, rot: 0, rotSpeed: 1, scale: 1 },
+    { x: 4, y: -2, z: 70, rot: 0.5, rotSpeed: 1, scale: 1.2 },
+  ];
+  state.orbs = [
+    { x: 2, y: 0, z: 25, collected: false },
+    { x: -1, y: 2, z: 55, collected: false },
+  ];
+  state.mines = [
+    { x: 0, y: -1, z: 40, rot: 0, rotSpeed: 1, scale: 1, hp: 3 },
+    { x: -4, y: 3, z: 90, rot: 1, rotSpeed: 1, scale: 1, hp: 3 },
+  ];
+  state.bullets = [];
+  state.particles = [];
 }
 
 /**

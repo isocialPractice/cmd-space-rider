@@ -43,6 +43,7 @@ export class Game {
       shipY: 0,
       shipRoll: 0,
       time: 0,
+      uiTime: 0,
       gameTime: 0,
       obstacles: [],
       orbs: [],
@@ -246,7 +247,12 @@ export class Game {
 
     // Presentation timers keep running while paused so an in-flight flash or
     // shake finishes instead of freezing on screen.
-    s.time += dt;
+    s.uiTime += dt;
+    // The world's clock stops with the world, so a paused screen is a still
+    // image. The gate names the mode as well as the flag: the title screen,
+    // debug menu and game over screen animate off this clock and are not a
+    // run in progress, so a bare `!s.paused` would freeze them too.
+    if (!(s.mode === 'playing' && s.paused)) s.time += dt;
     s.damageFlash = max(0, s.damageFlash - dt * 8);
     s.collectFlash = max(0, s.collectFlash - dt * 8);
     s.newBestFlash = max(0, s.newBestFlash - dt);

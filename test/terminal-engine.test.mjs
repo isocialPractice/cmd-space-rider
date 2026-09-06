@@ -8,7 +8,10 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { REPO_ROOT, rowText, screenText, stageCollision, FRAME } from './helpers.mjs';
+import {
+  REPO_ROOT, rowText, screenText, screenCells, changedCells,
+  stageCollision, stageAnimatedWorld, FRAME,
+} from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { Game } = require(join(REPO_ROOT, 'out', 'game.js'));
@@ -120,7 +123,7 @@ test('the shake offset is at most one column and settles to zero', () => {
   s.shake = SHAKE_TIME;
   let sawMovement = false;
   for (let i = 0; i < 40; i++) {
-    s.time = i * FRAME;
+    s.uiTime = i * FRAME;
     const dx = shakeColumns(s);
     assert.ok(Number.isInteger(dx), 'a column offset must be whole');
     assert.ok(Math.abs(dx) <= 1, `offset within one column, got ${dx}`);
@@ -141,7 +144,7 @@ test('the shake leaves the HUD and border anchored', () => {
 
   // Sweep the shake through a full cycle so a shifting frame is certain.
   for (let i = 0; i < 20; i++) {
-    game.state.time = i * FRAME;
+    game.state.uiTime = i * FRAME;
     renderGame(screen, game.state);
     const rows = screenText(screen).split('\n');
     assert.equal(rows[0][0], '╔', 'top-left corner holds');
@@ -184,6 +187,94 @@ test('P does nothing outside a run, and a fresh run clears it', () => {
 
   game.startGame();
   assert.equal(game.state.paused, false);
+});
+
+test('a pause stops the world clock and leaves the presentation clock running', () => {
+  const game = new Game();
+
+  game.startGame();
+  game.update(FRAME, {}, { P: true });
+  const { time, uiTime } = game.state;
+
+  game.update(FRAME, {}, {});
+  assert.equal(game.state.time, time, 'the world clock is frozen by the pause');
+  assert.ok(game.state.uiTime > uiTime, 'the presentation clock carries on');
+
+  game.update(FRAME, {}, { P: true });
+  game.update(FRAME, {}, {});
+  assert.ok(game.state.time > time, 'resuming restarts the world clock');
+});
+
+test('the world clock keeps running outside a run, whatever the pause flag says', () => {
+  // The title screen, debug menu and game over screen all animate off the world
+  // clock, so the pause gate has to name the mode as well as the flag.
+  for (const mode of ['menu', 'debugMenu', 'dead']) {
+    const game = new Game();
+    game.state.mode = mode;
+    game.state.paused = true;
+
+    const t = game.state.time;
+    game.update(FRAME, {}, {});
+    assert.ok(game.state.time > t, `${mode} keeps animating`);
+  }
+});
+
+test('a paused screen is a still image apart from the PAUSED label', () => {
+  const game = new Game();
+  const screen = stage(game);
+
+  game.startGame();
+  stageAnimatedWorld(game.state);
+  game.update(FRAME, {}, { P: true });
+  assert.equal(game.state.paused, true);
+
+  renderGame(screen, game.state);
+  const before = screenCells(screen);
+
+  for (let i = 0; i < 10; i++) game.update(FRAME, {}, {});
+  renderGame(screen, game.state);
+  const after = screenCells(screen);
+
+  // The label pulse is the one thing meant to move, so it reads as paused
+  // rather than crashed. Everything else - tunnel walls, mine blink, orb bob,
+  // engine glow - freezes with the world.
+  const moved = changedCells(before, after);
+  const labelRow = Math.floor(screen.height / 2) - 1;
+  const strays = moved.filter((cell) => Number(cell.split(',')[1]) !== labelRow);
+  assert.deepEqual(strays, [], 'nothing outside the label row may animate while paused');
+});
+
+test('the PAUSED label still pulses across paused frames', () => {
+  const game = new Game();
+  const screen = stage(game);
+
+  game.startGame();
+  game.update(FRAME, {}, { P: true });
+
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) {
+    game.update(FRAME, {}, {});
+    renderGame(screen, game.state);
+    const labelRow = Math.floor(screen.height / 2) - 1;
+    const mid = labelRow * screen.width + Math.floor(screen.width / 2);
+    seen.add(screen.fg[mid]);
+  }
+  assert.ok(seen.size > 1, `the label should change colour while paused, saw ${[...seen]}`);
+});
+
+test('a shake caught by a pause still decays and settles at no offset', () => {
+  const game = new Game();
+  const s = game.state;
+
+  game.startGame();
+  s.shake = SHAKE_TIME;
+  game.update(FRAME, {}, { P: true });
+  assert.equal(s.paused, true);
+  assert.ok(s.shake > 0, 'the shake is still in flight when the pause lands');
+
+  for (let i = 0; i < 20; i++) game.update(FRAME, {}, {});
+  assert.equal(s.shake, 0, 'the shake finishes rather than freezing mid-offset');
+  assert.equal(shakeColumns(s), 0, 'and settles back to centre');
 });
 
 test('the paused overlay is drawn only while paused', () => {

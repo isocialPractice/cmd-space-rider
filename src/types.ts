@@ -76,7 +76,10 @@ export interface GameState {
   shipX: number;
   shipY: number;
   shipRoll: number;
+  /** The world's animation clock. Stops while a run is paused. */
   time: number;
+  /** Presentation clock for the few effects meant to outlive a pause. */
+  uiTime: number;
   gameTime: number;
 
   obstacles: Obstacle[];
