@@ -18,6 +18,9 @@ its origin survives archiving into `## Complete`.
 - [ ] **Combo scoring** — Track rapid successive hits. Display a combo counter ("x3", "x5") that multiplies score for quick kills. Resets after 2 seconds without a hit.
   - From: Medium Effort
 
+- [ ] **Pin the debug menu hint's pulse at the minimum size** - The navigation hint is the only animated thing on the debug menu, so a change that stopped it pulsing would leave that screen completely still with every existing test still passing. `test/browser-engine.test.mjs` samples the pulse only at the suite's 80x24 default, and `test/menu-layout.test.mjs` asserts the hint is drawn at every height but not that it moves. Add a check to `test/menu-layout.test.mjs` that renders the debug menu at 60x20 twice with `state.time` set either side of the `sin(time * 3) * 0.5 + 0.5 > 0.3` threshold, and asserts the hint's foreground colour differs between the two renders, in both builds.
+  - From: UI/UX verification 2026-09-07
+
 ### UI/UX Override - menu screens clipped and speckled
 
 Both found while verifying the 0.2.1-alpha pause fix in the browser. That fix
