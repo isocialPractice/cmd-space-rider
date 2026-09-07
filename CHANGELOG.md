@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.2.2-alpha] - 2026-09-07
+
+### Fixed
+
+- The debug menu no longer loses rows off the bottom of a short screen. Its mode
+  list and its navigation hint were placed by counting rows down from the title
+  with nothing clamping the result, and the screen buffer discards an
+  out-of-range write without complaint, so at the documented 60x20 minimum the
+  fifth mode and the whole navigation hint were silently gone, and the classic
+  80x24 lost the hint alone. That hint is the only thing on the screen that
+  animates, so a clipped debug menu was also a completely still one. The screen
+  now picks the fullest layout the height allows, giving up the blank row
+  between entries and the rule above the selected one first, then the per-mode
+  descriptions, then the title art, and the hint takes the last row inside the
+  border when there is no room for its usual one. All five modes and the hint
+  are drawn at every height from 20 to 44 rows, at 60 columns and at 80.
+- Menu screens no longer draw over their own bottom border. At the documented
+  60x20 minimum the debug menu wrote `[4] MINE SWEEPER` onto it and the title
+  screen wrote its start prompt there; at 80x24 it was the fifth mode's
+  description row.
+- The menu starfield is drawn behind the text rather than over it. It was the
+  last thing drawn on the title screen, the debug menu and the game over screen,
+  so stars punched holes through whatever was already there: a mode name reading
+  `+3] COLLISION COURSE`, a star inside the brackets of the navigation hint, and
+  two gaps in the title art. Both builds shared the fault and both are fixed.
+
+### Added
+
+- Tests covering the menu layout in both builds: every debug menu height from 20
+  to 44 rows at 60 and 80 columns drawing all five modes and the navigation hint,
+  nothing written onto the border or off the buffer, the two builds laying the
+  screen out identically, and the starfield leaving every drawn cell alone on all
+  three menu screens.
+
+### Changed
+
+- The browser test that proves the screens outside a run keep redrawing is back
+  on the suite's 80x24 default. It had been staged at 100x30 because the debug
+  menu needed 28 rows before its navigation hint, the only animated thing on that
+  screen, was drawn at all.
+
 ## [0.2.1-alpha] - 2026-09-06
 
 ### Fixed
