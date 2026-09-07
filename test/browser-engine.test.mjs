@@ -304,10 +304,7 @@ test('the screens outside a run keep redrawing, not just ticking', () => {
 
   for (const [name, mode, render] of screens) {
     const game = new engine.Game();
-    // Staged taller than this file's 80x24 default on purpose: the debug menu
-    // needs 28 rows before its navigation hint is drawn, and that hint is the
-    // only thing on that screen that animates. See the clipping item in TODO.
-    const screen = stage(engine, game, 100, 30);
+    const screen = stage(engine, game);
     game.startGame();
     game.state.mode = mode;
     // Left over from the run that just ended, which is the state a gate

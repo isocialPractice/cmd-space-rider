@@ -164,7 +164,7 @@ line is game logic and rendering, which is what gets exercised.
 
 ## Terminal Requirements
 
-- **Minimum size**: 60 columns x 20 rows
+- **Minimum size**: 60 columns x 20 rows &mdash; the menu screens fit themselves to the height available, giving up spacing and then the per-mode descriptions rather than dropping a line off the bottom.
 - **Color support**: 256-color ANSI (most modern terminals)
 - **Unicode support**: Box-drawing and block element characters
 - **Recommended terminals**: Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty

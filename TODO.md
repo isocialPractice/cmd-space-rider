@@ -21,44 +21,6 @@ its origin survives archiving into `## Complete`.
 - [ ] **Pin the debug menu hint's pulse at the minimum size** - The navigation hint is the only animated thing on the debug menu, so a change that stopped it pulsing would leave that screen completely still with every existing test still passing. `test/browser-engine.test.mjs` samples the pulse only at the suite's 80x24 default, and `test/menu-layout.test.mjs` asserts the hint is drawn at every height but not that it moves. Add a check to `test/menu-layout.test.mjs` that renders the debug menu at 60x20 twice with `state.time` set either side of the `sin(time * 3) * 0.5 + 0.5 > 0.3` threshold, and asserts the hint's foreground colour differs between the two renders, in both builds.
   - From: UI/UX verification 2026-09-07
 
-### UI/UX Override - menu screens clipped and speckled
-
-Both found while verifying the 0.2.1-alpha pause fix in the browser. That fix
-passed every check, so nothing here is a regression from it; these are separate
-defects on the menu screens, in both builds.
-
-#### Found Issues
-
-- [ ] **Debug menu is clipped at the documented minimum screen size**
-  - **Issue**: `renderDebugMenu` places the navigation hint at
-    `menuY + DEBUG_MODES.length * 3 + 1` and never clamps it to the screen, and
-    `ScreenBuffer.put` drops out-of-range writes without complaint. Rendered
-    with the starfield suppressed and swept over height, the hint is missing
-    below 28 rows and the fifth mode is missing below 23 rows, identically at
-    60 and 80 columns. `README.md` gives the minimum as 60x20, where the menu
-    loses both `CHAOS PROTOCOL` and the line saying the arrows select and Enter
-    launches. The hint is also the only animated thing on that screen, so a
-    clipped debug menu is completely still. Shared by `index.html` and
-    `src/menu.ts:124`.
-  - **Goal**: Resolve to [debug-menu-nav-hint-clipped.prompt.md](.claude/prompts/debug-menu-nav-hint-clipped.prompt.md)
-  - From: UI/UX Override - menu screens clipped and speckled
-
-- [ ] **Menu starfield is drawn over the menu text instead of behind it**
-  - **Issue**: `drawMenuStars` is the last call in `renderTitleScreen`,
-    `renderDebugMenu` and `renderGameOver`, so stars overwrite whatever the
-    screen already drew. On a real 100x31 browser render the debug menu showed
-    `[3] COLLISION COURSE` as `+3]`, `Log collisions.` as `Lo* collisions.`,
-    a star inside the brackets of the navigation hint, and two punched into the
-    title art. Comparing starred against starless renders over 300 seeds, all
-    300 lost drawn cells at 100x30, mean 5.4 and up to 12 of the 40 stars, with
-    287 of 300 at 128x44 and 294 of 300 on the title screen. Both builds.
-  - **Goal**: Draw the starfield before the text on all three screens, or have
-    `drawMenuStars` skip any cell whose character is not blank. The three call
-    sites are `index.html:935`, `index.html:977`, `index.html:1006` and their
-    counterparts in `src/menu.ts`; keep both builds identical, as
-    `test/parity.test.mjs` expects.
-  - From: UI/UX Override - menu screens clipped and speckled
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -135,3 +97,31 @@ the roadmap section each one came from.
   - **Issue**: `README.md:22` says taking damage jolts the view "leaving the HUD and border anchored". That holds for the terminal build, which shifts only the play-area rows, but not for the browser build, which translates the whole canvas in `frame()` (`index.html:1153-1157`) so the HUD and border move with everything else. The Browser Version section lower down describes the pixel-offset difference but never corrects the blanket claim, and the browser build is what the README's deployed link opens.
   - **Goal**: Reword the feature bullet so the anchored HUD reads as the terminal build's behaviour rather than the game's, matching the accurate wording already in `CHANGELOG.md` for 0.2.0-alpha.
   - From: Code Review Override - terminal key repeat double-toggles P and M
+- [x] **Debug menu is clipped at the documented minimum screen size**
+  - **Issue**: `renderDebugMenu` places the navigation hint at
+    `menuY + DEBUG_MODES.length * 3 + 1` and never clamps it to the screen, and
+    `ScreenBuffer.put` drops out-of-range writes without complaint. Rendered
+    with the starfield suppressed and swept over height, the hint is missing
+    below 28 rows and the fifth mode is missing below 23 rows, identically at
+    60 and 80 columns. `README.md` gives the minimum as 60x20, where the menu
+    loses both `CHAOS PROTOCOL` and the line saying the arrows select and Enter
+    launches. The hint is also the only animated thing on that screen, so a
+    clipped debug menu is completely still. Shared by `index.html` and
+    `src/menu.ts:124`.
+  - **Goal**: Resolve to [debug-menu-nav-hint-clipped.prompt.md](.claude/prompts/debug-menu-nav-hint-clipped.prompt.md)
+  - From: UI/UX Override - menu screens clipped and speckled
+- [x] **Menu starfield is drawn over the menu text instead of behind it**
+  - **Issue**: `drawMenuStars` is the last call in `renderTitleScreen`,
+    `renderDebugMenu` and `renderGameOver`, so stars overwrite whatever the
+    screen already drew. On a real 100x31 browser render the debug menu showed
+    `[3] COLLISION COURSE` as `+3]`, `Log collisions.` as `Lo* collisions.`,
+    a star inside the brackets of the navigation hint, and two punched into the
+    title art. Comparing starred against starless renders over 300 seeds, all
+    300 lost drawn cells at 100x30, mean 5.4 and up to 12 of the 40 stars, with
+    287 of 300 at 128x44 and 294 of 300 on the title screen. Both builds.
+  - **Goal**: Draw the starfield before the text on all three screens, or have
+    `drawMenuStars` skip any cell whose character is not blank. The three call
+    sites are `index.html:935`, `index.html:977`, `index.html:1006` and their
+    counterparts in `src/menu.ts`; keep both builds identical, as
+    `test/parity.test.mjs` expects.
+  - From: UI/UX Override - menu screens clipped and speckled
