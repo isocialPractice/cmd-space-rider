@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.3.0-alpha] - 2026-09-08
+
+### Added
+
+- A barrel roll behind `Q` and `E`, which have been bound in both builds since
+  the start and did nothing at all until now. The ship rolls for half a second,
+  its wings turning through four positions and its hull going white so the
+  invincibility the move grants is visible rather than something to remember,
+  and nothing can touch it for the duration. A press the other way mid-roll
+  neither restarts nor reverses it. The cooldown runs from the start of the roll
+  rather than its end, so it bounds how much of a run can be spent untouchable.
+- Combo scoring. Kills strung together inside two seconds chain: the second is
+  worth double, the third triple, and so on, with a `COMBO x3` counter on the
+  HUD row reading the multiplier back and colouring up as the chain lengthens.
+  Two quiet seconds drop it. Orbs are a pickup rather than a kill and never
+  chain, and the two collision-tracking debug scenarios score nothing, so they
+  chain nothing either.
+- Sound in the browser version, synthesized with the Web Audio API. No audio
+  files and nothing to load: a pulse cannon zap, an orb chime, a damage crunch,
+  a mine explosion, and an engine hum whose pitch follows the speed readout the
+  HUD shows, so a boost is heard as well as read. The engine names the events
+  and queues them for the frame it has just simulated; only the browser turns
+  those names into tones. `M`, which has raised a `MUTED` indicator and driven
+  nothing since it was added, now silences all of it.
+- A CRT overlay in the browser version: scanlines and a soft vignette laid over
+  the canvas in CSS rather than drawn into the character grid. On out of the
+  box, toggled with `C`, and written through to storage so a reload comes back
+  the way it was left. A browser that will not hand over its storage gets the
+  default rather than an error.
+- Tests for all three systems, run against both builds wherever the code is
+  shared: the roll's timing, its invincibility, its cooldown and its wing
+  frames; the combo chain's multiplier, decay and HUD counter; and the cue queue
+  raised by firing, collecting, taking a hit and destroying a mine. The browser
+  synthesizer is driven against a recording stand-in for an `AudioContext`, so
+  the pitch sweep and envelope behind every cue are read back rather than
+  assumed, along with the hum being held open instead of restarted each frame
+  and a browser refusing an audio context leaving the game silent rather than
+  throwing.
+- A test pinning the debug menu's navigation hint to its pulse at the documented
+  60x20 minimum. The hint is the only animated thing on that screen, so a change
+  that stopped it moving would have left the screen completely still with every
+  existing test passing.
+
 ## [0.2.2-alpha] - 2026-09-07
 
 ### Fixed

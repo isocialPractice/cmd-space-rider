@@ -19,9 +19,11 @@ const DOM_MARKER = '// ===== Canvas Setup & Sizing =====';
 const EXPORTS = [
   'Game', 'ScreenBuffer', 'C',
   'renderGame', 'renderTitleScreen', 'renderDebugMenu', 'renderGameOver', 'drawPauseOverlay',
-  'shakeOffset', 'loadBestScore', 'saveBestScore',
+  'shakeOffset', 'rollWings', 'loadBestScore', 'saveBestScore', 'loadCrt', 'saveCrt',
+  'RetroAudio', 'SOUND_CUES', 'ENGINE_BASE_HZ', 'ENGINE_GAIN',
   'HUD_ROWS', 'FOOTER_ROWS', 'SHAKE_TIME', 'NEW_BEST_FLASH_TIME',
-  'BASE_SPEED_START', 'SHAKE_PIXELS', 'BEST_SCORE_KEY',
+  'BASE_SPEED_START', 'SHAKE_PIXELS', 'BEST_SCORE_KEY', 'CRT_KEY',
+  'ROLL_TIME', 'ROLL_COOLDOWN', 'COMBO_TIME',
 ];
 
 /** In-memory stand-in for window.localStorage. */

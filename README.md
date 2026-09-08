@@ -20,6 +20,10 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **High score persistence** &mdash; The browser version saves your best score and restores it on load. A `[ NEW BEST ]` banner flashes the moment a run passes it.
 - **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. The world freezes with it, so once an in-flight flash or shake has finished, the pulsing overlay label is all that still moves. Useful in the browser, where there is no terminal interrupt.
 - **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second. The browser build offsets the whole canvas; the terminal build jolts only the play area, leaving the HUD and border anchored.
+- **Barrel roll** &mdash; `Q` and `E` roll the ship for half a second. The wings turn through the roll and the hull goes white, and nothing can touch the ship while it does. A cooldown keeps it an escape rather than a way of life.
+- **Combo scoring** &mdash; Kills strung together inside two seconds chain: the second is worth double, the third triple, and a `COMBO x3` counter reads the multiplier back on the HUD. Two quiet seconds drop it.
+- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost.
+- **CRT overlay** &mdash; The browser version lays scanlines and a soft vignette over the canvas. On out of the box, toggled with `C`, and the choice is remembered across reloads.
 - **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
 
 ## Getting Started
@@ -85,12 +89,13 @@ space-rider --help                   Show help
 | `Q` / `E` | Barrel roll |
 | `P` | Pause / resume a run |
 | `M` | Mute toggle |
+| `C` (browser) | CRT scanline overlay on / off |
 | `Enter` | Launch / relaunch |
 | `Esc` | Return to menu / quit |
 | `Ctrl+C` | Quit immediately (terminal) |
 
-`M` sets a mute flag and shows a `MUTED` indicator in the footer. The game has no
-sound yet, so the flag currently drives nothing.
+`M` silences the browser version and shows a `MUTED` indicator in the footer. The
+terminal version has no audio, so there the flag only raises the indicator.
 
 ### Gameplay
 
@@ -98,6 +103,8 @@ sound yet, so the flag currently drives nothing.
 - **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
+- **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
+- **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
 - **Survive** &mdash; The game ends when shield reaches 0.
 - **Chase your best** &mdash; Only normal runs count toward the best score. Debug scenarios are diagnostics and never record one.
 
@@ -133,6 +140,11 @@ cmd-space-rider/
     browser-engine.test.mjs     # Browser build behaviour
     terminal-engine.test.mjs    # Terminal build behaviour
     input.test.mjs              # Terminal input decoding and key repeat
+    menu-layout.test.mjs        # Menu screens fit every supported size
+    barrel-roll.test.mjs        # Roll timing, invincibility, and cooldown
+    combo.test.mjs              # Combo chaining, decay, and the HUD counter
+    sound.test.mjs              # Sound cues and the browser synthesizer
+    hud-row.test.mjs            # The HUD row the counter, label and banner share
     parity.test.mjs             # Both builds agree
   hero.png          # Hero banner graphic
   icon.png          # App icon graphic
@@ -179,4 +191,4 @@ The game uses a custom double-buffered screen renderer built on raw ANSI escape 
 
 The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
 
-Two things differ, both because the medium demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead.
+Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.

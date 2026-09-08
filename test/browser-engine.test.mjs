@@ -1,16 +1,19 @@
 // test/browser-engine.test.mjs — Browser build: persistence, pause, mute,
-// speed readout, and screen shake.
+// speed readout, screen shake, and the CRT overlay.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
-  loadBrowserEngine, fakeStorage, hostileStorage,
+  REPO_ROOT, loadBrowserEngine, fakeStorage, hostileStorage,
   rowText, screenText, screenCells, changedCells,
   stageCollision, stageAnimatedWorld, FRAME,
 } from './helpers.mjs';
 
 const KEY = 'cmdSpaceRider.bestScore';
+const CRT = 'cmdSpaceRider.crt';
 
 /** Build a screen buffer sized for a playing frame. */
 function stage(engine, game, w = 80, h = 24) {
@@ -612,4 +615,58 @@ test('the pause overlay stays inside the screen at the minimum size', () => {
   assert.ok(labelRow > 0, 'the label should be drawn');
   assert.ok(labelRow < screen.height - 1, 'the label should be clear of the last row');
   assert.ok(rows.some((r) => r.includes('P to resume')));
+});
+
+// ----- CRT overlay -----
+
+test('the overlay is on until it is turned off', () => {
+  const engine = loadBrowserEngine(fakeStorage());
+  assert.equal(engine.loadCrt(), true);
+  assert.equal(engine.CRT_KEY, CRT);
+});
+
+test('the stored choice is what comes back', () => {
+  assert.equal(loadBrowserEngine(fakeStorage({ [CRT]: 'off' })).loadCrt(), false);
+  assert.equal(loadBrowserEngine(fakeStorage({ [CRT]: 'on' })).loadCrt(), true);
+});
+
+test('a stored value nobody wrote reads as on, the way no value does', () => {
+  assert.equal(loadBrowserEngine(fakeStorage({ [CRT]: 'yes please' })).loadCrt(), true);
+});
+
+test('the choice is written through so a refresh comes back the same', () => {
+  const storage = fakeStorage();
+  const engine = loadBrowserEngine(storage);
+
+  engine.saveCrt(false);
+  assert.equal(storage.read(CRT), 'off');
+  assert.equal(loadBrowserEngine(storage).loadCrt(), false);
+
+  engine.saveCrt(true);
+  assert.equal(storage.read(CRT), 'on');
+  assert.equal(loadBrowserEngine(storage).loadCrt(), true);
+});
+
+test('storage that throws leaves the overlay on rather than crashing', () => {
+  const engine = loadBrowserEngine(hostileStorage());
+  assert.equal(engine.loadCrt(), true);
+  engine.saveCrt(false);
+  assert.equal(engine.loadCrt(), true, 'and the choice simply does not survive the session');
+});
+
+test('the page carries the overlay, its scanlines, and the key that toggles it', () => {
+  // The overlay is CSS over the canvas and a class on the body, none of which
+  // the engine harness can reach: it stops evaluating where index.html starts
+  // touching the DOM. Reading the file as text is crude, but it is what catches
+  // half the wiring being removed and the other half quietly doing nothing.
+  const html = readFileSync(join(REPO_ROOT, 'index.html'), 'utf8');
+
+  assert.ok(html.includes('<div id="crt"></div>'), 'the overlay element');
+  assert.ok(html.includes('repeating-linear-gradient'), 'the scanlines');
+  assert.ok(html.includes('radial-gradient'), 'the vignette');
+  assert.ok(html.includes('pointer-events:none'), 'and none of it under the pointer');
+  assert.ok(html.includes('body.crt #crt'), 'the class that shows it');
+  assert.ok(html.includes("case'KeyC':return'C'"), 'C bound to the toggle');
+  assert.ok(html.includes('applyCrt()'), 'the toggle carried to the page');
+  assert.ok(html.includes('saveCrt(crtOn)'), 'and written through when it changes');
 });

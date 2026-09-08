@@ -8,10 +8,26 @@
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000}
 canvas{display:block}
+/* CRT overlay: scanlines and a vignette laid over the canvas rather than drawn
+   into the character grid, because it is a property of the screen the game is
+   shown on and not of the game. Never under the pointer, and toggled by the
+   `crt` class on the body so the whole effect is one class away. */
+#crt{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;opacity:0;transition:opacity .15s linear;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,.26) 0,rgba(0,0,0,.26) 1px,
+      rgba(0,0,0,0) 1px,rgba(0,0,0,0) 3px),
+    radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);
+}
+body.crt #crt{opacity:1}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="crt"></div>
 <script>
 // CMD Space Rider — Browser terminal preview
 // Faithful port of the CLI game rendered as a canvas-based character grid
@@ -133,6 +149,14 @@ const SHAKE_TIME=0.2;
 const NEW_BEST_FLASH_TIME=2;
 // Peak canvas offset of the damage shake, in pixels.
 const SHAKE_PIXELS=5;
+// Seconds a barrel roll takes to carry the ship all the way round.
+const ROLL_TIME=0.5;
+// Seconds from the start of one barrel roll to the earliest next one. Longer
+// than the roll itself, so there is a beat of level flight between two of them
+// and the invincibility the roll grants cannot be held open indefinitely.
+const ROLL_COOLDOWN=1.2;
+// Seconds a combo chain survives without a kill before it drops to nothing.
+const COMBO_TIME=2;
 
 // ===== Best score persistence =====
 // localStorage throws rather than returning null in some privacy modes and
@@ -158,6 +182,28 @@ function saveBestScore(best){
   }
 }
 
+// ===== CRT overlay preference =====
+// The overlay is on out of the box - the retro screen is the look the game is
+// after - so anything other than a stored 'off' reads as on, and a browser that
+// will not hand over its storage still gets the default rather than an error.
+const CRT_KEY='cmdSpaceRider.crt';
+
+function loadCrt(){
+  try{
+    return localStorage.getItem(CRT_KEY)!=='off';
+  }catch(e){
+    return true;
+  }
+}
+
+function saveCrt(on){
+  try{
+    localStorage.setItem(CRT_KEY,on?'on':'off');
+  }catch(e){
+    /* the choice stays for this session only */
+  }
+}
+
 const DEBUG_MODES=['mines','orbs','obstacleCollision','mineCollision','chaos'];
 const DEBUG_MODE_NAMES={
   mines:'MINE FIELD',orbs:'ORB HARVEST',
@@ -177,13 +223,15 @@ class Game{
       mode:'menu',debugMode:null,score:0,distance:0,shield:100,
       bestScore:loadBestScore(),
       speed:BASE_SPEED_START,baseSpeed:BASE_SPEED_START,boostSpeed:0.55,
-      shipX:0,shipY:0,shipRoll:0,time:0,uiTime:0,gameTime:0,
+      shipX:0,shipY:0,shipRoll:0,rollDir:0,rollCooldown:0,
+      time:0,uiTime:0,gameTime:0,
       obstacles:[],orbs:[],mines:[],bullets:[],particles:[],stars:[],
       tunnelRadius:8,maxViewZ:200,
       lastObstacleIncreaseMinute:0,mineTrackTime:0,minesToPresent:0,
       mineSpawnTimers:[],firstMinuteElapsed:false,
       trackerCount:0,debugMenuSelected:0,chaosFireTimer:0,
       damageFlash:0,collectFlash:0,boosting:false,
+      combo:0,comboTimer:0,sounds:[],
       paused:false,muted:false,shake:0,newBestFlash:0,newBestShown:false,
       screenWidth:80,screenHeight:24,
     };
@@ -222,7 +270,8 @@ class Game{
     s.debugMode=mode||null;s.mode='playing';
     s.score=0;s.distance=0;s.shield=100;
     s.baseSpeed=BASE_SPEED_START;s.boostSpeed=0.55;s.speed=s.baseSpeed;
-    s.shipX=0;s.shipY=1;s.shipRoll=0;
+    s.shipX=0;s.shipY=1;s.shipRoll=0;s.rollDir=0;s.rollCooldown=0;
+    s.combo=0;s.comboTimer=0;
     s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.mines=[];
     s.gameTime=0;s.lastObstacleIncreaseMinute=0;
     s.mineTrackTime=0;s.minesToPresent=0;s.mineSpawnTimers=[];
@@ -296,8 +345,25 @@ class Game{
       }
     }
   }
+  // Queue a one-shot sound for the frame being simulated. The queue is drained
+  // by whoever can make a noise with it, which is the browser build alone.
+  cue(name){this.state.sounds.push(name)}
+  // Count a kill into the combo chain and hand back the multiplier it earns.
+  // The first kill is worth x1, and each further one inside the window raises
+  // it, so a chain pays more the faster it is strung together.
+  registerKill(){
+    const s=this.state;
+    s.combo+=1;
+    s.comboTimer=COMBO_TIME;
+    return s.combo;
+  }
   update(dt,keys,justPressed){
     const s=this.state;
+
+    // The cue queue holds one frame's worth of sound. Emptying it here rather
+    // than leaving it to the caller keeps it bounded in a build that never
+    // reads it.
+    s.sounds.length=0;
 
     // M is a global setting toggle, so it works in every mode. P only pauses a
     // run in progress.
@@ -327,6 +393,9 @@ class Game{
     if(keys.W||keys.UP){s.shipY+=moveSpeed*dt}
     if(keys.S||keys.DOWN){s.shipY-=moveSpeed*dt}
 
+    this.updateBarrelRoll(dt,justPressed);
+    this.updateCombo(dt);
+
     s.boosting=false;
     if(s.debugMode==='chaos'){
       s.speed=lerp(s.speed,s.boostSpeed,3*dt);s.boosting=true;
@@ -344,6 +413,7 @@ class Game{
       s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
       s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
       s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+      this.cue('shot');
     }
 
     if(s.debugMode==='chaos'){
@@ -353,6 +423,7 @@ class Game{
         s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
         s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
         s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+        this.cue('shot');
       }
     }
 
@@ -382,6 +453,39 @@ class Game{
     this.updateBullets(dt,advance);
     this.updateParticles(dt,advance);
     this.updateStars(dt);
+  }
+  // Barrel roll. Q rolls left and E rolls right, for as long as ROLL_TIME, and
+  // the ship is untouchable for the whole of it - that dodge is what the move
+  // is for. The cooldown starts with the roll rather than with its end, so it
+  // bounds how much of a run can be spent invincible.
+  updateBarrelRoll(dt,justPressed){
+    const s=this.state;
+    if(s.rollCooldown>0)s.rollCooldown=max(0,s.rollCooldown-dt);
+
+    if(s.shipRoll>0){
+      s.shipRoll=max(0,s.shipRoll-dt);
+      if(s.shipRoll===0)s.rollDir=0;
+      return;
+    }
+
+    if(s.rollCooldown>0)return;
+    const dir=justPressed.Q?-1:justPressed.E?1:0;
+    if(dir===0)return;
+
+    s.shipRoll=ROLL_TIME;
+    s.rollDir=dir;
+    s.rollCooldown=ROLL_COOLDOWN;
+  }
+  // True while a barrel roll is carrying the ship through whatever it hits.
+  invincible(){return this.state.shipRoll>0}
+  // Combo decay. Every kill re-arms the window in registerKill; COMBO_TIME
+  // without one drops the chain, so the multiplier only pays for kills strung
+  // together rather than for a long run's total.
+  updateCombo(dt){
+    const s=this.state;
+    if(s.comboTimer<=0)return;
+    s.comboTimer=max(0,s.comboTimer-dt);
+    if(s.comboTimer===0)s.combo=0;
   }
   updateObstacleScaling(){
     const s=this.state;
@@ -440,7 +544,9 @@ class Game{
         const dy=shipScr.row-oScr.row;
         if(abs(shipScr.col-oScr.col)<=SHIP_HALF_W+half&&
            dy<=2+half&&dy>=-(1+half)){
+          if(this.invincible())continue; // rolled clean through it
           s.shake=SHAKE_TIME; // every branch below is an impact
+          this.cue('damage');
           if(s.debugMode==='obstacleCollision'){
             s.trackerCount++;s.damageFlash=0.5;
             this.spawnParticles(o.x,o.y,o.z,208,8);
@@ -475,6 +581,7 @@ class Game{
            dy<=2+half&&dy>=-(1+half)){
           o.collected=true;s.score+=500;
           s.shield=min(100,s.shield+10);s.collectFlash=0.6;
+          this.cue('orb');
           this.spawnParticles(o.x,o.y,o.z,10,10);
         }
       }
@@ -500,7 +607,9 @@ class Game{
         const dy=shipScr.row-mScr.row;
         if(abs(shipScr.col-mScr.col)<=SHIP_HALF_W+half&&
            dy<=2+half&&dy>=-(1+half)){
+          if(this.invincible())continue; // rolled clean through it
           s.shake=SHAKE_TIME; // every branch below is an impact
+          this.cue('damage');
           if(s.debugMode==='mineCollision'){
             s.trackerCount++;s.damageFlash=0.5;
             this.spawnParticles(m.x,m.y,m.z,9,8);
@@ -536,7 +645,10 @@ class Game{
              bScr.row>=oScr.row-half&&bScr.row-1<=oScr.row+half){
             this.spawnParticles(o.x,o.y,o.z,208,12);
             if(s.debugMode==='chaos')s.trackerCount++;
-            if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')s.score+=200;
+            // The collision-tracking modes are not scored, so a kill in one of
+            // them carries no multiplier and never starts a chain either.
+            if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')
+              s.score+=200*this.registerKill();
             o.z=-RECYCLE_Z+rand(-10,10);
             s.bullets.splice(i,1);hit=true;break;
           }
@@ -555,8 +667,10 @@ class Game{
             m.hp-=1;this.spawnParticles(m.x,m.y,m.z,9,5);
             if(m.hp<=0){
               this.spawnParticles(m.x,m.y,m.z,9,20);
+              this.cue('mine');
               if(s.debugMode==='chaos')s.trackerCount++;
-              if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')s.score+=500;
+              if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')
+                s.score+=500*this.registerKill();
               s.mines.splice(j,1);
             }
             s.bullets.splice(i,1);break;
@@ -741,15 +855,36 @@ function drawParticles(screen,state,gameTop,gameBottom){
   }
 }
 
+// The ship's wings a quarter of a roll apart. The sprite is three cells wide,
+// so the roll is told by the wings alone: the nose and body stay where they
+// are, which is what a roll about the long axis actually does.
+const ROLL_WINGS=[['<','>'],['\\','/'],['-','-'],['/','\\']];
+
+// The wing pair for the roll the ship is in, level when it is in none. E reads
+// the table forwards and Q reads it backwards, which mirrors the spin.
+function rollWings(state){
+  if(state.shipRoll<=0)return ROLL_WINGS[0];
+  const turns=ROLL_WINGS.length;
+  const elapsed=(ROLL_TIME-state.shipRoll)/ROLL_TIME;
+  const step=min(turns-1,max(0,floor(elapsed*turns)));
+  return state.rollDir<0?ROLL_WINGS[(turns-step)%turns]:ROLL_WINGS[step];
+}
+
 function drawShip(screen,state,gameTop,gameBottom){
   const w=screen.width,h=screen.height;
   const pos=gameToScreen(state.shipX,state.shipY,0,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
   const cx=pos.col,cy=pos.row;
+  // Mid-roll the wings turn and the hull goes white, so the invincibility the
+  // roll grants is visible rather than something the player has to remember.
+  const rolling=state.shipRoll>0;
+  const [leftWing,rightWing]=rollWings(state);
+  const hullColor=rolling?C.BRIGHT_WHITE:C.BRIGHT_CYAN;
+  const wingColor=rolling?C.BRIGHT_MAGENTA:C.BRIGHT_BLUE;
   if(cy-1>=gameTop&&cy+1<gameBottom){
-    screen.put(cx,cy-1,'\u25B2',C.BRIGHT_CYAN,C.BLACK);
-    screen.put(cx-1,cy,'<',C.BRIGHT_BLUE,C.BLACK);
-    screen.put(cx,cy,'\u2588',C.BRIGHT_CYAN,C.BLACK);
-    screen.put(cx+1,cy,'>',C.BRIGHT_BLUE,C.BLACK);
+    screen.put(cx,cy-1,'\u25B2',hullColor,C.BLACK);
+    screen.put(cx-1,cy,leftWing,wingColor,C.BLACK);
+    screen.put(cx,cy,'\u2588',hullColor,C.BLACK);
+    screen.put(cx+1,cy,rightWing,wingColor,C.BLACK);
     screen.put(cx-1,cy+1,'\u2568',C.CYAN,C.BLACK);
     screen.put(cx+1,cy+1,'\u2568',C.CYAN,C.BLACK);
     const engineGlow=sin(state.time*20)>0;
@@ -789,6 +924,17 @@ function drawHUD(screen,state){
     if(i<filled)screen.put(barStart+i,2,'\u2588',barColor,C.BLACK);
     else screen.put(barStart+i,2,'\u2591',C.GRAY,C.BLACK);
   }
+  // Combo counter, left-aligned on the row the debug label and the NEW BEST
+  // banner centre themselves on, so the three never collide. A lone kill is
+  // worth its face value and puts nothing on screen; the chain starts at x2.
+  if(state.combo>=2){
+    const combo=`COMBO x${state.combo}`;
+    const comboColor=state.combo>=6?C.BRIGHT_MAGENTA
+      :state.combo>=4?C.BRIGHT_YELLOW
+      :C.BRIGHT_CYAN;
+    screen.putString(2,HUD_ROWS,combo,comboColor,C.BLACK);
+  }
+
   if(state.debugMode&&state.mode==='playing'){
     const label=`[ DEBUG: ${DEBUG_MODE_NAMES[state.debugMode]} ]`;
     screen.putStringCenter(HUD_ROWS,label,C.BRIGHT_MAGENTA,C.BLACK);
@@ -1083,6 +1229,101 @@ function drawMenuStars(screen,state,w,h){
   }
 }
 
+// ===== Sound (Web Audio) =====
+// Every cue is synthesized on the spot: there are no audio files to fetch, so
+// nothing to load before a run and nothing to keep in step with the build.
+
+// The one-shot cues, each a frequency sweep under a decaying envelope. The shot
+// and the mine sweep down, the orb chimes up, and damage is the lowest and
+// longest of the four so it reads as a hit rather than as another pickup.
+const SOUND_CUES={
+  shot:  {wave:'square',  from:900,to:180, dur:0.10,gain:0.05},
+  orb:   {wave:'sine',    from:660,to:1400,dur:0.18,gain:0.06},
+  damage:{wave:'sawtooth',from:220,to:50,  dur:0.30,gain:0.09},
+  mine:  {wave:'square',  from:180,to:28,  dur:0.45,gain:0.10},
+};
+
+// The engine hum. Its pitch is this note times the speed readout the HUD shows,
+// so what is heard and what is read move together and a boost is audible.
+const ENGINE_BASE_HZ=55;
+const ENGINE_GAIN=0.03;
+
+class RetroAudio{
+  constructor(makeContext){
+    this.makeContext=makeContext;
+    this.ctx=null;
+    this.engine=null;
+    this.failed=false;
+  }
+  // The context is built on the first sound rather than at startup, because a
+  // browser will not start one before the page has had a user gesture. One that
+  // refuses outright leaves the game silent instead of throwing every frame.
+  context(){
+    if(this.ctx||this.failed)return this.ctx;
+    try{this.ctx=this.makeContext()}catch(e){this.failed=true}
+    return this.ctx;
+  }
+  // A context built before the page has had a gesture starts suspended, which
+  // is the case a `?mode=` link lands in: the run is under way before anything
+  // has been pressed. Nudging it on the first press is what wakes it, and it is
+  // harmless on the context that was built after a gesture and is already going.
+  resume(){
+    if(this.ctx&&this.ctx.state==='suspended'&&this.ctx.resume)this.ctx.resume();
+  }
+  play(name){
+    const spec=SOUND_CUES[name];
+    if(!spec)return;
+    const ctx=this.context();
+    if(!ctx)return;
+    const t=ctx.currentTime;
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.type=spec.wave;
+    osc.frequency.setValueAtTime(spec.from,t);
+    osc.frequency.exponentialRampToValueAtTime(spec.to,t+spec.dur);
+    gain.gain.setValueAtTime(spec.gain,t);
+    // Ramping to silence rather than stopping on a live gain is what keeps the
+    // tail off; an exponential ramp cannot reach zero, so it lands just under.
+    gain.gain.exponentialRampToValueAtTime(0.0001,t+spec.dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t+spec.dur);
+  }
+  // The hum runs for as long as the run does. Starting and stopping it every
+  // frame would click, so it is held open and only its frequency moves.
+  engineOn(speedMultiple){
+    const ctx=this.context();
+    if(!ctx)return;
+    if(!this.engine){
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.type='triangle';
+      gain.gain.setValueAtTime(ENGINE_GAIN,ctx.currentTime);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      this.engine={osc,gain};
+    }
+    this.engine.osc.frequency.setValueAtTime(ENGINE_BASE_HZ*speedMultiple,ctx.currentTime);
+  }
+  engineOff(){
+    if(!this.engine)return;
+    this.engine.osc.stop(this.ctx.currentTime);
+    this.engine.osc.disconnect();
+    this.engine.gain.disconnect();
+    this.engine=null;
+  }
+  // Play out one frame: the cues the engine queued, then the hum, which runs
+  // only while a run is actually advancing. Mute silences all of it.
+  frame(state){
+    if(state.muted){this.engineOff();return}
+    for(const cue of state.sounds)this.play(cue);
+    if(state.mode==='playing'&&!state.paused)this.engineOn(state.speed/BASE_SPEED_START);
+    else this.engineOff();
+  }
+}
+
 // ===== Canvas Setup & Sizing =====
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -1120,6 +1361,14 @@ function handleResize(){
 window.addEventListener('resize',handleResize);
 handleResize();
 
+// ===== CRT overlay and sound, wired to the page =====
+let crtOn=loadCrt();
+
+function applyCrt(){document.body.classList.toggle('crt',crtOn)}
+applyCrt();
+
+const audio=new RetroAudio(()=>new (window.AudioContext||window.webkitAudioContext)());
+
 // ===== URL params for debug =====
 const params=new URLSearchParams(window.location.search);
 const wantsDebug=params.has('debug');
@@ -1141,7 +1390,7 @@ function mapKey(e){
     case'ArrowLeft':return'LEFT';case'ArrowRight':return'RIGHT';
     case'KeyW':return'W';case'KeyA':return'A';case'KeyS':return'S';case'KeyD':return'D';
     case'KeyQ':return'Q';case'KeyE':return'E';case'KeyF':return'F';
-    case'KeyP':return'P';case'KeyM':return'M';
+    case'KeyP':return'P';case'KeyM':return'M';case'KeyC':return'C';
     case'Space':return'SPACE';case'Enter':return'ENTER';
     case'Escape':return'ESCAPE';case'Tab':return'TAB';
     case'ShiftLeft':case'ShiftRight':return'SHIFT';
@@ -1156,6 +1405,7 @@ window.addEventListener('keydown',e=>{
   const k=mapKey(e);
   if(k){
     e.preventDefault();
+    audio.resume();
     if(!keys[k])justPressed[k]=true;
     keys[k]=true;
   }
@@ -1185,6 +1435,15 @@ function frame(now){
   // Handle menu input
   game.handleMenuInput(justPressed);
 
+  // C toggles the CRT overlay. It is a property of the page rather than of the
+  // game, so it lives here beside the element it drives, and the choice is
+  // written through so a refresh comes back the way the player left it.
+  if(justPressed.C){
+    crtOn=!crtOn;
+    saveCrt(crtOn);
+    applyCrt();
+  }
+
   // ESC
   if(justPressed.ESCAPE){
     if(game.state.mode==='playing'||game.state.mode==='dead'||game.state.mode==='debugMenu'){
@@ -1194,6 +1453,10 @@ function frame(now){
 
   // Update
   game.update(dt,keys,justPressed);
+
+  // Play out the frame the engine just simulated. It names the events; what
+  // they sound like is the audio layer's business.
+  audio.frame(game.state);
 
   // Clear canvas
   ctx.fillStyle='#000';

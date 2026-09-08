@@ -1,7 +1,7 @@
 // src/render.ts — Terminal renderer: tunnel, ship, entities, HUD, effects
 
 import { ScreenBuffer } from './screen';
-import { GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME } from './types';
+import { GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME } from './types';
 
 const { sin, cos, floor, round, max, min, abs, sqrt } = Math;
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -58,6 +58,25 @@ export function shakeColumns(state: GameState): number {
   if (state.shake <= 0) return 0;
   const strength = state.shake / SHAKE_TIME;
   return round(sin(state.uiTime * 40) * 1.5 * strength);
+}
+
+/**
+ * The ship's wings a quarter of a roll apart. The sprite is three cells wide,
+ * so the roll is told by the wings alone: the nose and body stay where they
+ * are, which is what a roll about the long axis actually does.
+ */
+const ROLL_WINGS = [['<', '>'], ['\\', '/'], ['-', '-'], ['/', '\\']];
+
+/**
+ * The wing pair for the roll the ship is in, level when it is in none. E reads
+ * the table forwards and Q reads it backwards, which mirrors the spin.
+ */
+export function rollWings(state: GameState): string[] {
+  if (state.shipRoll <= 0) return ROLL_WINGS[0];
+  const turns = ROLL_WINGS.length;
+  const elapsed = (ROLL_TIME - state.shipRoll) / ROLL_TIME;
+  const step = min(turns - 1, max(0, floor(elapsed * turns)));
+  return state.rollDir < 0 ? ROLL_WINGS[(turns - step) % turns] : ROLL_WINGS[step];
 }
 
 function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
@@ -231,13 +250,20 @@ function drawShip(screen: ScreenBuffer, state: GameState, gameTop: number, gameB
   const cx = pos.col;
   const cy = pos.row;
 
+  // Mid-roll the wings turn and the hull goes white, so the invincibility the
+  // roll grants is visible rather than something the player has to remember.
+  const rolling = state.shipRoll > 0;
+  const [leftWing, rightWing] = rollWings(state);
+  const hullColor = rolling ? C.BRIGHT_WHITE : C.BRIGHT_CYAN;
+  const wingColor = rolling ? C.BRIGHT_MAGENTA : C.BRIGHT_BLUE;
+
   if (cy - 1 >= gameTop && cy + 1 < gameBottom) {
-    screen.put(cx, cy - 1, '\u25B2', C.BRIGHT_CYAN, C.BLACK);     // ▲ nose
-    screen.put(cx - 1, cy, '<', C.BRIGHT_BLUE, C.BLACK);            // < left wing
-    screen.put(cx, cy, '\u2588', C.BRIGHT_CYAN, C.BLACK);           // █ body
-    screen.put(cx + 1, cy, '>', C.BRIGHT_BLUE, C.BLACK);            // > right wing
-    screen.put(cx - 1, cy + 1, '\u2568', C.CYAN, C.BLACK);         // ╨ left engine
-    screen.put(cx + 1, cy + 1, '\u2568', C.CYAN, C.BLACK);         // ╨ right engine
+    screen.put(cx, cy - 1, '\u25B2', hullColor, C.BLACK);  // ▲ nose
+    screen.put(cx - 1, cy, leftWing, wingColor, C.BLACK);  // left wing, turns
+    screen.put(cx, cy, '\u2588', hullColor, C.BLACK);      // █ body
+    screen.put(cx + 1, cy, rightWing, wingColor, C.BLACK); // right wing, turns
+    screen.put(cx - 1, cy + 1, '\u2568', C.CYAN, C.BLACK); // ╨ left engine
+    screen.put(cx + 1, cy + 1, '\u2568', C.CYAN, C.BLACK); // ╨ right engine
 
     // Engine glow
     const engineGlow = sin(state.time * 20) > 0;
@@ -290,6 +316,17 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
     } else {
       screen.put(barStart + i, 2, '\u2591', C.GRAY, C.BLACK); // ░
     }
+  }
+
+  // Combo counter, left-aligned on the row the debug label and the NEW BEST
+  // banner centre themselves on, so the three never collide. A lone kill is
+  // worth its face value and puts nothing on screen; the chain starts at x2.
+  if (state.combo >= 2) {
+    const combo = `COMBO x${state.combo}`;
+    const comboColor = state.combo >= 6 ? C.BRIGHT_MAGENTA
+      : state.combo >= 4 ? C.BRIGHT_YELLOW
+      : C.BRIGHT_CYAN;
+    screen.putString(2, HUD_ROWS, combo, comboColor, C.BLACK);
   }
 
   // Debug mode indicator

@@ -1,9 +1,10 @@
 // src/game.ts — Game engine: state management, physics, collision, entities
 
 import {
-  GameState, GameMode, DebugMode, DEBUG_MODES,
+  GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
@@ -42,6 +43,8 @@ export class Game {
       shipX: 0,
       shipY: 0,
       shipRoll: 0,
+      rollDir: 0,
+      rollCooldown: 0,
       time: 0,
       uiTime: 0,
       gameTime: 0,
@@ -64,6 +67,9 @@ export class Game {
       damageFlash: 0,
       collectFlash: 0,
       boosting: false,
+      combo: 0,
+      comboTimer: 0,
+      sounds: [],
       paused: false,
       muted: false,
       shake: 0,
@@ -123,7 +129,12 @@ export class Game {
     s.boostSpeed = 0.55;
     s.speed = s.baseSpeed;
     s.shipX = 0;
-    s.shipY = 1;    s.shipRoll = 0;
+    s.shipY = 1;
+    s.shipRoll = 0;
+    s.rollDir = 0;
+    s.rollCooldown = 0;
+    s.combo = 0;
+    s.comboTimer = 0;
     s.obstacles = [];
     s.orbs = [];
     s.bullets = [];
@@ -237,8 +248,33 @@ export class Game {
     }
   }
 
+  /**
+   * Queue a one-shot sound for the frame being simulated. The queue is drained
+   * by whoever can make a noise with it, which is the browser build alone.
+   */
+  private cue(name: SoundCue): void {
+    this.state.sounds.push(name);
+  }
+
+  /**
+   * Count a kill into the combo chain and hand back the multiplier it earns.
+   * The first kill is worth x1, and each further one inside the window raises
+   * it, so a chain pays more the faster it is strung together.
+   */
+  private registerKill(): number {
+    const s = this.state;
+    s.combo += 1;
+    s.comboTimer = COMBO_TIME;
+    return s.combo;
+  }
+
   update(dt: number, keys: Record<string, boolean>, justPressed: Record<string, boolean>): void {
     const s = this.state;
+
+    // The cue queue holds one frame's worth of sound. Emptying it here rather
+    // than leaving it to the caller keeps it bounded in a build that never
+    // reads it.
+    s.sounds.length = 0;
 
     // M is a global setting toggle, so it works in every mode. P only pauses a
     // run in progress.
@@ -273,6 +309,9 @@ export class Game {
     if (keys['W'] || keys['UP']) { s.shipY += moveSpeed * dt; }
     if (keys['S'] || keys['DOWN']) { s.shipY -= moveSpeed * dt; }
 
+    this.updateBarrelRoll(dt, justPressed);
+    this.updateCombo(dt);
+
     // Boost (F key since Shift is hard to detect in raw terminal mode)
     s.boosting = false;
     if (s.debugMode === 'chaos') {
@@ -295,6 +334,7 @@ export class Game {
       s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
       s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
       s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
+      this.cue('shot');
     }
 
     // Chaos auto-fire
@@ -305,6 +345,7 @@ export class Game {
         s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
         s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
         s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
+        this.cue('shot');
       }
     }
 
@@ -337,6 +378,48 @@ export class Game {
     this.updateBullets(dt, advance);
     this.updateParticles(dt, advance);
     this.updateStars(dt);
+  }
+
+  /**
+   * Barrel roll. Q rolls left and E rolls right, for as long as ROLL_TIME, and
+   * the ship is untouchable for the whole of it - that dodge is what the move
+   * is for. The cooldown starts with the roll rather than with its end, so it
+   * bounds how much of a run can be spent invincible.
+   */
+  private updateBarrelRoll(dt: number, justPressed: Record<string, boolean>): void {
+    const s = this.state;
+    if (s.rollCooldown > 0) s.rollCooldown = max(0, s.rollCooldown - dt);
+
+    if (s.shipRoll > 0) {
+      s.shipRoll = max(0, s.shipRoll - dt);
+      if (s.shipRoll === 0) s.rollDir = 0;
+      return;
+    }
+
+    if (s.rollCooldown > 0) return;
+    const dir = justPressed['Q'] ? -1 : justPressed['E'] ? 1 : 0;
+    if (dir === 0) return;
+
+    s.shipRoll = ROLL_TIME;
+    s.rollDir = dir;
+    s.rollCooldown = ROLL_COOLDOWN;
+  }
+
+  /** True while a barrel roll is carrying the ship through whatever it hits. */
+  private invincible(): boolean {
+    return this.state.shipRoll > 0;
+  }
+
+  /**
+   * Combo decay. Every kill re-arms the window in registerKill; COMBO_TIME
+   * without one drops the chain, so the multiplier only pays for kills strung
+   * together rather than for a long run's total.
+   */
+  private updateCombo(dt: number): void {
+    const s = this.state;
+    if (s.comboTimer <= 0) return;
+    s.comboTimer = max(0, s.comboTimer - dt);
+    if (s.comboTimer === 0) s.combo = 0;
   }
 
   private updateObstacleScaling(): void {
@@ -420,7 +503,9 @@ export class Game {
         const dy = shipScr.row - oScr.row;
         if (abs(shipScr.col - oScr.col) <= SHIP_HALF_W + half &&
             dy <= 2 + half && dy >= -(1 + half)) {
+          if (this.invincible()) continue; // rolled clean through it
           s.shake = SHAKE_TIME; // every branch below is an impact
+          this.cue('damage');
           if (s.debugMode === 'obstacleCollision') {
             s.trackerCount++;
             s.damageFlash = 0.5;
@@ -470,6 +555,7 @@ export class Game {
           s.score += 500;
           s.shield = min(100, s.shield + 10);
           s.collectFlash = 0.6;
+          this.cue('orb');
           this.spawnParticles(o.x, o.y, o.z, 10, 10);
         }
       }
@@ -506,7 +592,9 @@ export class Game {
         const dy = shipScr.row - mScr.row;
         if (abs(shipScr.col - mScr.col) <= SHIP_HALF_W + half &&
             dy <= 2 + half && dy >= -(1 + half)) {
+          if (this.invincible()) continue; // rolled clean through it
           s.shake = SHAKE_TIME; // every branch below is an impact
+          this.cue('damage');
           if (s.debugMode === 'mineCollision') {
             s.trackerCount++;
             s.damageFlash = 0.5;
@@ -557,7 +645,11 @@ export class Game {
             this.spawnParticles(o.x, o.y, o.z, 208, 12);
             if (s.debugMode === 'chaos') s.trackerCount++;
             const dm = s.debugMode as string | null;
-            if (dm !== 'obstacleCollision' && dm !== 'mineCollision') s.score += 200;
+            // The collision-tracking modes are not scored, so a kill in one of
+            // them carries no multiplier and never starts a chain either.
+            if (dm !== 'obstacleCollision' && dm !== 'mineCollision') {
+              s.score += 200 * this.registerKill();
+            }
             o.z = -RECYCLE_Z + rand(-10, 10);
             s.bullets.splice(i, 1);
             hit = true;
@@ -582,9 +674,12 @@ export class Game {
             this.spawnParticles(m.x, m.y, m.z, 9, 5);
             if (m.hp <= 0) {
               this.spawnParticles(m.x, m.y, m.z, 9, 20);
+              this.cue('mine');
               if (s.debugMode === 'chaos') s.trackerCount++;
               const dm2 = s.debugMode as string | null;
-              if (dm2 !== 'obstacleCollision' && dm2 !== 'mineCollision') s.score += 500;
+              if (dm2 !== 'obstacleCollision' && dm2 !== 'mineCollision') {
+                s.score += 500 * this.registerKill();
+              }
               s.mines.splice(j, 1);
             }
             s.bullets.splice(i, 1);

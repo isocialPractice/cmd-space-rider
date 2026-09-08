@@ -233,3 +233,37 @@ for (const build of BUILDS) {
     }
   });
 }
+
+// ----- The navigation hint's pulse -----
+
+/**
+ * Foreground colour of the navigation hint at the documented minimum size, with
+ * the world clock parked at a given reading. The starfield is suppressed so the
+ * colour read back is the hint's own and not a star sitting on top of it.
+ */
+function navHintColor(build, time) {
+  const w = 60;
+  const h = 20;
+  const { game, screen } = stage(build, w, h);
+  game.state.stars = [];
+  game.state.time = time;
+  build.menu.renderDebugMenu(screen, game.state);
+
+  const rows = screenText(screen).split('\n');
+  const y = rows.findIndex((row) => row.includes(NAV_HINT));
+  assert.ok(y > 0, `t=${time}: the navigation hint should be drawn`);
+  return screen.fg[y * w + rows[y].indexOf(NAV_HINT)];
+}
+
+for (const build of BUILDS) {
+  test(`${build.name}: the navigation hint still pulses at the minimum size`, () => {
+    // The hint is the only animated thing on the debug menu, so a change that
+    // stopped it moving would leave that screen completely still with every
+    // other check here passing. Its colour turns on sin(time * 3) * 0.5 + 0.5
+    // crossing 0.3: at t=0 that term is 0.5 and at t=PI/2 it is 0, which is one
+    // either side of the threshold.
+    const lit = navHintColor(build, 0);
+    const dim = navHintColor(build, Math.PI / 2);
+    assert.notEqual(dim, lit, `the hint should change colour across the pulse, saw ${lit} both times`);
+  });
+}
