@@ -29,6 +29,20 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [deep-link-audio-burst.prompt.md](.claude/prompts/deep-link-audio-burst.prompt.md)
   - From: Medium Effort
 
+### Code Review Override - a held roll key and a chain that never caps
+
+#### Resolve Issues
+
+- [ ] Roll Key Repeat 1
+  - **Issue**: In the terminal build, holding `Q` or `E` rolls the ship over and over instead of once, on any terminal whose key-repeat rate is slower than the 150ms movement decay window. The roll acts on the press (`src/game.ts:400`, `index.html:472`), but `Q` and `E` are not in `TOGGLE_KEYS` (`src/input.ts:41`), so they decay after `KEY_DECAY_MS` and every repeat character that arrives after that re-arms `justPressed` as a fresh press. Driving `InputState` and `Game` together for a 6s hold: at the fast repeat rates the stream outruns the decay and the press lands once, 8.8% of frames invincible, matching the browser; at 2 characters per second, which is the slowest setting on the Windows keyboard repeat-rate slider, the same hold starts 4 rolls and leaves the ship invincible for 35.4% of frames, and at 5 per second, 5 rolls and 44.2%. The browser build gives 1 roll for the same hold at every rate, because its `keydown` handler is gated on `keys[k]`. This defeats the cooldown's stated purpose of bounding how much of a run can be spent untouchable, and it is the same fault `TOGGLE_KEYS` was added to fix for `P` and `M`.
+  - **Goal**: Add `Q` and `E` to `TOGGLE_KEYS` in `src/input.ts`, so a repeat character inside `TOGGLE_DECAY_MS` cannot read as a fresh press. The 800ms window costs nothing here, since `ROLL_COOLDOWN` already refuses a second roll for 1200ms. Cover it in `test/input.test.mjs` beside the existing repeat-suppression checks, which sweep the platform repeat delays but not the repeat rates that follow them.
+  - From: Medium Effort
+
+- [ ] Combo Chain Cap 1
+  - **Issue**: The combo multiplier has no ceiling, so an ordinary run's score runs into the millions and the best score it is measured against stops meaning anything. `registerKill` increments without bound (`src/game.ts:266`, `index.html:356`) and every kill is paid at `200 * combo` or `500 * combo`, so the 343rd kill in a chain pays 68,600. Three simulated minutes of a normal run reached x343 and 12,024,295 points; the same run with the multiplier pinned at 1 scored 111,295, a 91x inflation. The chain barely breaks, because obstacle density rises with difficulty and two seconds is longer than the gap between kills: at a leisurely 2 shots per second it dropped 9 times in 3 minutes and still peaked at x255, and `?mode=chaos` reached x2158 and 471,075,832. The item asked for a counter reading `x3` or `x5`; nothing in either build stops it at x2158. Best-score persistence is the concrete casualty - one long chain sets a stored best that ordinary play can never approach again, and the queued leaderboard item would inherit the same scale.
+  - **Goal**: Cap the multiplier at a value that keeps the chain worth chasing without swamping the rest of the scoring, in both builds together, and decide whether the counter should read the cap or keep counting past it. The cap belongs in `src/types.ts` beside `COMBO_TIME` with its browser twin in `index.html`, so `test/parity.test.mjs` keeps the two honest. Extend `test/combo.test.mjs`, which pins the x1/x2/x3 progression but stops before any ceiling, and correct the `and so on` in the `0.3.0-alpha` CHANGELOG entry and the README once the cap is chosen.
+  - From: Medium Effort
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -118,9 +132,9 @@ the roadmap section each one came from.
   - From: Quick Wins
 - [x] **Deep Link Audio Burst**: **Sound effects (Web Audio API)** — Synthesized retro beeps and boops. Pulse cannon shot, orb collect chime, damage crunch, mine explosion, engine hum that pitches up with boost. No audio files needed — generate all tones procedurally.
   - From: Medium Effort
-- [x] **Barrel roll visual** — Q and E are already bound but do nothing. Implement a barrel roll animation: tilt the ship sprite left/right for ~0.5s, grant brief invincibility during the roll, and add a cooldown.
+- [x] **Roll Key Repeat**: **Barrel roll visual** — Q and E are already bound but do nothing. Implement a barrel roll animation: tilt the ship sprite left/right for ~0.5s, grant brief invincibility during the roll, and add a cooldown.
   - From: Medium Effort
-- [x] **Combo scoring** — Track rapid successive hits. Display a combo counter ("x3", "x5") that multiplies score for quick kills. Resets after 2 seconds without a hit.
+- [x] **Combo Chain Cap**: **Combo scoring** — Track rapid successive hits. Display a combo counter ("x3", "x5") that multiplies score for quick kills. Resets after 2 seconds without a hit.
   - From: Medium Effort
 - [x] **Pin the debug menu hint's pulse at the minimum size** - The navigation hint is the only animated thing on the debug menu, so a change that stopped it pulsing would leave that screen completely still with every existing test still passing. `test/browser-engine.test.mjs` samples the pulse only at the suite's 80x24 default, and `test/menu-layout.test.mjs` asserts the hint is drawn at every height but not that it moves. Add a check to `test/menu-layout.test.mjs` that renders the debug menu at 60x20 twice with `state.time` set either side of the `sin(time * 3) * 0.5 + 0.5 > 0.3` threshold, and asserts the hint's foreground colour differs between the two renders, in both builds.
   - From: UI/UX verification 2026-09-07
