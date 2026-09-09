@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
 const { renderGame: terminalRender } = require(join(REPO_ROOT, 'out', 'render.js'));
-const { COMBO_TIME } = require(join(REPO_ROOT, 'out', 'types.js'));
+const { COMBO_TIME, COMBO_MAX } = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
 
@@ -106,6 +106,85 @@ for (const build of BUILDS) {
 
     assert.equal(paidFor(stageMineKill), 1500, 'a mine at triple its own 500');
     assert.equal(killing.state.combo, 3);
+  });
+
+  test(`${build.name}: the chain stops climbing at the cap`, () => {
+    const game = emptyRun(build);
+
+    for (let i = 0; i < COMBO_MAX; i++) {
+      stageObstacleKill(game.state);
+      game.update(FRAME, {}, {});
+      assert.equal(game.state.combo, i + 1, `kill ${i + 1} should still be climbing`);
+    }
+
+    // Another thirty kills on the same chain. Without a ceiling this reached
+    // x343 in three simulated minutes and paid 68,600 for a single obstacle.
+    for (let i = 0; i < 30; i++) {
+      stageObstacleKill(game.state);
+      game.update(FRAME, {}, {});
+      assert.equal(game.state.combo, COMBO_MAX, `kill ${COMBO_MAX + i + 1} past the cap`);
+    }
+  });
+
+  test(`${build.name}: a kill at the cap still holds the chain open`, () => {
+    // Capping the multiplier must not break the chain: the window is what the
+    // player is keeping alive, and it re-arms whether or not the number moved.
+    const game = emptyRun(build);
+
+    for (let i = 0; i < COMBO_MAX + 5; i++) {
+      stageObstacleKill(game.state);
+      game.update(FRAME, {}, {});
+    }
+    assert.equal(game.state.combo, COMBO_MAX);
+    assert.equal(game.state.comboTimer, COMBO_TIME, 'the window is re-armed at the cap');
+
+    const frames = Math.round(COMBO_TIME / FRAME) - 2;
+    for (let i = 0; i < frames; i++) game.update(FRAME, {}, {});
+    assert.equal(game.state.combo, COMBO_MAX, 'and still standing inside it');
+  });
+
+  test(`${build.name}: the cap bounds what a kill can ever pay`, () => {
+    const killing = emptyRun(build);
+    const control = emptyRun(build);
+
+    const step = (game, stage) => {
+      if (stage) stage(game.state);
+      else clearWorld(game.state);
+      const before = game.state.score;
+      game.update(FRAME, {}, {});
+      return game.state.score - before;
+    };
+
+    const paidFor = (stage) => step(killing, stage) - step(control, null);
+
+    for (let i = 0; i < COMBO_MAX - 1; i++) paidFor(stageObstacleKill);
+    assert.equal(killing.state.combo, COMBO_MAX - 1);
+
+    assert.equal(paidFor(stageObstacleKill), 200 * COMBO_MAX, 'the kill that reaches the cap');
+    assert.equal(paidFor(stageObstacleKill), 200 * COMBO_MAX, 'and the one after it, no higher');
+    assert.equal(paidFor(stageMineKill), 500 * COMBO_MAX, 'a mine is capped on the same chain');
+  });
+
+  test(`${build.name}: the counter reads the cap rather than counting past it`, () => {
+    // The number on the HUD is the multiplier being paid, so the two cannot
+    // drift apart: a counter that kept climbing would promise a payout the
+    // scoring no longer makes.
+    const game = emptyRun(build);
+    const screen = new build.ScreenBuffer(80, 24);
+    game.state.screenWidth = 80;
+    game.state.screenHeight = 24;
+    game.state.stars = [];
+
+    for (let i = 0; i < COMBO_MAX + 20; i++) {
+      stageObstacleKill(game.state);
+      game.update(FRAME, {}, {});
+    }
+
+    build.renderGame(screen, game.state);
+    assert.ok(
+      rowText(screen, HUD_ROWS).startsWith(`  COMBO x${COMBO_MAX}`),
+      `the counter should read the cap, saw ${JSON.stringify(rowText(screen, HUD_ROWS))}`
+    );
   });
 
   test(`${build.name}: a chain drops after a quiet window`, () => {
@@ -209,6 +288,35 @@ for (const build of BUILDS) {
     assert.equal(new Set(tiers).size, 3, `each tier should carry its own colour, saw ${tiers.join(' ')}`);
   });
 
+  test(`${build.name}: every multiplier the cap allows lands in its own tier`, () => {
+    // The check above asks only that the three tiers differ. With a ceiling in
+    // place the sharper question is where each reachable multiplier falls, and
+    // that the cap itself reads as the top tier rather than as a value the
+    // tiers never accounted for. Driving `?mode=chaos` in a browser showed
+    // x2, x3 cyan, x5 yellow and x6, x7, x8 magenta; this pins the same
+    // boundaries without a browser, at every multiplier a chain can now show.
+    const game = emptyRun(build);
+    const screen = new build.ScreenBuffer(80, 24);
+    game.state.screenWidth = 80;
+    game.state.screenHeight = 24;
+    game.state.stars = [];
+
+    const colorOfCounter = (combo) => {
+      game.state.combo = combo;
+      build.renderGame(screen, game.state);
+      return screen.fg[HUD_ROWS * screen.width + 2];
+    };
+
+    const bottom = colorOfCounter(2);
+    const middle = colorOfCounter(4);
+    const top = colorOfCounter(6);
+    for (let combo = 2; combo <= COMBO_MAX; combo++) {
+      const want = combo >= 6 ? top : combo >= 4 ? middle : bottom;
+      assert.equal(colorOfCounter(combo), want, `x${combo} should carry the tier it falls in`);
+    }
+    assert.equal(colorOfCounter(COMBO_MAX), top, `the cap at x${COMBO_MAX} should read as the top tier`);
+  });
+
   test(`${build.name}: the counter clears the debug label beside it`, () => {
     // Both sit on the HUD row: the counter left-aligned, the label centred. The
     // narrowest supported screen is where they would meet if they ever did.
@@ -225,6 +333,44 @@ for (const build of BUILDS) {
     assert.ok(row.includes('[ DEBUG: CHAOS PROTOCOL ]'), `and the label whole, saw ${JSON.stringify(row)}`);
   });
 }
+
+test('the cap leaves every colour tier of the counter reachable', () => {
+  // The counter colours up at x2, x4 and x6. A cap at or below the top tier
+  // would make that tier dead code and the chain stop reading as a chain.
+  const TOP_TIER = 6;
+  assert.ok(
+    COMBO_MAX > TOP_TIER,
+    `cap x${COMBO_MAX} must clear the top counter tier at x${TOP_TIER}`
+  );
+});
+
+test('the cap bounds what a long run can inflate a score to', () => {
+  // The defect this cap answers: an uncapped chain reached x343 over three
+  // simulated minutes and inflated the run's score 91x, so a best score set by
+  // one long chain was one ordinary play could never approach. Killing on every
+  // frame is the worst case, and the gap has to stay inside the cap.
+  const chained = emptyRun(BUILDS[0]);
+  const flat = emptyRun(BUILDS[0]);
+
+  const KILLS = 400;
+  for (let i = 0; i < KILLS; i++) {
+    stageObstacleKill(chained.state);
+    chained.update(FRAME, {}, {});
+
+    stageObstacleKill(flat.state);
+    flat.update(FRAME, {}, {});
+    // Break the chain by hand, for the same run scored with no multiplier.
+    flat.state.combo = 0;
+    flat.state.comboTimer = 0;
+  }
+
+  assert.equal(chained.state.combo, COMBO_MAX);
+  assert.ok(
+    chained.state.score <= flat.state.score * COMBO_MAX,
+    `${KILLS} chained kills scored ${chained.state.score} against ${flat.state.score} unchained, ` +
+    `more than the x${COMBO_MAX} the cap allows`
+  );
+});
 
 test('both builds chain and score the same way', () => {
   const pair = BUILDS.map((build) => emptyRun(build));
