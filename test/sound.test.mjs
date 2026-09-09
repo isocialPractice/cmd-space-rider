@@ -173,6 +173,31 @@ function stubContext() {
   return ctx;
 }
 
+/**
+ * The same, as a browser hands one back before the page has been touched:
+ * suspended, with a clock that stays at 0 for as long as it is asleep and reads
+ * `wakeAt` once resumed. Scheduling against a stopped clock is what used to pile
+ * every cue raised before the first keypress onto the same instant.
+ */
+function sleepingContext(wakeAt = 5) {
+  const ctx = stubContext();
+  ctx.state = 'suspended';
+  Object.defineProperty(ctx, 'currentTime', {
+    get: () => (ctx.state === 'suspended' ? 0 : wakeAt),
+  });
+  return ctx;
+}
+
+/**
+ * RetroAudio with the page's gesture already given. Nothing is built before
+ * that, so every test about what a cue sounds like has to press a key first.
+ */
+function wokenAudio(ctx) {
+  const audio = new browser.RetroAudio(() => ctx);
+  audio.resume();
+  return audio;
+}
+
 /** A playing frame, as RetroAudio.frame reads one. */
 function playingFrame(overrides = {}) {
   return {
@@ -184,7 +209,7 @@ function playingFrame(overrides = {}) {
 test('every cue is one tone, swept and faded', () => {
   for (const [name, spec] of Object.entries(browser.SOUND_CUES)) {
     const ctx = stubContext();
-    new browser.RetroAudio(() => ctx).play(name);
+    wokenAudio(ctx).play(name);
 
     assert.equal(ctx.oscillators.length, 1, `${name}: one oscillator`);
     const [osc] = ctx.oscillators;
@@ -212,7 +237,7 @@ test('the four cues the engine can raise all have a tone behind them', () => {
 
 test('a name with no tone behind it plays nothing', () => {
   const ctx = stubContext();
-  new browser.RetroAudio(() => ctx).play('trumpet');
+  wokenAudio(ctx).play('trumpet');
   assert.equal(ctx.oscillators.length, 0);
 });
 
@@ -223,6 +248,10 @@ test('the audio context is built once, and not before it is needed', () => {
 
   assert.equal(built, 0, 'nothing built at construction');
   audio.play('shot');
+  assert.equal(built, 0, 'nor before the page has had its gesture');
+
+  audio.resume();
+  audio.play('shot');
   audio.play('orb');
   assert.equal(built, 1, 'and only one thereafter');
 });
@@ -231,6 +260,7 @@ test('a browser that refuses an audio context leaves the game silent', () => {
   let asked = 0;
   const audio = new browser.RetroAudio(() => { asked += 1; throw new Error('no audio here'); });
 
+  audio.resume();
   audio.play('shot');
   audio.engineOn(2);
   audio.engineOff();
@@ -241,7 +271,7 @@ test('a browser that refuses an audio context leaves the game silent', () => {
 
 test('the hum is held open and only its pitch moves', () => {
   const ctx = stubContext();
-  const audio = new browser.RetroAudio(() => ctx);
+  const audio = wokenAudio(ctx);
 
   audio.engineOn(1);
   audio.engineOn(2);
@@ -258,7 +288,7 @@ test('the hum is held open and only its pitch moves', () => {
 
 test('the hum stops with the run and starts again with the next', () => {
   const ctx = stubContext();
-  const audio = new browser.RetroAudio(() => ctx);
+  const audio = wokenAudio(ctx);
 
   audio.engineOn(1);
   audio.engineOff();
@@ -275,7 +305,7 @@ test('the hum stops with the run and starts again with the next', () => {
 
 test('a frame plays its cues and pitches the hum to the speed readout', () => {
   const ctx = stubContext();
-  const audio = new browser.RetroAudio(() => ctx);
+  const audio = wokenAudio(ctx);
 
   audio.frame(playingFrame({ sounds: ['shot'], speed: browser.BASE_SPEED_START * 1.5 }));
 
@@ -286,7 +316,7 @@ test('a frame plays its cues and pitches the hum to the speed readout', () => {
 
 test('muting silences the cues and cuts the hum', () => {
   const ctx = stubContext();
-  const audio = new browser.RetroAudio(() => ctx);
+  const audio = wokenAudio(ctx);
 
   audio.frame(playingFrame({ sounds: ['shot'] }));
   assert.equal(ctx.oscillators.length, 2);
@@ -299,7 +329,7 @@ test('muting silences the cues and cuts the hum', () => {
 test('the hum stops outside a run and while one is paused', () => {
   for (const quiet of [{ paused: true }, { mode: 'menu' }, { mode: 'dead' }]) {
     const ctx = stubContext();
-    const audio = new browser.RetroAudio(() => ctx);
+    const audio = wokenAudio(ctx);
 
     audio.frame(playingFrame());
     assert.equal(ctx.oscillators.length, 1, 'the hum starts with the run');
@@ -309,23 +339,73 @@ test('the hum stops outside a run and while one is paused', () => {
   }
 });
 
-test('a suspended context is woken on the next press, and a running one left alone', () => {
-  const ctx = stubContext();
+test('a suspended context is woken on the first press, and a running one left alone', () => {
+  const ctx = sleepingContext();
   const audio = new browser.RetroAudio(() => ctx);
 
-  audio.resume();
-  assert.equal(ctx.resumed, 0, 'there is nothing to wake before a context exists');
-
-  // A `?mode=` link starts a run before anything has been pressed, so the
-  // context the first frame builds can come back suspended.
-  ctx.state = 'suspended';
+  // A `?mode=` link starts a run before anything has been pressed, so the cues
+  // it raises arrive with no gesture behind them.
   audio.play('shot');
+  assert.equal(ctx.resumed, 0, 'a cue is not a gesture, and wakes nothing');
+
   audio.resume();
   assert.equal(ctx.resumed, 1);
   assert.equal(ctx.state, 'running');
 
   audio.resume();
   assert.equal(ctx.resumed, 1, 'a running context is left alone');
+});
+
+// ----- The backlog a deep link used to build -----
+
+test('cues raised before the first keypress build nothing at all', () => {
+  let built = 0;
+  const ctx = sleepingContext();
+  const audio = new browser.RetroAudio(() => { built += 1; return ctx; });
+
+  // Ten seconds of `?mode=chaos` before a key is touched. Every one of these
+  // cues would have been scheduled at t = 0 at full gain, and the first press
+  // released the lot together well past full scale.
+  for (let i = 0; i < 300; i++) {
+    audio.frame(playingFrame({ sounds: ['shot', 'mine', 'damage'] }));
+  }
+
+  assert.equal(built, 0, 'no context is built before the gesture');
+  assert.equal(ctx.oscillators.length, 0, 'so there is no backlog to release');
+});
+
+test('a cue after the gesture is scheduled on the woken clock, not at zero', () => {
+  const WAKE_AT = 5;
+  const ctx = sleepingContext(WAKE_AT);
+  const audio = new browser.RetroAudio(() => ctx);
+
+  audio.play('shot');
+  assert.equal(ctx.oscillators.length, 0, 'the cue before the gesture is dropped');
+
+  audio.resume();
+  audio.play('shot');
+
+  assert.equal(ctx.oscillators.length, 1, 'and the one after it is heard');
+  const [osc] = ctx.oscillators;
+  const { dur } = browser.SOUND_CUES.shot;
+  assert.equal(osc.started, WAKE_AT, 'scheduled where the clock actually is');
+  assert.equal(osc.stopped, WAKE_AT + dur);
+  assert.deepEqual(osc.calls, [
+    { call: 'set', value: browser.SOUND_CUES.shot.from, at: WAKE_AT },
+    { call: 'ramp', value: browser.SOUND_CUES.shot.to, at: WAKE_AT + dur },
+  ], 'the sweep runs from the resumed clock too');
+});
+
+test('the hum waits for the gesture and starts on the frame after it', () => {
+  const ctx = sleepingContext();
+  const audio = new browser.RetroAudio(() => ctx);
+
+  audio.frame(playingFrame());
+  assert.equal(ctx.oscillators.length, 0, 'no hum while the page is untouched');
+
+  audio.resume();
+  audio.frame(playingFrame());
+  assert.equal(ctx.oscillators.length, 1, 'and one from the next frame on');
 });
 
 test('the page wakes the audio on a keypress', () => {

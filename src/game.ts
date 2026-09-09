@@ -4,7 +4,7 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
@@ -259,11 +259,13 @@ export class Game {
   /**
    * Count a kill into the combo chain and hand back the multiplier it earns.
    * The first kill is worth x1, and each further one inside the window raises
-   * it, so a chain pays more the faster it is strung together.
+   * it, so a chain pays more the faster it is strung together, up to COMBO_MAX.
+   * A kill at the ceiling still re-arms the window, so the chain is held rather
+   * than broken by pressing on past it.
    */
   private registerKill(): number {
     const s = this.state;
-    s.combo += 1;
+    s.combo = min(s.combo + 1, COMBO_MAX);
     s.comboTimer = COMBO_TIME;
     return s.combo;
   }

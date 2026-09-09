@@ -77,6 +77,20 @@ export const ROLL_COOLDOWN = 1.2;
 export const COMBO_TIME = 2;
 
 /**
+ * The highest multiplier a chain can reach. Without a ceiling the chain barely
+ * ever breaks - obstacle density rises with difficulty, so two seconds is
+ * longer than the gap between kills - and an ordinary run runs into the
+ * millions while a best score set by one long chain is one ordinary play can
+ * never approach again.
+ *
+ * The counter reads the cap rather than counting past it, so the number on the
+ * HUD is always the multiplier actually being paid. Eight clears the top HUD
+ * colour tier at 6, so every tier is still reachable, and holds a mine kill at
+ * 4000 rather than the 68,600 the 343rd kill of an uncapped chain was worth.
+ */
+export const COMBO_MAX = 8;
+
+/**
  * One-shot sounds the engine queues for the frame it has just simulated. The
  * engine names the event; what it sounds like is the browser build's business,
  * and the terminal build has no audio and simply lets the queue clear.

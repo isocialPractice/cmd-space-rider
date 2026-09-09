@@ -31,6 +31,10 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.BASE_SPEED_START, terminalTypes.BASE_SPEED_START);
   assert.equal(browser.SHAKE_TIME, terminalTypes.SHAKE_TIME);
   assert.equal(browser.NEW_BEST_FLASH_TIME, terminalTypes.NEW_BEST_FLASH_TIME);
+  assert.equal(browser.ROLL_TIME, terminalTypes.ROLL_TIME);
+  assert.equal(browser.ROLL_COOLDOWN, terminalTypes.ROLL_COOLDOWN);
+  assert.equal(browser.COMBO_TIME, terminalTypes.COMBO_TIME);
+  assert.equal(browser.COMBO_MAX, terminalTypes.COMBO_MAX);
 });
 
 test('both builds agree on the colour constants', () => {
