@@ -21,8 +21,8 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. The world freezes with it, so once an in-flight flash or shake has finished, the pulsing overlay label is all that still moves. Useful in the browser, where there is no terminal interrupt.
 - **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second. The browser build offsets the whole canvas; the terminal build jolts only the play area, leaving the HUD and border anchored.
 - **Barrel roll** &mdash; `Q` and `E` roll the ship for half a second. The wings turn through the roll and the hull goes white, and nothing can touch the ship while it does. A cooldown keeps it an escape rather than a way of life.
-- **Combo scoring** &mdash; Kills strung together inside two seconds chain: the second is worth double, the third triple, and a `COMBO x3` counter reads the multiplier back on the HUD. Two quiet seconds drop it.
-- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost.
+- **Combo scoring** &mdash; Kills strung together inside two seconds chain: the second is worth double, the third triple, and a `COMBO x3` counter reads the multiplier back on the HUD. The chain tops out at `COMBO x8`. Two quiet seconds drop it.
+- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost. Sound starts on the first keypress, which is the gesture a browser wants before it will make any noise at all.
 - **CRT overlay** &mdash; The browser version lays scanlines and a soft vignette over the canvas. On out of the box, toggled with `C`, and the choice is remembered across reloads.
 - **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
 
@@ -97,13 +97,19 @@ space-rider --help                   Show help
 `M` silences the browser version and shows a `MUTED` indicator in the footer. The
 terminal version has no audio, so there the flag only raises the indicator.
 
+The keys that act on the press rather than the hold &mdash; `P`, `M`, `Esc`, and
+the `Q` and `E` roll &mdash; fire once per press. Holding one down does not
+repeat it at any of the repeat rates the standard OS sliders offer. The cost is
+a short deadzone after a hold: having held one of these keys, the next press of
+it is ignored for a beat, so a deliberate second tap needs a moment between them.
+
 ### Gameplay
 
 - **Dodge obstacles** &mdash; Red rotating blocks deal 25 shield damage.
 - **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
-- **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
+- **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on up to `COMBO x8`, where the multiplier stops climbing. Further kills still hold the chain open, they just do not raise it. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
 - **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
 - **Survive** &mdash; The game ends when shield reaches 0.
 - **Chase your best** &mdash; Only normal runs count toward the best score. Debug scenarios are diagnostics and never record one.
@@ -191,4 +197,4 @@ The game uses a custom double-buffered screen renderer built on raw ANSI escape 
 
 The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
 
-Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.
+Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. Nothing is built until the page has had a keypress, so a run opened straight from a `?mode=` link is silent until the first key and then plays from that moment on, rather than releasing everything it missed. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.

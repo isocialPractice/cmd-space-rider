@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.3.1-alpha] - 2026-09-09
+
+### Fixed
+
+- A run opened straight from a `?mode=` debug link no longer opens with a loud
+  clipped crack on the first keypress. A browser will not start an audio context
+  before the page has been touched, and the one built for the first cue came
+  back suspended with its clock stopped at zero, so every cue raised before that
+  first key was scheduled for the same instant at full gain and the whole
+  backlog sounded together the moment the context woke. Ten seconds of
+  `?mode=chaos` before a key had 85 tones queued and peaked at more than four
+  times full scale, against 0.03 for a single cannon shot. Nothing is built
+  until the page has had its gesture now: the cues raised before it were never
+  going to be audible, so they are dropped, and sound starts from the first key
+  and plays forward. A run started from the title screen was never affected, and
+  is unchanged.
+- Holding `Q` or `E` in the terminal build rolls the ship once rather than over
+  and over. The roll acts on the press, but the two keys were missing from the
+  toggle key table, so they decayed on the 150ms movement window and every
+  repeat character arriving after it re-armed as a fresh press. At two
+  characters a second, the slowest setting on the Windows repeat-rate slider, a
+  six second hold started four rolls and left the ship invincible for 35% of
+  frames, which is exactly what the roll cooldown exists to bound. The browser
+  build gates its `keydown` handler on the held key and never shared the fault.
+  The suppression is not free: the window restarts on every repeat character
+  while the cooldown runs from the start of the roll, so releasing a key held
+  past the cooldown leaves the next press of it ignored for the rest of the
+  window. That is the beat `P` and `M` have always needed between taps, and it
+  is the better failure of the two.
+
+### Changed
+
+- The combo multiplier now stops at x8. It had no ceiling, so a chain that
+  barely ever broke - obstacle density rises with difficulty, and two seconds is
+  longer than the gap between kills - carried an ordinary run into the millions:
+  three simulated minutes reached x343 and 12,024,295 points, against 111,295
+  for the same run scored without a multiplier. The casualty was best-score
+  persistence, where one long chain set a stored best that ordinary play could
+  never approach again. Kills past the cap still hold the chain open, they just
+  do not raise it, and the HUD counter reads the cap rather than counting past
+  it, so the number shown is always the multiplier being paid. The cap sits in
+  `src/types.ts` beside `COMBO_TIME` with its browser twin in `index.html`, so
+  the parity suite holds the two builds to the same value.
+
 ## [0.3.0-alpha] - 2026-09-08
 
 ### Added
@@ -12,8 +56,9 @@
   neither restarts nor reverses it. The cooldown runs from the start of the roll
   rather than its end, so it bounds how much of a run can be spent untouchable.
 - Combo scoring. Kills strung together inside two seconds chain: the second is
-  worth double, the third triple, and so on, with a `COMBO x3` counter on the
-  HUD row reading the multiplier back and colouring up as the chain lengthens.
+  worth double, the third triple, and every further kill one step higher with
+  no ceiling, with a `COMBO x3` counter on the HUD row reading the multiplier
+  back and colouring up as the chain lengthens. (0.3.1-alpha caps it.)
   Two quiet seconds drop it. Orbs are a pickup rather than a kill and never
   chain, and the two collision-tracking debug scenarios score nothing, so they
   chain nothing either.

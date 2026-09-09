@@ -9,12 +9,14 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { REPO_ROOT } from './helpers.mjs';
+import { REPO_ROOT, FRAME } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const {
   InputState, decodeKeys, KEY_DECAY_MS, TOGGLE_DECAY_MS, TOGGLE_KEYS,
 } = require(join(REPO_ROOT, 'out', 'input.js'));
+const { Game } = require(join(REPO_ROOT, 'out', 'game.js'));
+const { ROLL_COOLDOWN } = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const ESC = String.fromCharCode(27);
 
@@ -140,6 +142,163 @@ test('holding ESC leaves the run without also quitting from the title screen', (
   }
 
   assert.equal(presses, 1, 'a held ESC must not reach the quit branch');
+});
+
+test('holding a key through a slow repeat rate presses it once', () => {
+  // The check above sweeps the delay before the first repeat character. This
+  // one sweeps the stream that follows it, which is the other half of the same
+  // hold: the Windows repeat-rate slider bottoms out around 2 characters a
+  // second, and any gap wider than the decay window reads as a fresh press.
+  for (const key of TOGGLE_KEYS) {
+    for (const perSecond of [2, 5, 10, 30]) {
+      const gap = 1000 / perSecond;
+      const input = new InputState();
+      let presses = 0;
+
+      const frame = (now) => {
+        input.expire(now);
+        if (input.justPressed[key]) presses++;
+        input.clearJustPressed();
+      };
+
+      input.press(key, 0);
+      frame(0);
+
+      // Six seconds of holding, which is long enough for the slowest rate to
+      // deliver a dozen characters.
+      for (let t = 660; t <= 6000; t += gap) {
+        input.press(key, t);
+        frame(t);
+      }
+
+      assert.equal(presses, 1, `${key} held at ${perSecond} characters a second`);
+    }
+  }
+});
+
+test('the roll keys act on the press, so they take the toggle window', () => {
+  // Q and E start a barrel roll, which grants invincibility for as long as it
+  // runs. A hold that re-armed on every repeat character would roll over and
+  // over and hold the ship untouchable, which is what the cooldown exists to
+  // bound.
+  assert.ok(TOGGLE_KEYS.includes('Q'), 'Q rolls left on the press');
+  assert.ok(TOGGLE_KEYS.includes('E'), 'E rolls right on the press');
+
+  // The window costs nothing here: the cooldown already refuses a second roll
+  // for longer than the window lasts, so no roll a player could ask for is
+  // suppressed by it.
+  assert.ok(
+    TOGGLE_DECAY_MS < ROLL_COOLDOWN * 1000,
+    `toggle window ${TOGGLE_DECAY_MS}ms must sit inside the ${ROLL_COOLDOWN * 1000}ms roll cooldown`
+  );
+});
+
+test('holding a roll key through OS repeat rolls the ship once', () => {
+  // The end the suppression is for, read off the engine rather than off the key
+  // table: one hold is one roll, and the ship spends the rest of it touchable.
+  for (const key of ['Q', 'E']) {
+    for (const perSecond of [2, 5, 30]) {
+      const gap = 1000 / perSecond;
+      const game = new Game();
+      game.startGame();
+      game.state.obstacles = [];
+      game.state.orbs = [];
+      game.state.mines = [];
+
+      const input = new InputState();
+      let rolls = 0;
+      let invincibleFrames = 0;
+      let frames = 0;
+      let wasRolling = false;
+
+      // Six seconds of holding the key down: the press, then the repeat stream
+      // after the usual delay. The game runs at its own frame rate throughout,
+      // rather than one frame per character, or a slow repeat rate would step
+      // the engine a dozen times in six seconds and read as all roll.
+      const HOLD_MS = 6000;
+      const FRAME_MS = FRAME * 1000;
+      const chars = [0];
+      for (let t = 660; t <= HOLD_MS; t += gap) chars.push(t);
+
+      let next = 0;
+      for (let now = 0; now <= HOLD_MS; now += FRAME_MS) {
+        while (next < chars.length && chars[next] <= now) {
+          input.press(key, now);
+          next++;
+        }
+        input.expire(now);
+        game.update(FRAME, input.keys, input.justPressed);
+        input.clearJustPressed();
+
+        const rolling = game.state.shipRoll > 0;
+        if (rolling && !wasRolling) rolls++;
+        wasRolling = rolling;
+        if (rolling) invincibleFrames++;
+        frames++;
+      }
+
+      assert.equal(rolls, 1, `${key} held at ${perSecond}/s should roll once`);
+      assert.ok(
+        invincibleFrames / frames < 0.15,
+        `${key} at ${perSecond}/s left the ship invincible for ` +
+        `${((invincibleFrames / frames) * 100).toFixed(1)}% of frames`
+      );
+    }
+  }
+});
+
+test('a roll key held past its cooldown is deadzoned for the window after release', () => {
+  // What the suppression costs, pinned rather than waved at. ROLL_COOLDOWN runs
+  // from the start of the roll and the toggle window restarts on every repeat
+  // character, so the two clocks only line up for a single tap. Held longer
+  // than the cooldown, the window outlives it and swallows the next press.
+  const rollsFor = (holdMs, gapAfterRelease) => {
+    const FRAME_MS = FRAME * 1000;
+    const gap = 1000 / 10;
+
+    // The hold, then the deliberate re-press after it.
+    const chars = [0];
+    for (let t = 660; t <= holdMs; t += gap) chars.push(t);
+    chars.push(holdMs + gapAfterRelease);
+
+    const game = new Game();
+    game.startGame();
+    game.state.obstacles = [];
+    game.state.orbs = [];
+    game.state.mines = [];
+
+    const input = new InputState();
+    let rolls = 0;
+    let wasRolling = false;
+    let next = 0;
+
+    for (let now = 0; now <= holdMs + gapAfterRelease + 1500; now += FRAME_MS) {
+      while (next < chars.length && chars[next] <= now) {
+        input.press('Q', now);
+        next++;
+      }
+      input.expire(now);
+      game.update(FRAME, input.keys, input.justPressed);
+      input.clearJustPressed();
+
+      const rolling = game.state.shipRoll > 0;
+      if (rolling && !wasRolling) rolls++;
+      wasRolling = rolling;
+    }
+    return rolls;
+  };
+
+  const HOLD = 2000;
+  assert.ok(HOLD > ROLL_COOLDOWN * 1000, 'the hold has to outlast the cooldown to show this');
+
+  assert.equal(
+    rollsFor(HOLD, TOGGLE_DECAY_MS - 100), 1,
+    'a re-press inside the window is swallowed, cooldown or no cooldown'
+  );
+  assert.equal(
+    rollsFor(HOLD, TOGGLE_DECAY_MS + 100), 2,
+    'and lands once the window has run out'
+  );
 });
 
 test('a toggle key presses again once it has been released', () => {

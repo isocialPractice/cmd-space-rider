@@ -22,6 +22,11 @@ export const KEY_DECAY_MS = 150;
  * key fires it twice: P pauses and immediately resumes, and ESCAPE backs out of
  * the run and then quits from the title screen.
  *
+ * It also has to outlast the gaps in the repeat stream that follows that delay,
+ * which is the slower half of the same problem: the Windows repeat-rate slider
+ * bottoms out around 2 characters a second, a 500ms gap, and any window shorter
+ * than that lets every repeat character through as a fresh press.
+ *
  * The cost is that a deliberate second press inside the window is ignored, so
  * pause-then-resume needs a beat between the taps. That is the better failure:
  * the alternative fires an action nobody asked for. A machine configured with a
@@ -37,8 +42,23 @@ export const TOGGLE_DECAY_MS = 800;
  * it as "leave the run" from a run and as "quit" from the title screen, so a
  * repeat character taken for a second press ends the process a beat after the
  * first press has landed the player on the title screen.
+ *
+ * Q and E belong here for the same reason: a barrel roll starts on the press
+ * and grants invincibility for as long as it runs, so a hold that re-arms on
+ * every repeat character rolls over and over and holds the ship untouchable,
+ * which is exactly what ROLL_COOLDOWN exists to bound.
+ *
+ * They pay the same cost as the keys above, and it is worth naming rather than
+ * waving at the cooldown: ROLL_COOLDOWN runs from the start of the roll, while
+ * this window restarts on every repeat character, so the two clocks only line
+ * up for a single tap. Release a key that was held past the cooldown and the
+ * next press of it is swallowed for the rest of the window - a two second hold
+ * followed by a deliberate re-press 700ms later rolls once, where the cooldown
+ * on its own would have allowed a second roll. Still the better failure: the
+ * alternative is a hold that rolls four times and spends a third of the run
+ * untouchable.
  */
-export const TOGGLE_KEYS = ['P', 'M', 'ESCAPE'];
+export const TOGGLE_KEYS = ['P', 'M', 'ESCAPE', 'Q', 'E'];
 
 /** Characters that map straight through to a key name, uppercased. */
 const LETTER_KEYS = 'WASDQEFPM';
