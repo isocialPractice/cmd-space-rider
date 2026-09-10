@@ -14,6 +14,7 @@ import { REPO_ROOT, FRAME } from './helpers.mjs';
 const require = createRequire(import.meta.url);
 const {
   InputState, decodeKeys, KEY_DECAY_MS, TOGGLE_DECAY_MS, TOGGLE_KEYS,
+  ROLL_KEYS, PRESS_KEYS, REPEAT_SLACK, ROLL_RELEASE_MIN_MS,
 } = require(join(REPO_ROOT, 'out', 'input.js'));
 const { Game } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ROLL_COOLDOWN } = require(join(REPO_ROOT, 'out', 'types.js'));
@@ -94,7 +95,7 @@ test('a held movement key re-arms on every repeat character', () => {
 // ----- Toggle repeat suppression -----
 
 test('holding a toggle key through OS repeat presses it once', () => {
-  for (const key of TOGGLE_KEYS) {
+  for (const key of PRESS_KEYS) {
     // Every platform's delay before the first repeat character, then the fast
     // stream that follows it once repeat is under way.
     for (const delay of [250, 400, 660, 750]) {
@@ -149,7 +150,7 @@ test('holding a key through a slow repeat rate presses it once', () => {
   // one sweeps the stream that follows it, which is the other half of the same
   // hold: the Windows repeat-rate slider bottoms out around 2 characters a
   // second, and any gap wider than the decay window reads as a fresh press.
-  for (const key of TOGGLE_KEYS) {
+  for (const key of PRESS_KEYS) {
     for (const perSecond of [2, 5, 10, 30]) {
       const gap = 1000 / perSecond;
       const input = new InputState();
@@ -176,21 +177,67 @@ test('holding a key through a slow repeat rate presses it once', () => {
   }
 });
 
-test('the roll keys act on the press, so they take the toggle window', () => {
+test('the roll keys act on the press, on their own measured window', () => {
   // Q and E start a barrel roll, which grants invincibility for as long as it
   // runs. A hold that re-armed on every repeat character would roll over and
   // over and hold the ship untouchable, which is what the cooldown exists to
-  // bound.
-  assert.ok(TOGGLE_KEYS.includes('Q'), 'Q rolls left on the press');
-  assert.ok(TOGGLE_KEYS.includes('E'), 'E rolls right on the press');
+  // bound. So they need the suppression - but not the flat window, which
+  // outlives the cooldown and deadzones the escape move after a hold.
+  assert.deepEqual(ROLL_KEYS, ['Q', 'E'], 'the roll pair take the measured window');
+  for (const key of ROLL_KEYS) {
+    assert.equal(TOGGLE_KEYS.includes(key), false, `${key} is not on the flat window`);
+    assert.ok(PRESS_KEYS.includes(key), `${key} still acts on the press`);
+  }
+  for (const key of TOGGLE_KEYS) {
+    assert.ok(PRESS_KEYS.includes(key), `${key} still acts on the press`);
+  }
+});
 
-  // The window costs nothing here: the cooldown already refuses a second roll
-  // for longer than the window lasts, so no roll a player could ask for is
-  // suppressed by it.
-  assert.ok(
-    TOGGLE_DECAY_MS < ROLL_COOLDOWN * 1000,
-    `toggle window ${TOGGLE_DECAY_MS}ms must sit inside the ${ROLL_COOLDOWN * 1000}ms roll cooldown`
-  );
+test('a roll key narrows its window to the repeat rate the stream shows', () => {
+  // The first gap of a hold is the OS delay before repeat starts, not the rate
+  // it starts at, so it is skipped and the window stays wide enough to cover
+  // it. The second gap is the rate, and the window follows it down.
+  const input = new InputState();
+
+  input.press('Q', 0);
+  assert.equal(input.holdWindow('Q'), TOGGLE_DECAY_MS, 'nothing measured from one character');
+
+  input.press('Q', 660);
+  assert.equal(input.holdWindow('Q'), TOGGLE_DECAY_MS, 'the OS delay says nothing about the rate');
+
+  input.press('Q', 760);
+  assert.equal(input.holdWindow('Q'), 100 * REPEAT_SLACK, '10 characters a second');
+
+  // A slower stream widens it again, and never past the flat window.
+  const slow = new InputState();
+  slow.press('E', 0);
+  slow.press('E', 660);
+  slow.press('E', 1160);
+  assert.equal(slow.holdWindow('E'), TOGGLE_DECAY_MS, '2 characters a second needs all of it');
+
+  // A stdin chunk carrying two characters presses both at once, which measures
+  // as a zero gap. The floor is what stops that reading as no window at all.
+  const burst = new InputState();
+  burst.feed('q', 0);
+  burst.feed('qq', 660);
+  assert.equal(burst.holdWindow('Q'), ROLL_RELEASE_MIN_MS, 'a zero gap falls back to the floor');
+
+  // Letting go and pressing again starts the measuring over.
+  const again = new InputState();
+  again.press('Q', 0);
+  again.press('Q', 660);
+  again.press('Q', 760);
+  again.press('Q', 2000);
+  assert.equal(again.holdWindow('Q'), TOGGLE_DECAY_MS, 'the last hold measured the last hold');
+
+  // The keys on the flat window are not measured at all.
+  for (const key of TOGGLE_KEYS) {
+    const flat = new InputState();
+    flat.press(key, 0);
+    flat.press(key, 660);
+    flat.press(key, 760);
+    assert.equal(flat.holdWindow(key), TOGGLE_DECAY_MS, `${key} keeps the flat window`);
+  }
 });
 
 test('holding a roll key through OS repeat rolls the ship once', () => {
@@ -247,14 +294,17 @@ test('holding a roll key through OS repeat rolls the ship once', () => {
   }
 });
 
-test('a roll key held past its cooldown is deadzoned for the window after release', () => {
-  // What the suppression costs, pinned rather than waved at. ROLL_COOLDOWN runs
-  // from the start of the roll and the toggle window restarts on every repeat
-  // character, so the two clocks only line up for a single tap. Held longer
-  // than the cooldown, the window outlives it and swallows the next press.
-  const rollsFor = (holdMs, gapAfterRelease) => {
+test('a roll key re-presses a repeat interval after a hold, not a flat window', () => {
+  // What the suppression costs, pinned rather than waved at. The roll is the
+  // escape move, so a player who holds the key through a dense stretch and then
+  // wants a roll on the way out must not find it dead: on the flat window the
+  // next press was swallowed for up to TOGGLE_DECAY_MS after release, because
+  // that window restarts on every repeat character while ROLL_COOLDOWN runs
+  // from the start of the roll. Measured off the stream instead, the deadzone
+  // is REPEAT_SLACK repeat intervals and the cooldown decides the rest.
+  const rollsFor = (holdMs, gapAfterRelease, perSecond = 10) => {
     const FRAME_MS = FRAME * 1000;
-    const gap = 1000 / 10;
+    const gap = 1000 / perSecond;
 
     // The hold, then the deliberate re-press after it.
     const chars = [0];
@@ -291,14 +341,57 @@ test('a roll key held past its cooldown is deadzoned for the window after releas
   const HOLD = 2000;
   assert.ok(HOLD > ROLL_COOLDOWN * 1000, 'the hold has to outlast the cooldown to show this');
 
-  assert.equal(
-    rollsFor(HOLD, TOGGLE_DECAY_MS - 100), 1,
-    'a re-press inside the window is swallowed, cooldown or no cooldown'
-  );
+  // The four re-presses the flat window used to swallow whole. Every one of
+  // them is past the cooldown, which expired at 1200ms, so every one of them is
+  // a roll the player asked for and can have.
+  for (const after of [300, 500, 700]) {
+    assert.equal(
+      rollsFor(HOLD, after), 2,
+      `a re-press ${after}ms after a hold should roll`
+    );
+  }
   assert.equal(
     rollsFor(HOLD, TOGGLE_DECAY_MS + 100), 2,
-    'and lands once the window has run out'
+    'and so should one well past the old flat window'
   );
+
+  // What is left is the window itself, REPEAT_SLACK intervals wide, of which
+  // one interval is not recoverable at any rate: at 10 characters a second a
+  // re-press 100ms after the last one is the same bytes at the same spacing as
+  // the hold carrying on, and nothing in the stream tells them apart. The
+  // second interval is the price of the jitter REPEAT_SLACK absorbs, so a
+  // re-press inside the 200ms window is swallowed too, distinguishable or not.
+  assert.equal(
+    rollsFor(HOLD, 100), 1,
+    'a re-press inside the stream\'s own cadence cannot be told from it'
+  );
+
+  // A slower stream measures a wider window, so the deadzone tracks the rate
+  // the machine is set to rather than a number chosen for the worst of them.
+  assert.equal(rollsFor(HOLD, 300, 30), 2, 'a fast repeat rate re-arms fast');
+  assert.equal(rollsFor(HOLD, 300, 2), 1, 'the slowest rate still needs its beat');
+});
+
+test('the flat window keeps its deadzone, which is what the roll pair left', () => {
+  // P, M and ESCAPE are unchanged on purpose: no cooldown competes for them, a
+  // beat between deliberate taps is the documented cost, and the flat window is
+  // the simpler thing to reason about where it costs nothing.
+  const pressesAfter = (key, gapAfterRelease) => {
+    const input = new InputState();
+    input.press(key, 0);
+    for (let t = 660; t <= 2000; t += 100) input.press(key, t);
+    input.clearJustPressed();
+    input.press(key, 2000 + gapAfterRelease);
+    return input.justPressed[key] === true;
+  };
+
+  for (const key of TOGGLE_KEYS) {
+    assert.equal(pressesAfter(key, 300), false, `${key} is still deadzoned after a hold`);
+    assert.equal(
+      pressesAfter(key, TOGGLE_DECAY_MS + 100), true,
+      `${key} re-presses once the flat window has run out`
+    );
+  }
 });
 
 test('a toggle key presses again once it has been released', () => {

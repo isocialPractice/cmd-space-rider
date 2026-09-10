@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.3.2-alpha] - 2026-09-10
+
+### Fixed
+
+- The barrel roll no longer goes dead for the best part of a second after a
+  hold. Suppressing the repeat stream on `Q` and `E` stopped a hold rolling over
+  and over, but it did it with the flat 800ms window `P`, `M` and `ESCAPE` use,
+  and that window restarts on every repeat character while `ROLL_COOLDOWN` runs
+  from the start of the roll. The two clocks only lined up for a single tap:
+  held for two seconds at ten characters a second, the cooldown expired at
+  1200ms and a deliberate re-press 100ms, 300ms, 500ms or 700ms after letting go
+  was swallowed anyway, so the escape move read as dead at the exact moment a
+  player coming out of a dense stretch wanted it. The roll pair now measure
+  their own window off the repeat stream instead: the first gap of a hold is the
+  OS delay before repeat starts and is ignored, and the gaps after it are the
+  rate, so the key re-arms about two repeat intervals after the last character
+  rather than 800ms. A re-press 300ms after that hold now rolls. What is left is
+  those two intervals, or 150ms where the stream is fast enough for the floor to
+  be the wider of the two: 400ms at five characters a second, 200ms at ten, and
+  150ms from about thirteen upwards. The slowest end keeps the old cost in full,
+  because two intervals of the two-a-second floor on the Windows repeat-rate
+  slider overrun the flat window and the cap holds it at 800ms, which is the one
+  rate the measurement buys nothing at. One of those two intervals is not
+  recoverable at any rate, since a press arriving exactly when the next repeat
+  character was due is the same bytes at the same spacing as the hold carrying
+  on; the second is the price of reading a stream the game loop delivers
+  unevenly. `P`, `M` and `ESCAPE` keep the flat window, which costs them
+  a beat between deliberate taps and nothing else, since no cooldown competes
+  for those keys.
+- A browser that would have allowed the sound outright is no longer silenced for
+  the opening seconds of a `?mode=` link. Withholding the audio context until the
+  page had been touched fixed the backlog of cues scheduled against a stopped
+  clock, but it withheld it from every browser rather than from the ones that
+  needed it: Chrome unblocks autoplay for an origin with a high media engagement
+  score, and for any site given a sound permission, and hands such a page a
+  context that is already running on a clock that advances. Ten seconds of
+  `?mode=chaos` before a key was pressed built nothing and played nothing there,
+  where the same browser used to play the run from its first frame. The context
+  is built lazily on the first cue again, and the cues are gated on it actually
+  running rather than on the keypress. A blocked browser hands back a suspended
+  context whose cues are dropped rather than queued at `t = 0`, which is the same
+  outcome as withholding it, and a permitting one plays from the first frame. The
+  keypress stays as the nudge that wakes a suspended context.
+
 ## [0.3.1-alpha] - 2026-09-09
 
 ### Fixed
