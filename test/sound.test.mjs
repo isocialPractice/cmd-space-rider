@@ -189,8 +189,24 @@ function sleepingContext(wakeAt = 5) {
 }
 
 /**
- * RetroAudio with the page's gesture already given. Nothing is built before
- * that, so every test about what a cue sounds like has to press a key first.
+ * The same, as a browser that permits the sound outright hands one back:
+ * already running before anything has been pressed, on a clock that advances
+ * from the moment it is built. Chrome unblocks autoplay for an origin with a
+ * high Media Engagement Index, which a returning player accumulates, and for
+ * any site given the Sound: Allow permission.
+ */
+function permittedContext() {
+  const ctx = stubContext();
+  ctx.state = 'running';
+  ctx.clock = 0;
+  Object.defineProperty(ctx, 'currentTime', { get: () => ctx.clock });
+  return ctx;
+}
+
+/**
+ * RetroAudio with the page's gesture already given. A blocked browser builds
+ * nothing worth scheduling against before that, so every test about what a cue
+ * sounds like presses a key first.
  */
 function wokenAudio(ctx) {
   const audio = new browser.RetroAudio(() => ctx);
@@ -248,12 +264,11 @@ test('the audio context is built once, and not before it is needed', () => {
 
   assert.equal(built, 0, 'nothing built at construction');
   audio.play('shot');
-  assert.equal(built, 0, 'nor before the page has had its gesture');
-
+  assert.equal(built, 1, 'the first cue builds it');
   audio.resume();
   audio.play('shot');
   audio.play('orb');
-  assert.equal(built, 1, 'and only one thereafter');
+  assert.equal(built, 1, 'and nothing builds a second');
 });
 
 test('a browser that refuses an audio context leaves the game silent', () => {
@@ -358,7 +373,7 @@ test('a suspended context is woken on the first press, and a running one left al
 
 // ----- The backlog a deep link used to build -----
 
-test('cues raised before the first keypress build nothing at all', () => {
+test('cues a blocked browser cannot play are dropped, not queued', () => {
   let built = 0;
   const ctx = sleepingContext();
   const audio = new browser.RetroAudio(() => { built += 1; return ctx; });
@@ -370,8 +385,34 @@ test('cues raised before the first keypress build nothing at all', () => {
     audio.frame(playingFrame({ sounds: ['shot', 'mine', 'damage'] }));
   }
 
-  assert.equal(built, 0, 'no context is built before the gesture');
+  assert.equal(built, 1, 'the context is built and asked what it can do');
+  assert.equal(ctx.state, 'suspended', 'and this browser will not start it yet');
   assert.equal(ctx.oscillators.length, 0, 'so there is no backlog to release');
+  assert.equal(ctx.resumed, 0, 'a cue is not a gesture and cannot wake it');
+});
+
+test('a browser that permits the sound plays a deep link from the first frame', () => {
+  // The other half of the same decision. Gating on the gesture rather than on
+  // what the context is doing silenced a browser that would have allowed the
+  // sound outright, for the whole of the opening seconds of a debug link.
+  const ctx = permittedContext();
+  const audio = new browser.RetroAudio(() => ctx);
+
+  for (let i = 0; i < 300; i++) {
+    ctx.clock = i / 30;
+    audio.frame(playingFrame({ sounds: ['shot'] }));
+  }
+
+  assert.equal(ctx.resumed, 0, 'a running context is never resumed');
+
+  const hums = ctx.oscillators.filter((osc) => osc.type === 'triangle');
+  const shots = ctx.oscillators.filter((osc) => osc.type === browser.SOUND_CUES.shot.wave);
+  assert.equal(hums.length, 1, 'the hum runs from the first frame');
+  assert.equal(shots.length, 300, 'and every shot is heard as it is fired');
+
+  // Scheduled where the clock actually was, rather than piled onto one instant.
+  assert.equal(shots[0].started, 0);
+  assert.equal(shots[299].started, 299 / 30);
 });
 
 test('a cue after the gesture is scheduled on the woken clock, not at zero', () => {
@@ -396,12 +437,12 @@ test('a cue after the gesture is scheduled on the woken clock, not at zero', () 
   ], 'the sweep runs from the resumed clock too');
 });
 
-test('the hum waits for the gesture and starts on the frame after it', () => {
+test('the hum waits for a running context and starts on the frame after', () => {
   const ctx = sleepingContext();
   const audio = new browser.RetroAudio(() => ctx);
 
   audio.frame(playingFrame());
-  assert.equal(ctx.oscillators.length, 0, 'no hum while the page is untouched');
+  assert.equal(ctx.oscillators.length, 0, 'no hum while the context is asleep');
 
   audio.resume();
   audio.frame(playingFrame());

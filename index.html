@@ -1265,39 +1265,45 @@ class RetroAudio{
     this.ctx=null;
     this.engine=null;
     this.failed=false;
-    // Whether the page has had the user gesture a browser wants before it will
-    // start an audio context. Nothing is built until it has.
-    this.gestured=false;
   }
-  // The context is built on the first sound after the gesture, rather than at
-  // startup or on the first cue, because a browser hands back a suspended
-  // context before the page has been touched and a suspended context's clock
-  // sits at 0. Everything play() schedules reads that clock, so every cue
-  // raised beforehand is scheduled for the same instant at full gain and the
-  // whole backlog sounds together the moment the context wakes - which is what
-  // a `?mode=` link, whose run is under way before anything has been pressed,
-  // used to open with. Those cues were never going to be audible, so withholding
-  // the context drops them: play() and engineOn() fall through their null
-  // guards and build nothing. A browser that refuses a context outright leaves
-  // the game silent instead of throwing every frame.
+  // The context is built on the first cue rather than at startup, and only once:
+  // a browser that refuses one outright leaves the game silent instead of
+  // throwing every frame.
   context(){
-    if(!this.gestured)return null;
     if(this.ctx||this.failed)return this.ctx;
     try{this.ctx=this.makeContext()}catch(e){this.failed=true}
     return this.ctx;
   }
-  // The page's first keypress, from the keydown handler. It records the gesture,
-  // which is what lets a context be built at all, builds it, and wakes it if the
-  // browser handed it back asleep. Harmless on one already running.
+  // The context, but only when it is actually running, which is the only state
+  // worth scheduling against. A browser that will not start one before the page
+  // has been touched hands back a suspended context, and a suspended context's
+  // clock sits at 0: everything play() schedules reads that clock, so every cue
+  // raised beforehand would be scheduled for the same instant at full gain and
+  // the whole backlog would sound together the moment the context woke - which
+  // is what a `?mode=` link, whose run is under way before anything has been
+  // pressed, used to open with. Those cues were never going to be audible, so
+  // they are dropped here instead of queued.
+  //
+  // Reading the state rather than waiting for the keypress is what keeps a
+  // browser that allows the sound outright - a high Media Engagement Index, or
+  // the site given Sound: Allow - playing the run from its first frame. It hands
+  // back a context already running, on a clock that advances, and there is
+  // nothing for a gesture to add.
+  live(){
+    const ctx=this.context();
+    return ctx&&ctx.state==='running'?ctx:null;
+  }
+  // The page's first keypress, from the keydown handler: the gesture a blocked
+  // browser is waiting for. Harmless on a context already running, and on a
+  // browser that has no context to give.
   resume(){
-    this.gestured=true;
     const ctx=this.context();
     if(ctx&&ctx.state==='suspended'&&ctx.resume)ctx.resume();
   }
   play(name){
     const spec=SOUND_CUES[name];
     if(!spec)return;
-    const ctx=this.context();
+    const ctx=this.live();
     if(!ctx)return;
     const t=ctx.currentTime;
     const osc=ctx.createOscillator();
@@ -1317,7 +1323,7 @@ class RetroAudio{
   // The hum runs for as long as the run does. Starting and stopping it every
   // frame would click, so it is held open and only its frequency moves.
   engineOn(speedMultiple){
-    const ctx=this.context();
+    const ctx=this.live();
     if(!ctx)return;
     if(!this.engine){
       const osc=ctx.createOscillator();

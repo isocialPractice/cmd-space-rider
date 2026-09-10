@@ -22,7 +22,7 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second. The browser build offsets the whole canvas; the terminal build jolts only the play area, leaving the HUD and border anchored.
 - **Barrel roll** &mdash; `Q` and `E` roll the ship for half a second. The wings turn through the roll and the hull goes white, and nothing can touch the ship while it does. A cooldown keeps it an escape rather than a way of life.
 - **Combo scoring** &mdash; Kills strung together inside two seconds chain: the second is worth double, the third triple, and a `COMBO x3` counter reads the multiplier back on the HUD. The chain tops out at `COMBO x8`. Two quiet seconds drop it.
-- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost. Sound starts on the first keypress, which is the gesture a browser wants before it will make any noise at all.
+- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost. Most browsers want the page touched once before they will make any noise, so sound usually starts on the first keypress; a browser that permits it outright plays from the first frame.
 - **CRT overlay** &mdash; The browser version lays scanlines and a soft vignette over the canvas. On out of the box, toggled with `C`, and the choice is remembered across reloads.
 - **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
 
@@ -99,9 +99,21 @@ terminal version has no audio, so there the flag only raises the indicator.
 
 The keys that act on the press rather than the hold &mdash; `P`, `M`, `Esc`, and
 the `Q` and `E` roll &mdash; fire once per press. Holding one down does not
-repeat it at any of the repeat rates the standard OS sliders offer. The cost is
-a short deadzone after a hold: having held one of these keys, the next press of
-it is ignored for a beat, so a deliberate second tap needs a moment between them.
+repeat it at any of the repeat rates the standard OS sliders offer.
+
+That costs a short deadzone after a hold, because a terminal has no key-up event
+and silence is the only thing that can stand in for one. `P`, `M` and `Esc` take
+it flat: having held one, the next press of it is ignored for a beat, so a
+deliberate second tap needs a moment between them. Nothing is competing for those
+keys, and a beat is cheap.
+
+The roll is the escape move, so `Q` and `E` do not pay that flat rate. Their
+deadzone is measured off the repeat stream instead, which lasts about twice the
+gap between repeat characters &mdash; a fifth of a second on a normally
+configured keyboard. Let go after a long hold and the next press rolls, with the
+roll cooldown left to decide whether it lands. What cannot be recovered is a
+re-press inside the repeat rate itself: arriving exactly as soon as the next
+repeat character would have, it is the same stream, and nothing tells them apart.
 
 ### Gameplay
 
@@ -197,4 +209,4 @@ The game uses a custom double-buffered screen renderer built on raw ANSI escape 
 
 The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
 
-Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. Nothing is built until the page has had a keypress, so a run opened straight from a `?mode=` link is silent until the first key and then plays from that moment on, rather than releasing everything it missed. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.
+Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. A cue is played only when the audio context is actually running: a browser that blocks sound until the page has been touched hands back a suspended one, and the cues raised meanwhile are dropped rather than queued, so a run opened straight from a `?mode=` link is silent until the first key and then plays from that moment on rather than releasing everything it missed. A browser that permits the sound outright &mdash; a returning player's high media engagement, or the site given a sound permission &mdash; hands back one already running, and the same link plays from its first frame. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.
