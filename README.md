@@ -115,6 +115,22 @@ roll cooldown left to decide whether it lands. What cannot be recovered is a
 re-press inside the repeat rate itself: arriving exactly as soon as the next
 repeat character would have, it is the same stream, and nothing tells them apart.
 
+Silence only counts against a key while the game is listening for it. A terminal
+that cannot keep up with the repaint blocks the write the game hands it, and the
+loop with it, so keystrokes queue up and land together when it clears. That
+pause is the game's, not the player's, and it is discounted rather than read as
+the key having been let go &mdash; so holding the roll on a terminal falling
+behind still rolls once. A press made inside such a pause is the one thing lost:
+it cannot be told from the hold carrying on, and the game was frozen for it
+anyway.
+
+Gaps that pause leaves are not the repeat rate either, so they are not measured
+as it. On a terminal that blocks on every frame there is no gap left that was
+timed against a loop actually reading, nothing is measured, and the roll falls
+back to the same flat deadzone `P`, `M` and `Esc` carry. That is the wide end
+rather than the narrow one, and on a loop ticking that slowly it is about three
+frames.
+
 ### Gameplay
 
 - **Dodge obstacles** &mdash; Red rotating blocks deal 25 shield damage.
@@ -203,7 +219,7 @@ line is game logic and rendering, which is what gets exercised.
 
 ### Terminal Version
 
-The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode. Terminals only provide key-press events, not key-release, so a key counts as held until its characters stop arriving, and the decay window is checked once per frame. Keys that act on the press rather than the hold get a longer window than the movement keys, so that the first character of an OS auto-repeat is not read as a second press.
+The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode. Terminals only provide key-press events, not key-release, so a key counts as held until its characters stop arriving, and the decay window is checked once per frame. Keys that act on the press rather than the hold get a longer window than the movement keys, so that the first character of an OS auto-repeat is not read as a second press. That single write is synchronous, so a terminal falling behind blocks it and the loop with it; the input layer tracks how long each frame took and discounts the time it was blocked, since a loop that was not reading is no evidence a key went quiet.
 
 ### Browser Version
 

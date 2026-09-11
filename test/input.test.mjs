@@ -1,6 +1,7 @@
 // test/input.test.mjs — Terminal input layer: key decoding, the decay window
-// that stands in for the key-up event raw mode does not deliver, and the
-// repeat suppression that keeps a held toggle from firing twice.
+// that stands in for the key-up event raw mode does not deliver, the repeat
+// suppression that keeps a held toggle from firing twice, and the discounting
+// that keeps a loop blocked on its own repaint from reading as a key let go.
 //
 // Runs against the compiled output in out/, so `npm run build` comes first.
 
@@ -14,7 +15,7 @@ import { REPO_ROOT, FRAME } from './helpers.mjs';
 const require = createRequire(import.meta.url);
 const {
   InputState, decodeKeys, KEY_DECAY_MS, TOGGLE_DECAY_MS, TOGGLE_KEYS,
-  ROLL_KEYS, PRESS_KEYS, REPEAT_SLACK, ROLL_RELEASE_MIN_MS,
+  ROLL_KEYS, PRESS_KEYS, REPEAT_SLACK, ROLL_RELEASE_MIN_MS, TICK_BUDGET_MS,
 } = require(join(REPO_ROOT, 'out', 'input.js'));
 const { Game } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ROLL_COOLDOWN } = require(join(REPO_ROOT, 'out', 'types.js'));
@@ -216,11 +217,19 @@ test('a roll key narrows its window to the repeat rate the stream shows', () => 
   assert.equal(slow.holdWindow('E'), TOGGLE_DECAY_MS, '2 characters a second needs all of it');
 
   // A stdin chunk carrying two characters presses both at once, which measures
-  // as a zero gap. The floor is what stops that reading as no window at all.
+  // as a zero gap. That is not a slow stream or a fast one, it is no reading at
+  // all, so it is not taken as one: the window stays where an unmeasured stream
+  // leaves it. Falling back to the floor instead would read a burst as the
+  // fastest rate there is, and the floor is narrower than the interval at every
+  // rate below about 13 characters a second.
   const burst = new InputState();
   burst.feed('q', 0);
   burst.feed('qq', 660);
-  assert.equal(burst.holdWindow('Q'), ROLL_RELEASE_MIN_MS, 'a zero gap falls back to the floor');
+  assert.equal(burst.holdWindow('Q'), TOGGLE_DECAY_MS, 'a zero gap measures nothing');
+
+  // The first gap with two ends to it is what the window follows.
+  burst.feed('q', 860);
+  assert.equal(burst.holdWindow('Q'), 200 * REPEAT_SLACK, 'and the first real gap is the rate');
 
   // Letting go and pressing again starts the measuring over.
   const again = new InputState();
@@ -292,6 +301,156 @@ test('holding a roll key through OS repeat rolls the ship once', () => {
       );
     }
   }
+});
+
+// ----- A loop that stops reading -----
+
+test('the window is measured against time the loop was listening', () => {
+  // Drawing the window off the repeat rate narrows what a blocked repaint can
+  // do by exactly as much: at a fast rate the window is 150ms and a terminal
+  // that cannot keep up blocks the write, and the loop behind it, for a quarter
+  // of a second at a time. The backlog's first character then arrives to find
+  // its own key released. Time nothing could be read in is not evidence the key
+  // went quiet, so it comes off the clock before anything is released.
+  const input = new InputState();
+
+  // Three characters at 30 a second, one per frame, which is what the window
+  // gets measured from.
+  input.press('Q', 0);
+  input.expire(0);
+  input.press('Q', 33);
+  input.expire(33);
+  input.press('Q', 66);
+  input.expire(66);
+  assert.equal(input.holdWindow('Q'), ROLL_RELEASE_MIN_MS, 'a fast stream draws the floor');
+  input.clearJustPressed();
+
+  // The frame at 66 blocks on its write until 330, which is the 264ms a 200x60
+  // frame took against a terminal draining every 250ms. Everything the OS
+  // produced meanwhile lands together when it clears.
+  input.press('Q', 330);
+  assert.equal(input.keys.Q, true, 'the hold carried through the blocked repaint');
+  assert.equal(input.justPressed.Q, undefined, 'and did not re-press the key');
+
+  // A key genuinely let go sends nothing, so it claims none of that credit and
+  // still expires on its own window, however slowly the loop has come to tick.
+  const idle = new InputState();
+  idle.press('Q', 0);
+  idle.expire(0);
+  idle.press('Q', 33);
+  idle.expire(33);
+  idle.press('Q', 66);
+  idle.expire(66);
+  for (let t = 66; t <= 1200; t += 250) idle.expire(t);
+  assert.equal(idle.keys.Q, false, 'silence with nothing behind it still releases');
+});
+
+test('a hold through a stalling repaint rolls the ship once', () => {
+  // The rate sweep above holds the key against a loop that keeps up. This one
+  // holds it against a loop that does not: the finished frame goes to stdout in
+  // one write, which is synchronous on Windows, so a terminal falling behind
+  // blocks it and nothing is read until it clears. Driven against the real
+  // render loop, a frame blocked for 110ms, 234ms, 264ms and 470ms as the
+  // consumer drained every 100, 250 and 500ms, and the repeat stream was
+  // delivered in one batch on the far side of each block.
+  const holdThrough = ({ perSecond, stallMs, rePressAfter = null }) => {
+    const FRAME_MS = FRAME * 1000;
+    const HOLD_MS = 6000;
+    const STALL_EVERY_MS = 400;
+
+    // What the OS produced: the press, the delay before repeat starts, then the
+    // repeat stream itself, and optionally one deliberate press after the hold.
+    const produced = [0];
+    for (let t = 660; t <= HOLD_MS; t += 1000 / perSecond) produced.push(t);
+    if (rePressAfter !== null) produced.push(HOLD_MS + rePressAfter);
+    const runFor = produced[produced.length - 1] + 1500;
+
+    const game = new Game();
+    game.startGame();
+    game.state.obstacles = [];
+    game.state.orbs = [];
+    game.state.mines = [];
+
+    const input = new InputState();
+    let rolls = 0;
+    let presses = 0;
+    let wasRolling = false;
+    let next = 0;
+    let now = 0;
+    let lastStall = 0;
+
+    while (now <= runFor) {
+      input.expire(now);
+      if (input.justPressed.Q) presses++;
+      game.update(FRAME, input.keys, input.justPressed);
+      input.clearJustPressed();
+
+      const rolling = game.state.shipRoll > 0;
+      if (rolling && !wasRolling) rolls++;
+      wasRolling = rolling;
+
+      // The repaint. Once the hold is over the terminal is given room to catch
+      // up, so the deliberate re-press lands on a loop that is reading.
+      const blocked = now <= HOLD_MS && now - lastStall >= STALL_EVERY_MS;
+      now += blocked ? stallMs : FRAME_MS;
+      if (blocked) lastStall = now;
+
+      // Everything produced while the loop was busy lands together now.
+      while (next < produced.length && produced[next] <= now) {
+        input.press('Q', now);
+        next++;
+      }
+    }
+    return { rolls, presses };
+  };
+
+  // Sweep the block rather than sample it. Which block sizes hurt depends on
+  // how the backlog happens to line up with the repeat stream, so a handful of
+  // sizes can all miss: at 5 characters a second every size from 360ms to 493ms
+  // used to re-press, 384ms worst at 8 presses and 3 rolls, while 264ms and
+  // 513ms either side of that band came through clean. The step is what makes
+  // the case honest, so keep it fine enough to land inside a band that narrow.
+  const RATES = [30, 20, 13, 10, 5, 2];
+  for (let stallMs = 70; stallMs <= 700; stallMs += 7) {
+    for (const perSecond of RATES) {
+      const { rolls, presses } = holdThrough({ perSecond, stallMs });
+      assert.equal(
+        presses, 1,
+        `${perSecond}/s through a ${stallMs}ms block pressed Q ${presses} times`
+      );
+      assert.equal(
+        rolls, 1,
+        `${perSecond}/s through a ${stallMs}ms block rolled ${rolls} times`
+      );
+    }
+  }
+
+  // And the escape move is still there afterwards: the credit only ever covers
+  // time the loop was blocked, so a press on a loop that is reading again rolls
+  // as it always did.
+  for (const stallMs of [264, 470]) {
+    assert.equal(
+      holdThrough({ perSecond: 30, stallMs, rePressAfter: 400 }).rolls, 2,
+      `a re-press after a hold through a ${stallMs}ms block should roll`
+    );
+  }
+});
+
+test('the tick budget clears the loop and not the blocks it measured', () => {
+  // The budget is what separates a loop running slowly from a loop that has
+  // stopped reading, so it has to sit above the one and below the other. A loop
+  // keeping up ticked at 50ms at most against its 33.3ms target; the smallest
+  // block measured was 110ms.
+  const MEASURED_HEALTHY_TICK_MS = 50;
+  const SMALLEST_MEASURED_BLOCK_MS = 110;
+  assert.ok(
+    TICK_BUDGET_MS > MEASURED_HEALTHY_TICK_MS,
+    `budget ${TICK_BUDGET_MS}ms must clear a ${MEASURED_HEALTHY_TICK_MS}ms tick`
+  );
+  assert.ok(
+    TICK_BUDGET_MS < SMALLEST_MEASURED_BLOCK_MS,
+    `budget ${TICK_BUDGET_MS}ms must sit under a ${SMALLEST_MEASURED_BLOCK_MS}ms block`
+  );
 });
 
 test('a roll key re-presses a repeat interval after a hold, not a flat window', () => {

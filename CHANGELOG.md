@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.3.3-alpha] - 2026-09-11
+
+### Fixed
+
+- A terminal that cannot keep up with the repaint no longer re-rolls the ship
+  under a held `Q` or `E`. Measuring the roll keys' release window off the
+  repeat stream narrowed it to 150ms at a fast rate, and it narrowed what a
+  stall in stdin delivery can do by exactly as much. That stall is the game's
+  own: each finished frame goes to stdout in a single write, which is
+  synchronous on Windows for a console and a pipe alike, so a terminal applying
+  backpressure blocks the write and the whole loop behind it, and nothing is
+  read until it clears. Driven against the real render loop, a 200x60 frame
+  blocked for 264ms against a consumer draining every 250ms and the repeat
+  stream arrived in one batch on the far side of it, so one unbroken six second
+  hold of `Q` read as 20 presses and rolled the ship twice; an 80x24 frame
+  blocked for 234ms against a consumer draining every 500ms, and the same hold
+  rolled four times. A terminal keeping up blocked for 6ms at most and rolled
+  once. Time the loop spent blocked is now taken off the clock before anything
+  is released, so a character landing on the far side of a blocked repaint
+  rejoins the hold it belongs to rather than re-pressing the key, and both of
+  those holds now read one press and roll once. What the credit cannot cover is
+  a deliberate re-press that lands inside a block, which reads as the hold
+  carrying on and is lost; the game was frozen for that quarter second either
+  way, and the alternative is a roll nobody asked for. It is claimed by an
+  arriving character and by nothing else, so a key genuinely let go is credited
+  nothing and expires on its own window however slowly the loop has come to
+  tick. Every held key gets the same treatment rather than the roll pair alone,
+  so a block longer than the flat 800ms window cannot double-toggle `P`, `M` or
+  `ESCAPE` either - the longest block measured was 470ms, so that one was not
+  reachable yet, but it was a wider terminal away.
+- The roll keys no longer read the gaps a blocked repaint leaves as the repeat
+  rate. The release window is measured off the widest gap the hold has shown,
+  which only ever grows, so a gap taken for the rate while it is really too
+  narrow pins the window under the true interval for the rest of the hold and
+  every ordinary gap after it reads as the key having been let go. Two kinds of
+  gap do that. A chunk of stdin carrying two characters presses both on the
+  same clock, which is a gap of nothing; a floor of 150ms was supposed to cover
+  it, but 150ms is itself narrower than the interval at every repeat rate below
+  about 13 characters a second. And a character freed by a block is read late,
+  which compresses the gap to the one behind it. Sweeping one unbroken six
+  second hold of `Q` across every block length from 70ms to 700ms: at 5
+  characters a second, 270 of them re-pressed the key, up to 8 presses and 3
+  rolls at a 384ms block, and at 2 a second every block from 594ms up gave 2
+  presses - while 264ms and 513ms, either side of the worst band, came through
+  clean, which is how four sampled block sizes all missed it. Neither kind of
+  gap is now taken for the rate, and the sweep is clean at every rate the
+  repeat sliders offer. On a terminal keeping up the window is measured exactly
+  as before, 150ms at 30 characters a second and 412ms at 5; on one blocking
+  every frame it runs there is no clean gap to measure, so it stays at the
+  800ms flat window, which is where an unmeasured stream has always left it and
+  about three frames on a loop ticking that slowly. The browser build has real
+  key-up events and never shared any of this.
+
 ## [0.3.2-alpha] - 2026-09-10
 
 ### Fixed
