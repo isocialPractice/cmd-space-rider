@@ -20,6 +20,15 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
+### User Overrides
+
+- [ ] Resolve "pulse cannon" collision detection is off
+  - **Issue**: Collision detection for the "pulse cannon" is off nearly 2/3 of the time.
+  - **Goal**: Address and improve:
+    - Hit registration
+    - Hit scan
+    - Target leading
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
