@@ -20,19 +20,51 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### User Overrides
+### UI/UX Override - pulse cannon tracer leaves the drawn tunnel
 
-- [ ] Resolve "pulse cannon" collision detection is off
-  - **Issue**: Collision detection for the "pulse cannon" is off nearly 2/3 of the time.
-  - **Goal**: Address and improve:
-    - Hit registration
-    - Hit scan
-    - Target leading
+#### Found Issues
+
+- [ ] **A shot fired from a tunnel wall is drawn outside the tunnel**
+  - **Issue**: Holding a screen column means a tracer no longer converges on
+    the vanishing point, and the drawn tunnel does, so a shot fired from near
+    a wall flies out of the corridor it was fired down. Read off the rendered
+    character grid at 80x24, both builds identically: fired from the left wall
+    the volley crosses the drawn wall on frame 16 of its 59 drawn frames,
+    about half a second into a two second flight, and finishes 16 columns
+    clear of the wall in the black margin; from the right wall it is 15. Fired
+    from half a tunnel radius out it stays inside the corridor the whole way,
+    so this is a wall effect, and the walls are where the aiming fix mattered
+    most. It costs nothing in play - targets sit inside the tunnel and a shot
+    aimed at one stays with it - and the previous build kept the tracer inside
+    the corridor only by drifting away from the column the player aimed at.
+    What is new is the reading: a cyan tracer climbing through empty space
+    with the tunnel some distance to one side.
+  - **Goal**: Decide whether a tracer may be drawn outside the drawn tunnel at
+    all, and pin whichever way it goes. The flight itself should not move - the
+    held column is the aiming fix and the hit rates depend on it - so the
+    choice is a drawing one: clamp the glyph's column into the tunnel's span on
+    its row so the shot rides the wall, stop drawing a tracer once it leaves
+    the corridor, or accept it and say why in the comment above
+    `updateBullets`. Both builds together, as `test/parity.test.mjs` expects,
+    and pinned in `test/pulse-cannon.test.mjs` beside the drawn-tracer check
+    added this run, which already reads the glyph's column off the grid.
+  - From: UI/UX Override - pulse cannon tracer leaves the drawn tunnel
 
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
 already has. Most touch a single flag, key binding, or HUD field.
+
+- [ ] **Shots die short of what the tunnel shows** - A bullet's two second life
+  at 60 units a second gives it about 120 units of travel, and a target closes
+  on it at the run's speed, so the furthest a shot can reach is a little over
+  150 units. The tunnel is drawn to `maxViewZ`, which is 200. Firing straight
+  down the middle at a target parked dead ahead lands at every range from 30 to
+  150 units and misses at every range from 160 up, so the outer fifth of what
+  the player can see cannot be shot at all, with nothing on screen saying why.
+  Decide whether the reach should cover the draw distance - a longer `life`, a
+  faster shot, or a shorter `maxViewZ` - and pin it in `test/pulse-cannon.test.mjs`
+  beside the range bands. Both builds together, as `test/parity.test.mjs` expects.
 
 ## Medium Effort
 
@@ -148,3 +180,10 @@ the roadmap section each one came from.
   - **Issue**: Narrowing the roll key's release detection to the repeat rate also narrows what a stall in stdin delivery can do. The window is `REPEAT_SLACK` intervals floored at `ROLL_RELEASE_MIN_MS` (`src/input.ts:89`, `src/input.ts:96`), so a pause that wide mid-hold reads as a release and the next repeat character re-presses `Q` as a fresh roll. The flat 800ms window absorbed any pause shorter than itself; the measured one absorbs 150ms at a fast repeat rate. `expire()` runs at the top of `press()` (`src/input.ts:198`, `src/input.ts:226`) against the widest gap seen so far, so the stretched gap releases the key before it can widen the measurement, and `widestGap` taking the maximum (`src/input.ts:205`) cannot recover it afterwards. Driving `InputState` and `Game` together over a 4000ms hold of `Q` with one stall injected at 1500ms: at 30 characters a second a 150ms stall starts a second roll, at 10 a second it takes 300ms, and at 5 a second 500ms. A loop hitching 200ms every 400ms across a 10s hold starts 9 rolls and leaves the ship invincible for 42% of frames, against 1 roll and 5% for the same hold on a steady stream. `ROLL_COOLDOWN` still bounds it to one roll per 1200ms, so this degrades the bound rather than losing it, and it needs a stall in the terminal's own delivery that nothing in the suite or the repository measures.
   - **Goal**: Decide how much delivery jitter the release detection has to survive, then hold the window to it rather than to the repeat rate alone. Options worth weighing against each other: raise `ROLL_RELEASE_MIN_MS` to a figure a dropped frame batch cannot cross while staying well inside `ROLL_COOLDOWN`; require two consecutive missed intervals before a roll key reads as released, so one stretched gap cannot do it; or keep `widestGap` across the expiry and let a hold that resumes at its measured cadence rejoin rather than re-press. Measure the terminal build's actual stdin delivery gaps under a full repaint first - the choice is only defensible against a real number, and there is none yet. Whatever is chosen, extend `test/input.test.mjs` with a stalled-stream case beside the existing rate sweep, and correct the deadzone figures in the `holdWindow` comment, the `0.3.2-alpha` CHANGELOG entry and the `Controls` note in `README.md` if the window moves.
   - From: Medium Effort
+- [x] Resolve "pulse cannon" collision detection is off
+  - **Issue**: Collision detection for the "pulse cannon" is off nearly 2/3 of the time.
+  - **Goal**: Address and improve:
+    - Hit registration
+    - Hit scan
+    - Target leading
+  - From: User Overrides
