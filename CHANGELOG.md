@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.3.4-alpha] - 2026-09-12
+
+### Fixed
+
+- The pulse cannon now hits what it is pointed at. A shot held a constant world
+  x while the only aim the player has is the screen, and perspective pulls those
+  two apart: a shot converges on the vanishing point as it recedes, while the
+  target it was lined up against diverges from it, so the error grew with both
+  the range and how far off-centre the target sat. Flying engagements against
+  the engine - steer until the ship's glyph is in the target's column, fire,
+  peel off - the centre bullet landed 93.1% of the time at 15-35 units out,
+  47.2% at 35-80 and 5.7% at 80-140; the three-shot volley 100%, 72.5% and
+  21.3%. Every miss measured was a miss on the column, none on the row, with the
+  ship a median 0.85 world units off the target's line at the moment of firing.
+  A shot now holds the screen column it was fired down instead, which is also
+  what it looks like it does, and the same engagements land 100%, 96.5% and 74%
+  for the centre bullet and 100%, 99.1% and 95% for the volley.
+- The hit itself is resolved at the depth where a shot crossed its target rather
+  than wherever the frame happened to leave it. The old test compared the two
+  projected up to 10 units apart, which distorted the columns it was comparing,
+  and sampled only where each frame landed. The same engagement now resolves the
+  same way from 60 frames a second down to 6.
+- A target's block is a single character past about 47 units out, so a shot had
+  to land on one exact column to count. Both positions are floored to a cell, so
+  a shot dead on in world terms read as a column adrift whenever the two fell
+  either side of a cell boundary, and a target's own column creeps outward
+  during a long shot's flight by about a column more. `SHOT_SLACK_COLS` now
+  allows one column either side of the target's block, so a shot registers where
+  it passes through it or immediately beside it.
+
+### Added
+
+- `test/pulse-cannon.test.mjs`, covering both builds: the hit rate a player
+  actually gets at three range bands, a shot holding its column across its whole
+  flight, the verdict on one shot staying the same from 60 frames a second down
+  to 6, and the slack registering a shot beside the target while refusing one a
+  column past it. The suite had no test that aimed anything - every existing
+  check placed a bullet on top of an obstacle, which passes whatever the aiming
+  does, which is how this went unnoticed through three releases.
+
 ## [0.3.3-alpha] - 2026-09-11
 
 ### Fixed

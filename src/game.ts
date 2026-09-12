@@ -4,7 +4,7 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, SHOT_SLACK_COLS,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
@@ -80,6 +80,18 @@ export class Game {
     };
   }
 
+  /**
+   * The perspective scale toScreen applies at a given depth, on its own. The
+   * pulse cannon needs it away from a full projection: a shot holds the screen
+   * column it was fired down, and that means undoing the scale rather than
+   * applying it.
+   */
+  private projScale(gz: number): number {
+    const s = this.state;
+    const t = max(0, min(1, (gz + s.maxViewZ) / s.maxViewZ));
+    return 0.15 + t * 0.85;
+  }
+
   /** Project game coordinates to screen space (matches render.ts gameToScreen) */
   private toScreen(gx: number, gy: number, gz: number): { col: number; row: number; scale: number } {
     const s = this.state;
@@ -89,7 +101,7 @@ export class Game {
     const gameBottom = sh - FOOTER_ROWS;
     const gameH = gameBottom - gameTop;
     const t = max(0, min(1, (gz + s.maxViewZ) / s.maxViewZ));
-    const scale = 0.15 + t * 0.85;
+    const scale = this.projScale(gz);
     const baseRow = gameTop + t * (gameH - 2);
     const colRange = (sw - 6) / 2;
     const col = sw / 2 + (gx / s.tunnelRadius) * colRange * scale;
@@ -621,28 +633,80 @@ export class Game {
     }
   }
 
+  /**
+   * How far into the frame just stepped a shot crossed an entity's depth, as a
+   * fraction of that step, or null when it did not cross it. Both ends move -
+   * the shot outward by its travel, the entity inward by `advance` - so the
+   * gap between them only ever closes and there is at most one crossing per
+   * frame. `entityZ` is where the entity finished the frame, so subtracting
+   * `advance` is where it started it.
+   */
+  private crossing(fromZ: number, toZ: number, entityZ: number, advance: number): number | null {
+    const gapBefore = fromZ - (entityZ - advance);
+    const gapAfter = toZ - entityZ;
+    if (gapBefore < 0 || gapAfter > 0) return null;
+    const closed = gapBefore - gapAfter;
+    return closed <= 0 ? 0 : gapBefore / closed;
+  }
+
+  /**
+   * Bullet flight and what it hits.
+   *
+   * Horizontally a shot holds the screen column it was fired down rather than
+   * a line of constant world x, because the column is the player's whole aim:
+   * the target is one glyph in one of about seventy columns, the ship is
+   * another, and there is no reticle to do it any other way. A world-space
+   * shot converges on the vanishing point as it recedes while the target it
+   * was aimed at diverges from it, so a shot lined up at the muzzle lands wide
+   * of anything off-centre, and the wider the range the wider it lands. Paying
+   * `b.x` forward by the ratio of the two scales holds the column instead, and
+   * the shot then draws as the straight line up the screen a player already
+   * reads it as.
+   *
+   * Vertically it stays in world space, because that axis reads differently.
+   * Y_FACTOR squashes the tunnel's whole height into about eight rows at the
+   * muzzle, so nobody aims by row - they aim by how high in the tunnel the
+   * target sits, which is world y. Holding the row instead measured worse at
+   * every range, since it puts the shot above a target the player had lined up
+   * correctly.
+   *
+   * The hit is then resolved at the depth where the shot crossed the target
+   * rather than wherever the frame happened to leave it, so both are projected
+   * on one plane and the comparison holds at any frame rate.
+   */
   private updateBullets(dt: number, advance: number): void {
     const s = this.state;
+    const travel = 60 * dt;
+
     for (let i = s.bullets.length - 1; i >= 0; i--) {
       const b = s.bullets[i];
-      b.z -= 60 * dt;
+      const fromZ = b.z;
+      b.z -= travel;
       b.life -= dt;
       if (b.life <= 0) { s.bullets.splice(i, 1); continue; }
 
-      const bScr = this.toScreen(b.x, b.y, b.z);
+      // x * scale is constant along a screen ray, so carrying x forward by the
+      // ratio of the two scales holds the column the shot was fired at.
+      b.x *= this.projScale(fromZ) / this.projScale(b.z);
+      const aimX = b.x * this.projScale(b.z);
+
       // Bullet bbox: 1 col wide, 2 rows tall → (bCol, bRow-1) to (bCol, bRow)
       let hit = false;
 
-      // Bullet-obstacle collision (2D character-grid overlap)
+      // Bullet-obstacle collision (2D character-grid overlap at the crossing)
       if (!s.debugMode || s.debugMode === 'obstacleCollision' || s.debugMode === 'chaos') {
         for (let j = s.obstacles.length - 1; j >= 0; j--) {
           const o = s.obstacles[j];
-          if (abs(b.z - o.z) > 10) continue;
-          const oScr = this.toScreen(o.x, o.y, o.z);
-          const size = max(1, floor(oScr.scale * 2.5));
+          const u = this.crossing(fromZ, b.z, o.z, advance);
+          if (u === null) continue;
+          const hitZ = fromZ - u * travel;
+          const scale = this.projScale(hitZ);
+          const bScr = this.toScreen(aimX / scale, b.y, hitZ);
+          const oScr = this.toScreen(o.x, o.y, hitZ);
+          const size = max(1, floor(scale * 2.5));
           const half = floor(size / 2);
           // bullet col in obstacle col range, and bullet row range overlaps obstacle row range
-          if (abs(bScr.col - oScr.col) <= half &&
+          if (abs(bScr.col - oScr.col) <= half + SHOT_SLACK_COLS &&
               bScr.row >= oScr.row - half && bScr.row - 1 <= oScr.row + half) {
             this.spawnParticles(o.x, o.y, o.z, 208, 12);
             if (s.debugMode === 'chaos') s.trackerCount++;
@@ -662,15 +726,19 @@ export class Game {
 
       if (hit) continue;
 
-      // Bullet-mine collision (2D character-grid overlap)
+      // Bullet-mine collision (2D character-grid overlap at the crossing)
       if (!s.debugMode || s.debugMode === 'mines' || s.debugMode === 'mineCollision' || s.debugMode === 'chaos') {
         for (let j = s.mines.length - 1; j >= 0; j--) {
           const m = s.mines[j];
-          if (abs(b.z - m.z) > 10) continue;
-          const mScr = this.toScreen(m.x, m.y, m.z);
-          const size = max(1, floor(mScr.scale * 2.5));
+          const u = this.crossing(fromZ, b.z, m.z, advance);
+          if (u === null) continue;
+          const hitZ = fromZ - u * travel;
+          const scale = this.projScale(hitZ);
+          const bScr = this.toScreen(aimX / scale, b.y, hitZ);
+          const mScr = this.toScreen(m.x, m.y, hitZ);
+          const size = max(1, floor(scale * 2.5));
           const half = floor(size / 2);
-          if (abs(bScr.col - mScr.col) <= half &&
+          if (abs(bScr.col - mScr.col) <= half + SHOT_SLACK_COLS &&
               bScr.row >= mScr.row - half && bScr.row - 1 <= mScr.row + half) {
             m.hp -= 1;
             this.spawnParticles(m.x, m.y, m.z, 9, 5);

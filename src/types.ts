@@ -73,6 +73,25 @@ export const ROLL_TIME = 0.5;
  */
 export const ROLL_COOLDOWN = 1.2;
 
+/**
+ * Columns of slack the pulse cannon's hit test allows either side of a target's
+ * drawn block.
+ *
+ * Past about 47 units out a target's block is a single character, so without
+ * slack a shot has to land on one exact column. Two things go wrong with that.
+ * Both positions are floored to a cell, so a shot dead on in world terms still
+ * reads as one column adrift whenever the two fall either side of a cell
+ * boundary. And a target's own column creeps outward while the shot is in
+ * flight, which over a long one comes to about a column of lead the player has
+ * no way to measure.
+ *
+ * One column covers both: the shot registers where it passes through the
+ * target's block or immediately beside it. Two was measured as well and buys
+ * little past what the three-shot volley's own spread already covers, at the
+ * cost of counting a shot that visibly clears the target by a character.
+ */
+export const SHOT_SLACK_COLS = 1;
+
 /** Seconds a combo chain survives without a kill before it drops to nothing. */
 export const COMBO_TIME = 2;
 
