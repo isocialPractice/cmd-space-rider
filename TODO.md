@@ -50,6 +50,39 @@ its origin survives archiving into `## Complete`.
     added this run, which already reads the glyph's column off the grid.
   - From: UI/UX Override - pulse cannon tracer leaves the drawn tunnel
 
+### Code Review Override - line endings rewritten across seven files
+
+#### Found Issues
+
+- [ ] **This run's edits converted seven files from LF to CRLF**
+  - **Issue**: The repository is LF, and every file this run did not edit still
+    is: `src/index.ts`, `src/input.ts`, `src/menu.ts`, `src/render.ts`,
+    `src/screen.ts`, `tsconfig.json` and the eight older `test/*.test.mjs`
+    files carry no CR bytes at all. `core.autocrlf` is `false` and there is no
+    `.gitattributes`, so whatever a tool writes is what gets committed. The
+    editing this run did rewrote six tracked files wholesale as CRLF -
+    `CHANGELOG.md`, `index.html`, `package.json`, `src/game.ts`,
+    `test/helpers.mjs` and `test/parity.test.mjs` - and committed
+    `test/pulse-cannon.test.mjs` as CRLF in 56adb56. Two files edited this same
+    run, `README.md` and `src/types.ts`, stayed LF, so it is the editing path
+    and not a global setting. Nothing fails: the suite passes 228 and `tsc` is
+    clean, because CRLF is legal in every one of those formats. The cost is to
+    the history. `git diff` reports 3098 insertions against 2895 deletions where
+    the real change is 230 against 27, so the diff is unreadable without
+    `--ignore-cr-at-eol`; committing it rewrites every line of those six files,
+    which takes `git blame` on all of them to this commit and makes any later
+    branch conflict on every line; and `.claude/commit-mode.request` is
+    `update`, so it will be pushed. `TODO.md` went the same way on an earlier
+    run and is already CRLF in `HEAD`, so this is a recurrence, not a one-off.
+  - **Goal**: Settle the repository's line ending instead of leaving it to
+    whichever tool writes a file next. LF is what is already committed, so
+    convert the seven files back, which restores the diff to its real size.
+    Then add a `.gitattributes` pinning it - `* text=auto eol=lf` across the
+    `.ts`, `.mjs`, `.html`, `.md` and `.json` files here - so the next editor
+    cannot reintroduce it. Verify with `git diff --stat` matching
+    `git diff --stat --ignore-cr-at-eol`, and with `npm test` still at 228.
+  - From: Code Review Override - line endings rewritten across seven files
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
