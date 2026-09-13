@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.3.5-alpha] - 2026-09-13
+
+### Fixed
+
+- A pulse tracer is no longer drawn outside the tunnel it was fired down.
+  Holding the screen column is what makes the cannon hit what it is pointed at,
+  but the drawn tunnel converges on the vanishing point and a held column does
+  not, so a shot fired from near a wall crossed that wall partway up and the
+  rest of the flight was drawn out in the black margin. Read off the character
+  grid at 80x24, both builds alike: fired from the left wall the shot crossed
+  the wall on frame 10 of the 59 it is alive and finished 16 columns clear of
+  it, and from the right wall on frame 16 and 15 columns clear. The tracer now
+  stops at the wall. That is also the point the shot stops being able to hit
+  anything - targets spawn no further out than 4.5 units and so sit inside the
+  drawn span at every depth - so the tracer now runs exactly as long as the shot
+  is still in playable space: the whole flight down the middle, 46 of 59 frames
+  from the outermost column a target spawns in, and 17 from the wall, where the
+  shot could never have reached a target in the first place.
+- The flight itself is untouched, and deliberately so. Cutting the bullet where
+  the tracer stops would have been cheaper, but the walls are drawn a little
+  narrower than the tunnel radius projects to, so a shot can still be inside the
+  tunnel and outside the drawn span out at the far end. The clip is in
+  `drawBullets` alone; `updateBullets` is unchanged, and the hit rates that
+  depend on the held column with it.
+- Line endings are settled at LF, which is what the repository was written in.
+  Nothing pinned them - `core.autocrlf` is off and there was no
+  `.gitattributes` - so whichever tool wrote a file last decided its endings,
+  and eight tracked files had drifted to CRLF. The cost was to the history
+  rather than to anything running: measured over the nine files changed at the
+  point of conversion, git reported 3,860 insertions against 3,685 deletions
+  where the real change was 277 lines. A diff that size takes `git blame` on
+  every rewritten file to one commit and leaves any later branch conflicting on
+  every line. Four of the eight drifted files had no content change at all.
+
+### Added
+
+- `.gitattributes`, pinning `* text=auto eol=lf` with `*.png binary` over it.
+  Git now normalizes on the way into the index, so an editor that writes CRLF
+  still commits LF and the recurrence is closed rather than cleaned up again
+  next time. Verified by hashing a CRLF copy of `src/render.ts` through
+  `git hash-object --path`, which returns the same blob as the LF original.
+  The repository's `.gitignore` un-ignores the file, because a global dotfile
+  rule on this machine hid it from `git add` entirely.
+- Three checks per build in `test/pulse-cannon.test.mjs`: that no tracer cell
+  is ever drawn outside the tunnel's span on its own row, that a tracer once
+  dark stays dark, and that clipping the drawing leaves the shot itself in
+  flight for as many frames as a centre shot. The existing drawn-tracer check
+  now walks five firing positions from wall to wall rather than three, with the
+  frames drawn and rows climbed pinned per position.
+
 ## [0.3.4-alpha] - 2026-09-12
 
 ### Fixed

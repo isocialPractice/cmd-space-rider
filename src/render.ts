@@ -91,18 +91,30 @@ function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, 
   }
 }
 
+/**
+ * The two columns the tunnel's walls are drawn on for a given row.
+ * drawTunnel lays the walls down from this and drawBullets reads it back to
+ * tell whether a tracer is still in the corridor, so the corridor the player
+ * sees and the corridor the renderer tests a shot against cannot drift apart.
+ */
+export function tunnelSpan(
+  row: number, gameTop: number, gameBottom: number, w: number
+): { left: number; right: number } {
+  const center = floor(w / 2);
+  const t = (row - gameTop) / (gameBottom - gameTop); // 0=far(top), 1=near(bottom)
+  const halfSpan = floor(3 + t * (center - 4));
+  return { left: center - halfSpan, right: center + halfSpan };
+}
+
 function drawTunnel(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
   const w = screen.width;
   const gameH = gameBottom - gameTop;
-  const center = floor(w / 2);
   const ringSpacing = 4;
   const ringOffset = floor(state.distance * 0.3) % ringSpacing;
 
   for (let row = gameTop; row < gameBottom; row++) {
     const t = (row - gameTop) / gameH; // 0=far(top), 1=near(bottom)
-    const halfSpan = floor(3 + t * (center - 4));
-    const leftWall = center - halfSpan;
-    const rightWall = center + halfSpan;
+    const { left: leftWall, right: rightWall } = tunnelSpan(row, gameTop, gameBottom, w);
 
     // Wall thickness: thicker near camera
     const thickness = max(1, floor(t * 3));
@@ -209,16 +221,44 @@ function drawBlock(
   }
 }
 
+/**
+ * The tracer, drawn only while it is still inside the corridor.
+ *
+ * A shot holds the screen column it was fired down - updateBullets says why
+ * the aim depends on that - while the drawn tunnel converges on the vanishing
+ * point, so a shot fired from near a wall crosses that wall partway up, and
+ * the rest of the flight would otherwise be drawn out in the black margin
+ * with the tunnel some distance to one side.
+ *
+ * Crossing the wall is also where the shot stops being able to hit anything.
+ * Targets spawn within four and a half units of the axis and the walls are
+ * drawn at eight, so every target sits inside this span at every depth; a
+ * shot whose column has left the span is in a column no target can occupy at
+ * that depth, and stays there for the rest of its life. Stopping the tracer
+ * at the wall says so. Clamping it back onto the wall instead would keep
+ * drawing a shot inside the corridor that can no longer hit a thing in it,
+ * and would put back the column drift the aiming fix removed.
+ *
+ * Drawing only: the span the walls are drawn on runs a little narrower than
+ * the tunnel radius projects to, so culling the bullet on it would cost real
+ * hits at the far end. Each half is tested on its own row, because the span
+ * narrows going up and the dim upper half leaves the corridor first.
+ */
 function drawBullets(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
   const w = screen.width;
   const h = screen.height;
+  const inCorridor = (col: number, row: number): boolean => {
+    const span = tunnelSpan(row, gameTop, gameBottom, w);
+    return col >= span.left && col <= span.right;
+  };
   for (const b of state.bullets) {
     const pos = gameToScreen(b.x, b.y, b.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
-    if (pos.row >= gameTop && pos.row < gameBottom) {
+    if (pos.row < gameTop || pos.row >= gameBottom) continue;
+    if (inCorridor(pos.col, pos.row)) {
       screen.put(pos.col, pos.row, '\u2502', C.BRIGHT_CYAN, C.BLACK); // │
-      if (pos.row - 1 >= gameTop) {
-        screen.put(pos.col, pos.row - 1, '\u2502', C.CYAN, C.BLACK);
-      }
+    }
+    if (pos.row - 1 >= gameTop && inCorridor(pos.col, pos.row - 1)) {
+      screen.put(pos.col, pos.row - 1, '\u2502', C.CYAN, C.BLACK);
     }
   }
 }

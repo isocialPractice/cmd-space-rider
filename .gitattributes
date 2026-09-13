@@ -1,0 +1,12 @@
+# Line endings are LF here, in the working tree as well as in the index.
+#
+# The repository has been LF since the first commit, but core.autocrlf is off
+# and nothing else pinned it, so whichever tool wrote a file last decided its
+# endings. An editor that wrote CRLF turned a 230 line change into a 3098 line
+# diff, which takes git blame on every rewritten file to that one commit and
+# leaves any later branch conflicting on every line. This settles it for every
+# editor, on every machine, instead.
+* text=auto eol=lf
+
+# Bytes, not text. Never normalize, never diff as lines.
+*.png binary

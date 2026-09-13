@@ -670,6 +670,13 @@ export class Game {
    * every range, since it puts the shot above a target the player had lined up
    * correctly.
    *
+   * Holding the column is also why a shot fired from near a wall ends up
+   * outside the drawn tunnel partway through its flight: the corridor
+   * converges on the vanishing point and the shot does not. That is left
+   * alone here, because the column is the aim and the hit rates ride on it.
+   * drawBullets in render.ts stops drawing the tracer there instead, and says
+   * why the flight may not be cut short with it.
+   *
    * The hit is then resolved at the depth where the shot crossed the target
    * rather than wherever the frame happened to leave it, so both are projected
    * on one plane and the comparison holds at any frame rate.
