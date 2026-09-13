@@ -20,68 +20,80 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### UI/UX Override - pulse cannon tracer leaves the drawn tunnel
+### Code Review Override - the tracer is clipped to the wall, not to the corridor
 
-#### Found Issues
+#### Resolve Issues
 
-- [ ] **A shot fired from a tunnel wall is drawn outside the tunnel**
-  - **Issue**: Holding a screen column means a tracer no longer converges on
-    the vanishing point, and the drawn tunnel does, so a shot fired from near
-    a wall flies out of the corridor it was fired down. Read off the rendered
-    character grid at 80x24, both builds identically: fired from the left wall
-    the volley crosses the drawn wall on frame 16 of its 59 drawn frames,
-    about half a second into a two second flight, and finishes 16 columns
-    clear of the wall in the black margin; from the right wall it is 15. Fired
-    from half a tunnel radius out it stays inside the corridor the whole way,
-    so this is a wall effect, and the walls are where the aiming fix mattered
-    most. It costs nothing in play - targets sit inside the tunnel and a shot
-    aimed at one stays with it - and the previous build kept the tracer inside
-    the corridor only by drifting away from the column the player aimed at.
-    What is new is the reading: a cyan tracer climbing through empty space
-    with the tunnel some distance to one side.
-  - **Goal**: Decide whether a tracer may be drawn outside the drawn tunnel at
-    all, and pin whichever way it goes. The flight itself should not move - the
-    held column is the aiming fix and the hit rates depend on it - so the
-    choice is a drawing one: clamp the glyph's column into the tunnel's span on
-    its row so the shot rides the wall, stop drawing a tracer once it leaves
-    the corridor, or accept it and say why in the comment above
-    `updateBullets`. Both builds together, as `test/parity.test.mjs` expects,
-    and pinned in `test/pulse-cannon.test.mjs` beside the drawn-tracer check
-    added this run, which already reads the glyph's column off the grid.
+- [ ] Tracer Wall Clip 1
+  - **Issue**: The corridor test admits the wall columns themselves, so the
+    tracer now erases the wall instead of stopping inside it. `drawTunnel`
+    draws the wall glyph *on* `leftWall` and `rightWall` (`src/render.ts:143`,
+    `src/render.ts:147`), with thickness growing outward from there, so the
+    corridor is `left + 1` to `right - 1`. `inCorridor` tests
+    `col >= span.left && col <= span.right` (`src/render.ts:252`), and
+    `drawBullets` runs after `drawTunnel` in `renderGame`, so a tracer landing
+    on a wall column overwrites it. Read off the grid at 80x24: fired from
+    -4.5, 24 of the flight's 218 tracer cells sit on a wall column; from 4.5,
+    24 of 242; from -6.5, 12 of 47; from 6.5, 23 of 70. Down the middle it
+    never happens. Wall thickness is `max(1, floor(t * 3))`, which is a single
+    cell for every row above t = 2/3, so on rows 3 to 15 the wall is not
+    thinned but erased: fired from -4.5, frame 28 leaves row 13 reading `││`
+    where rows 11, 12, 15 and 16 still carry `▒` and `▓`, a one cell hole in
+    the wall that travels up with the shot. The ring rows go the same way,
+    since `╣` and `╠` are drawn on those exact columns (`src/render.ts:154`,
+    `src/render.ts:155`). The docstring above `drawBullets` says the tracer is
+    "drawn only while it is still inside the corridor", and the two new tests
+    assert the inclusive bound instead, so the test pins the defect rather
+    than the intent.
+  - **Goal**: Decide whether a wall column counts as inside the corridor, then
+    make the code, the docstring and the tests say the same thing. Excluding
+    it (`col > span.left && col < span.right`) is the reading that matches the
+    docstring and stops the erasure; measured, it costs the centre nothing
+    (59 of 59 frames), takes -4.5 from 46 drawn frames to 40 and -6.5 from 17
+    to 11, and leaves 4.5 and 6.5 untouched at 46 and 17. Weigh that
+    asymmetry first: it comes from `center = floor(w / 2)` sitting half a cell
+    off the true centre on an even width, so the left wall is reachable and
+    the right one is not, and it may deserve fixing ahead of the bound. Then
+    move what the change moves: `TRACER_FLIGHTS` in
+    `test/pulse-cannon.test.mjs` pins `minDrawn: 12` for the wall shots, which
+    11 fails, and `minDrawn: 40` for ±4.5, which would sit with no margin; the
+    span assertions in both new tests carry the inclusive bound; and the
+    `0.3.5-alpha` CHANGELOG entry quotes 46 and 17 as single figures for a
+    pair of sides that would no longer agree. Confirm with the probe the entry
+    already rests on - that no kill lands on a dark frame - since the clip
+    tightening by a column moves the tracer dark earlier. Both builds
+    together, as `test/parity.test.mjs` expects.
   - From: UI/UX Override - pulse cannon tracer leaves the drawn tunnel
 
-### Code Review Override - line endings rewritten across seven files
-
 #### Found Issues
 
-- [ ] **This run's edits converted seven files from LF to CRLF**
-  - **Issue**: The repository is LF, and every file this run did not edit still
-    is: `src/index.ts`, `src/input.ts`, `src/menu.ts`, `src/render.ts`,
-    `src/screen.ts`, `tsconfig.json` and the eight older `test/*.test.mjs`
-    files carry no CR bytes at all. `core.autocrlf` is `false` and there is no
-    `.gitattributes`, so whatever a tool writes is what gets committed. The
-    editing this run did rewrote six tracked files wholesale as CRLF -
-    `CHANGELOG.md`, `index.html`, `package.json`, `src/game.ts`,
-    `test/helpers.mjs` and `test/parity.test.mjs` - and committed
-    `test/pulse-cannon.test.mjs` as CRLF in 56adb56. Two files edited this same
-    run, `README.md` and `src/types.ts`, stayed LF, so it is the editing path
-    and not a global setting. Nothing fails: the suite passes 228 and `tsc` is
-    clean, because CRLF is legal in every one of those formats. The cost is to
-    the history. `git diff` reports 3098 insertions against 2895 deletions where
-    the real change is 230 against 27, so the diff is unreadable without
-    `--ignore-cr-at-eol`; committing it rewrites every line of those six files,
-    which takes `git blame` on all of them to this commit and makes any later
-    branch conflict on every line; and `.claude/commit-mode.request` is
-    `update`, so it will be pushed. `TODO.md` went the same way on an earlier
-    run and is already CRLF in `HEAD`, so this is a recurrence, not a one-off.
-  - **Goal**: Settle the repository's line ending instead of leaving it to
-    whichever tool writes a file next. LF is what is already committed, so
-    convert the seven files back, which restores the diff to its real size.
-    Then add a `.gitattributes` pinning it - `* text=auto eol=lf` across the
-    `.ts`, `.mjs`, `.html`, `.md` and `.json` files here - so the next editor
-    cannot reintroduce it. Verify with `git diff --stat` matching
-    `git diff --stat --ignore-cr-at-eol`, and with `npm test` still at 228.
-  - From: Code Review Override - line endings rewritten across seven files
+- [ ] The CHANGELOG credits a `.gitignore` the repository does not have
+  - **Issue**: The `0.3.5-alpha` entry says "The repository's `.gitignore`
+    un-ignores the file, because a global dotfile rule on this machine hid it
+    from `git add` entirely." No `.gitignore` is tracked here - `git ls-files`
+    lists no dotfile at all, and `git log --all -- .gitignore` is empty - and
+    the file cannot be added, because the global excludes file carries both
+    `.*` and a bare `.gitignore`. So the five line comment and the
+    `!.gitattributes` rule this run wrote live in a file that will never be
+    committed, while a published CHANGELOG points readers at it;
+    `.claude/commit-mode.request` is `update`, so that entry is pushed.
+    Nothing is broken today: `.gitattributes` is currently untracked and not
+    ignored, `git add` carries it, and ignore rules stop applying to it once
+    it is tracked. The exposure is the next dotfile the project needs -
+    `.editorconfig`, `.npmrc`, `.nvmrc` all match `.*` - which would be
+    invisible to `git add` with no error, and the only thing that would
+    un-ignore it is a file that is itself never committed.
+  - **Goal**: Make the entry describe what is actually in the repository.
+    Either say plainly that the un-ignore is a local, untracked workaround for
+    this machine's global excludes and that `.gitattributes` is what every
+    clone gets, or track the `.gitignore` so the sentence becomes true - which
+    also puts the `out/`, `node_modules/` and `test-results/` rules in the
+    repository, where none of them are today. The global excludes file names
+    `.gitignore` twice, so treat not committing it as deliberate until the
+    user says otherwise, and prefer correcting the sentence. The README's new
+    "Line Endings" section ends "Nothing to configure locally", which holds
+    for `.gitattributes` and not for the un-ignore, so move it either way.
+  - From: Code Review Override - the tracer is clipped to the wall, not to the corridor
 
 ## Quick Wins
 
@@ -220,3 +232,56 @@ the roadmap section each one came from.
     - Hit scan
     - Target leading
   - From: User Overrides
+- [x] **Tracer Wall Clip**: **A shot fired from a tunnel wall is drawn outside the tunnel**
+  - **Issue**: Holding a screen column means a tracer no longer converges on
+    the vanishing point, and the drawn tunnel does, so a shot fired from near
+    a wall flies out of the corridor it was fired down. Read off the rendered
+    character grid at 80x24, both builds identically: fired from the left wall
+    the volley crosses the drawn wall on frame 16 of its 59 drawn frames,
+    about half a second into a two second flight, and finishes 16 columns
+    clear of the wall in the black margin; from the right wall it is 15. Fired
+    from half a tunnel radius out it stays inside the corridor the whole way,
+    so this is a wall effect, and the walls are where the aiming fix mattered
+    most. It costs nothing in play - targets sit inside the tunnel and a shot
+    aimed at one stays with it - and the previous build kept the tracer inside
+    the corridor only by drifting away from the column the player aimed at.
+    What is new is the reading: a cyan tracer climbing through empty space
+    with the tunnel some distance to one side.
+  - **Goal**: Decide whether a tracer may be drawn outside the drawn tunnel at
+    all, and pin whichever way it goes. The flight itself should not move - the
+    held column is the aiming fix and the hit rates depend on it - so the
+    choice is a drawing one: clamp the glyph's column into the tunnel's span on
+    its row so the shot rides the wall, stop drawing a tracer once it leaves
+    the corridor, or accept it and say why in the comment above
+    `updateBullets`. Both builds together, as `test/parity.test.mjs` expects,
+    and pinned in `test/pulse-cannon.test.mjs` beside the drawn-tracer check
+    added this run, which already reads the glyph's column off the grid.
+  - From: UI/UX Override - pulse cannon tracer leaves the drawn tunnel
+- [x] **This run's edits converted seven files from LF to CRLF**
+  - **Issue**: The repository is LF, and every file this run did not edit still
+    is: `src/index.ts`, `src/input.ts`, `src/menu.ts`, `src/render.ts`,
+    `src/screen.ts`, `tsconfig.json` and the eight older `test/*.test.mjs`
+    files carry no CR bytes at all. `core.autocrlf` is `false` and there is no
+    `.gitattributes`, so whatever a tool writes is what gets committed. The
+    editing this run did rewrote six tracked files wholesale as CRLF -
+    `CHANGELOG.md`, `index.html`, `package.json`, `src/game.ts`,
+    `test/helpers.mjs` and `test/parity.test.mjs` - and committed
+    `test/pulse-cannon.test.mjs` as CRLF in 56adb56. Two files edited this same
+    run, `README.md` and `src/types.ts`, stayed LF, so it is the editing path
+    and not a global setting. Nothing fails: the suite passes 228 and `tsc` is
+    clean, because CRLF is legal in every one of those formats. The cost is to
+    the history. `git diff` reports 3098 insertions against 2895 deletions where
+    the real change is 230 against 27, so the diff is unreadable without
+    `--ignore-cr-at-eol`; committing it rewrites every line of those six files,
+    which takes `git blame` on all of them to this commit and makes any later
+    branch conflict on every line; and `.claude/commit-mode.request` is
+    `update`, so it will be pushed. `TODO.md` went the same way on an earlier
+    run and is already CRLF in `HEAD`, so this is a recurrence, not a one-off.
+  - **Goal**: Settle the repository's line ending instead of leaving it to
+    whichever tool writes a file next. LF is what is already committed, so
+    convert the seven files back, which restores the diff to its real size.
+    Then add a `.gitattributes` pinning it - `* text=auto eol=lf` across the
+    `.ts`, `.mjs`, `.html`, `.md` and `.json` files here - so the next editor
+    cannot reintroduce it. Verify with `git diff --stat` matching
+    `git diff --stat --ignore-cr-at-eol`, and with `npm test` still at 228.
+  - From: Code Review Override - line endings rewritten across seven files
