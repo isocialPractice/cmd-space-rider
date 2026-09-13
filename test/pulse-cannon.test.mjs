@@ -19,7 +19,8 @@ import { REPO_ROOT, loadBrowserEngine, fakeStorage, screenCells, FRAME } from '.
 const require = createRequire(import.meta.url);
 const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
-const { renderGame: terminalRender } = require(join(REPO_ROOT, 'out', 'render.js'));
+const { renderGame: terminalRender, tunnelSpan: terminalTunnelSpan } =
+  require(join(REPO_ROOT, 'out', 'render.js'));
 const { SHOT_SLACK_COLS, C: terminalC } = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
@@ -28,10 +29,12 @@ const BUILDS = [
   {
     name: 'terminal', Game: TerminalGame,
     ScreenBuffer: TerminalScreen, renderGame: terminalRender, C: terminalC,
+    tunnelSpan: terminalTunnelSpan,
   },
   {
     name: 'browser', Game: browser.Game,
     ScreenBuffer: browser.ScreenBuffer, renderGame: browser.renderGame, C: browser.C,
+    tunnelSpan: browser.tunnelSpan,
   },
 ];
 
@@ -44,10 +47,44 @@ const FOOTER_ROWS = 2;
  * The cells a tracer was drawn on. Its bright lower half is the one glyph and
  * colour only drawBullets puts on the screen: the tunnel's own walls carry
  * block characters, and the boost stripes down the border are magenta.
+ *
+ * Its dim upper half is as particular, and is asked for by colour: the ring
+ * glyphs that share the colour are ╣ and ╠, and the engine glow that shares
+ * the glyph is blue.
  */
-function tracerCells(build, screen) {
-  const key = `│|${build.C.BRIGHT_CYAN}|${build.C.BLACK}`;
+function tracerCells(build, screen, fg = build.C.BRIGHT_CYAN) {
+  const key = `│|${fg}|${build.C.BLACK}`;
   return screenCells(screen).filter((cell) => cell.key === key);
+}
+
+/**
+ * Both halves of the tracer on every frame of one flight, in order.
+ *
+ * drawBullets tests each half against the row it is on, so the two are read
+ * back together: the halves sit a row apart, the corridor narrows going up, and
+ * a clip that read one row for both would show up here and nowhere else.
+ */
+function tracerFrames(build, shipX) {
+  const game = emptyRun(build);
+  const s = game.state;
+  s.shipX = shipX;
+  s.shipY = 0;
+
+  const screen = new build.ScreenBuffer(W, H);
+  game.update(FRAME, {}, { SPACE: true });
+  build.renderGame(screen, s);
+
+  const frames = [];
+  for (let i = 0; i < 70 && s.bullets.length; i++) {
+    const halves = [
+      ...tracerCells(build, screen).map((c) => ({ x: c.x, y: c.y, half: 'bright' })),
+      ...tracerCells(build, screen, build.C.CYAN).map((c) => ({ x: c.x, y: c.y, half: 'dim' })),
+    ];
+    frames.push(halves);
+    game.update(FRAME, {}, {});
+    build.renderGame(screen, s);
+  }
+  return frames;
 }
 
 /** A run holding nothing but what a test stages into it. */
@@ -80,8 +117,12 @@ function stageTarget(state, x, y, z) {
  * then peel off the collision course. A ram recycles the obstacle just as a
  * kill does, so the two are told apart by the shield - only a collision spends
  * it.
+ *
+ * `watch` is handed every frame once the trigger has been pulled, for a test
+ * that has to see what the engagement looked like rather than only how it
+ * ended.
  */
-function engage(game, { x, y, z, dt = FRAME, volley = true }) {
+function engage(game, { x, y, z, dt = FRAME, volley = true, watch = null }) {
   const s = game.state;
   stageTarget(s, x, y, z);
   let fired = false;
@@ -115,6 +156,7 @@ function engage(game, { x, y, z, dt = FRAME, volley = true }) {
     const bulletsBefore = s.bullets.length;
     const zBefore = o.z;
     game.update(dt, keys, justPressed);
+    if (fired && watch) watch();
     if (s.mode === 'dead') return 'dead';
 
     // A kill, a ram and simply sailing past the camera all recycle the
@@ -248,60 +290,212 @@ for (const build of BUILDS) {
     );
   });
 
-  test(`${build.name}: the tracer is drawn as one column inside the play area`, () => {
-    // The check above asks toScreen where the shot is. This one asks the
-    // renderer what it actually put on the screen, which is all the player has
-    // to aim by: drawBullets could round, clip or drop a column without the
-    // state ever saying so. Fired from both walls as well as the centre, since
-    // the drift the column fix removed was widest at the edges.
-    for (const shipX of [-6.5, 0, 6.5]) {
-      const game = emptyRun(build);
-      const s = game.state;
-      s.shipX = shipX;
-      s.shipY = 0;
+  // What the renderer actually put on the screen for a volley fired from a
+  // given column: how many frames carried a tracer, which cells it used, and
+  // how far up the screen it climbed. The checks above ask toScreen where the
+  // shot is; this reads the grid, which is all the player has to aim by, and
+  // drawBullets could round, clip or drop a column without the state saying so.
+  const flyTracer = (shipX) => {
+    const game = emptyRun(build);
+    const s = game.state;
+    s.shipX = shipX;
+    s.shipY = 0;
 
-      const screen = new build.ScreenBuffer(W, H);
-      game.update(FRAME, {}, { SPACE: true });
-      build.renderGame(screen, s);
+    const screen = new build.ScreenBuffer(W, H);
+    game.update(FRAME, {}, { SPACE: true });
+    build.renderGame(screen, s);
 
-      const columns = new Set();
-      let drawn = 0;
-      let firstRow = null;
-      let lastRow = null;
+    const columns = new Set();
+    const cells = [];
+    let drawn = 0;
+    let live = 0;
+    let lastDrawnFrame = -1;
+    let firstRow = null;
+    let lastRow = null;
 
-      for (let frame = 0; frame < 70 && s.bullets.length; frame++) {
-        const cells = tracerCells(build, screen);
-        if (cells.length) {
-          drawn++;
-          for (const cell of cells) {
-            columns.add(cell.x);
-            assert.ok(
-              cell.y >= HUD_ROWS && cell.y < H - FOOTER_ROWS,
-              `fired from ${shipX}, a tracer was drawn at row ${cell.y}, ` +
-              `outside the play area's rows ${HUD_ROWS} to ${H - FOOTER_ROWS - 1}`
-            );
-          }
-          lastRow = Math.min(...cells.map((cell) => cell.y));
-          if (firstRow === null) firstRow = lastRow;
+    for (let frame = 0; frame < 70 && s.bullets.length; frame++) {
+      live++;
+      const frameCells = tracerCells(build, screen);
+      if (frameCells.length) {
+        drawn++;
+        lastDrawnFrame = frame;
+        for (const cell of frameCells) {
+          columns.add(cell.x);
+          cells.push(cell);
         }
-        game.update(FRAME, {}, {});
-        build.renderGame(screen, s);
+        lastRow = Math.min(...frameCells.map((cell) => cell.y));
+        if (firstRow === null) firstRow = lastRow;
+      }
+      game.update(FRAME, {}, {});
+      build.renderGame(screen, s);
+    }
+
+    return { columns, cells, drawn, live, lastDrawnFrame, firstRow, lastRow };
+  };
+
+  // A shot holds its firing column while the drawn tunnel converges on the
+  // vanishing point, so how much of a flight is drawn depends on where it was
+  // fired from: down the middle it is drawn the whole way, and the nearer the
+  // wall the sooner it crosses out of the corridor and stops being drawn. 4.5
+  // is the outermost column a target spawns in, 6.5 the wall the ship is held
+  // at - a shot from there can reach nothing, and now says so.
+  const TRACER_FLIGHTS = [
+    { shipX: 0, minDrawn: 55, minClimb: 8 },
+    { shipX: -4.5, minDrawn: 40, minClimb: 5 },
+    { shipX: 4.5, minDrawn: 40, minClimb: 5 },
+    { shipX: -6.5, minDrawn: 12, minClimb: 1 },
+    { shipX: 6.5, minDrawn: 12, minClimb: 1 },
+  ];
+
+  test(`${build.name}: the tracer is drawn as one column inside the play area`, () => {
+    // Fired from both walls as well as the centre, since the drift the column
+    // fix removed was widest at the edges.
+    for (const { shipX, minDrawn, minClimb } of TRACER_FLIGHTS) {
+      const flight = flyTracer(shipX);
+
+      for (const cell of flight.cells) {
+        assert.ok(
+          cell.y >= HUD_ROWS && cell.y < H - FOOTER_ROWS,
+          `fired from ${shipX}, a tracer was drawn at row ${cell.y}, ` +
+          `outside the play area's rows ${HUD_ROWS} to ${H - FOOTER_ROWS - 1}`
+        );
       }
 
-      assert.ok(drawn > 40, `fired from ${shipX}, the volley was drawn on only ${drawn} frames`);
+      assert.ok(
+        flight.drawn >= minDrawn,
+        `fired from ${shipX}, the volley was drawn on only ${flight.drawn} frames`
+      );
       // Three bullets, so three columns at the most, and fewer while the ship's
       // own glyphs still cover the muzzle. The same volley on a constant world
       // x walked through sixteen columns over this flight.
       assert.ok(
-        columns.size <= 3,
+        flight.columns.size <= 3,
         `fired from ${shipX}, the volley was drawn across columns ` +
-        `${[...columns].sort((a, b) => a - b).join(', ')}`
+        `${[...flight.columns].sort((a, b) => a - b).join(', ')}`
       );
       assert.ok(
-        firstRow - lastRow >= 3,
-        `fired from ${shipX}, the tracer climbed only ${firstRow - lastRow} rows`
+        flight.firstRow - flight.lastRow >= minClimb,
+        `fired from ${shipX}, the tracer climbed only ` +
+        `${flight.firstRow - flight.lastRow} rows`
       );
     }
+  });
+
+  test(`${build.name}: a tracer is never drawn outside the drawn tunnel`, () => {
+    // Holding the firing column means a shot fired from near a wall crosses
+    // that wall partway up, because the drawn tunnel converges and the shot
+    // does not. Drawing it on past that left a cyan tracer climbing through
+    // the black margin with the tunnel some distance to one side. It is also
+    // where the shot stops being able to hit anything, since targets spawn no
+    // further out than 4.5 and so sit inside this span at every depth.
+    for (const { shipX } of TRACER_FLIGHTS) {
+      const flight = flyTracer(shipX);
+
+      for (const cell of flight.cells) {
+        const span = build.tunnelSpan(cell.y, HUD_ROWS, H - FOOTER_ROWS, W);
+        assert.ok(
+          cell.x >= span.left && cell.x <= span.right,
+          `fired from ${shipX}, a tracer was drawn at column ${cell.x} on row ` +
+          `${cell.y}, outside the tunnel drawn between ${span.left} and ${span.right}`
+        );
+      }
+
+      // Once dark it stays dark: the corridor only narrows as the shot climbs,
+      // so a tracer coming back would mean the clip is reading the wrong row.
+      assert.equal(
+        flight.drawn, flight.lastDrawnFrame + 1,
+        `fired from ${shipX}, the tracer went dark and came back`
+      );
+    }
+  });
+
+  test(`${build.name}: the tracer's dim upper half is clipped on its own row`, () => {
+    // The checks above read the bright lower half, which is the glyph a player
+    // aims by. The dim half is a row higher, where the corridor is narrower, so
+    // it leaves the tunnel first and a clip that tested both halves against the
+    // lower row would draw it in the margin with nothing above to say so.
+    for (const { shipX } of TRACER_FLIGHTS) {
+      const frames = tracerFrames(build, shipX);
+
+      for (const [frame, cells] of frames.entries()) {
+        for (const cell of cells.filter((c) => c.half === 'dim')) {
+          const span = build.tunnelSpan(cell.y, HUD_ROWS, H - FOOTER_ROWS, W);
+          assert.ok(
+            cell.x >= span.left && cell.x <= span.right,
+            `fired from ${shipX}, the dim half was drawn on frame ${frame} at column ` +
+            `${cell.x} of row ${cell.y}, outside the tunnel's ${span.left} to ${span.right}`
+          );
+        }
+      }
+
+      // And neither half flickers: the corridor only narrows as a shot climbs.
+      for (const half of ['bright', 'dim']) {
+        const lit = frames.map((cells) => cells.some((c) => c.half === half));
+        const first = lit.indexOf(true);
+        if (first < 0) continue;
+        assert.ok(
+          lit.slice(first, lit.lastIndexOf(true) + 1).every(Boolean),
+          `fired from ${shipX}, the ${half} half went dark and came back: ` +
+          lit.map((on) => (on ? '#' : '.')).join('')
+        );
+      }
+    }
+  });
+
+  test(`${build.name}: a tracer stays lit to the target it goes on to kill`, () => {
+    // The clip is meant to fall outside the space targets occupy, so a shot
+    // that lands has to be drawn the whole way there. A tracer that went dark
+    // first and killed the target anyway would read as a miss that scored.
+    //
+    // Two of the three sit in the outermost column a target spawns in, where a
+    // shot runs nearest the wall it is clipped against. A lone bullet is flown
+    // rather than the volley, so the frames below belong to one shot, which
+    // holds the placements inside the range a single shot is expected to land.
+    for (const [x, y, z] of [[0, 2, -90], [4.5, 0.5, -50], [-4.5, 3, -60]]) {
+      const game = emptyRun(build);
+      const screen = new build.ScreenBuffer(W, H);
+      const lit = [];
+      const outcome = engage(game, {
+        x, y, z, volley: false,
+        watch: () => {
+          build.renderGame(screen, game.state);
+          lit.push(tracerCells(build, screen).length > 0);
+        },
+      });
+
+      assert.equal(outcome, 'hit', `the shot at ${x},${y},${z} resolved as ${outcome}`);
+      // The killing shot is spent during the frame that resolves it, so the
+      // frame before is the last one that can carry its tracer - and does.
+      assert.ok(
+        lit[lit.length - 2],
+        `the shot at ${x},${y},${z} was dark on the frame before it killed: ` +
+        lit.map((on) => (on ? '#' : '.')).join('')
+      );
+      const first = lit.indexOf(true);
+      assert.ok(
+        lit.slice(first, lit.length - 1).every(Boolean),
+        `the shot at ${x},${y},${z} went dark on the way to the target: ` +
+        lit.map((on) => (on ? '#' : '.')).join('')
+      );
+    }
+  });
+
+  test(`${build.name}: clipping the tracer leaves the shot itself in flight`, () => {
+    // The fix is a drawing one. The span the walls are drawn on runs a little
+    // narrower than the tunnel radius projects to, so culling the bullet where
+    // the tracer stops would cost real hits out at the far end - and the held
+    // column is the aiming fix the hit rates depend on.
+    const wall = flyTracer(-6.5);
+    const centre = flyTracer(0);
+
+    assert.equal(
+      wall.live, centre.live,
+      `a wall shot lived ${wall.live} frames against the centre shot's ${centre.live}`
+    );
+    assert.ok(
+      wall.drawn < wall.live,
+      `the wall shot was drawn on all ${wall.live} of its frames, so nothing was clipped`
+    );
   });
 
   test(`${build.name}: a shot resolves the same way at any frame rate`, () => {
@@ -374,4 +568,22 @@ test('both builds resolve the same engagements the same way', () => {
     return results;
   });
   assert.deepEqual(outcomes[1], outcomes[0]);
+});
+
+test('both builds draw the tracer on the same cells, frame for frame', () => {
+  // The test above compares what the shots hit; this compares what they looked
+  // like, which is the half of the port that a hit rate cannot speak for. The
+  // clip is drawn from the same span the walls are, so the two builds have to
+  // stop a tracer in the same place as well as land it in the same place.
+  //
+  // Fired from the centre, from the outermost column a target spawns in, and
+  // from the wall the ship is held at, which is where the two spans differing
+  // by a column would show first.
+  for (const shipX of [0, -4.5, 4.5, -6.5, 6.5]) {
+    const [terminal, browserDrawn] = BUILDS.map((build) => tracerFrames(build, shipX));
+    assert.deepEqual(
+      browserDrawn, terminal,
+      `fired from ${shipX}, the two builds drew the tracer differently`
+    );
+  }
 });
