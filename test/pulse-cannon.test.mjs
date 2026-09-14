@@ -40,6 +40,12 @@ const BUILDS = [
 
 const W = 80;
 const H = 24;
+
+/** Everything drawTunnel is allowed to leave on a wall column. */
+const WALL_CHARS = new Set([
+  '\u2591', '\u2592', '\u2593', '\u2588', // the four depths of block
+  '\u2563', '\u2560', // the two ring ends
+]);
 const HUD_ROWS = 3;
 const FOOTER_ROWS = 2;
 
@@ -339,12 +345,21 @@ for (const build of BUILDS) {
   // wall the sooner it crosses out of the corridor and stops being drawn. 4.5
   // is the outermost column a target spawns in, 6.5 the wall the ship is held
   // at - a shot from there can reach nothing, and now says so.
+  //
+  // The two sides carry their own figures, because they are not mirrors. The
+  // corridor is symmetric about floor(w / 2) while the projection floors a
+  // continuous column, so a shot at -x sits a column further out than one at
+  // +x and reaches the wall that much sooner: 40 frames drawn against 46 from
+  // 4.5, and 11 against 17 from the wall. drawBullets says why rounding that
+  // away costs more than it buys. Fired from the left wall a shot goes dark
+  // before it has climbed a row at all, so there the drawn count is the whole
+  // of what can be pinned.
   const TRACER_FLIGHTS = [
     { shipX: 0, minDrawn: 55, minClimb: 8 },
-    { shipX: -4.5, minDrawn: 40, minClimb: 5 },
-    { shipX: 4.5, minDrawn: 40, minClimb: 5 },
-    { shipX: -6.5, minDrawn: 12, minClimb: 1 },
-    { shipX: 6.5, minDrawn: 12, minClimb: 1 },
+    { shipX: -4.5, minDrawn: 36, minClimb: 4 },
+    { shipX: 4.5, minDrawn: 42, minClimb: 5 },
+    { shipX: -6.5, minDrawn: 9, minClimb: 0 },
+    { shipX: 6.5, minDrawn: 14, minClimb: 1 },
   ];
 
   test(`${build.name}: the tracer is drawn as one column inside the play area`, () => {
@@ -381,22 +396,26 @@ for (const build of BUILDS) {
     }
   });
 
-  test(`${build.name}: a tracer is never drawn outside the drawn tunnel`, () => {
+  test(`${build.name}: a tracer is never drawn on or past the tunnel wall`, () => {
     // Holding the firing column means a shot fired from near a wall crosses
     // that wall partway up, because the drawn tunnel converges and the shot
     // does not. Drawing it on past that left a cyan tracer climbing through
     // the black margin with the tunnel some distance to one side. It is also
     // where the shot stops being able to hit anything, since targets spawn no
     // further out than 4.5 and so sit inside this span at every depth.
+    //
+    // The bound is strict on both sides. tunnelSpan gives the columns the walls
+    // are drawn on rather than the last columns of the corridor, so admitting
+    // them put the tracer on the wall itself.
     for (const { shipX } of TRACER_FLIGHTS) {
       const flight = flyTracer(shipX);
 
       for (const cell of flight.cells) {
         const span = build.tunnelSpan(cell.y, HUD_ROWS, H - FOOTER_ROWS, W);
         assert.ok(
-          cell.x >= span.left && cell.x <= span.right,
+          cell.x > span.left && cell.x < span.right,
           `fired from ${shipX}, a tracer was drawn at column ${cell.x} on row ` +
-          `${cell.y}, outside the tunnel drawn between ${span.left} and ${span.right}`
+          `${cell.y}, on or outside the tunnel walls at ${span.left} and ${span.right}`
         );
       }
 
@@ -421,9 +440,9 @@ for (const build of BUILDS) {
         for (const cell of cells.filter((c) => c.half === 'dim')) {
           const span = build.tunnelSpan(cell.y, HUD_ROWS, H - FOOTER_ROWS, W);
           assert.ok(
-            cell.x >= span.left && cell.x <= span.right,
+            cell.x > span.left && cell.x < span.right,
             `fired from ${shipX}, the dim half was drawn on frame ${frame} at column ` +
-            `${cell.x} of row ${cell.y}, outside the tunnel's ${span.left} to ${span.right}`
+            `${cell.x} of row ${cell.y}, on or outside the walls at ${span.left} and ${span.right}`
           );
         }
       }
@@ -477,6 +496,42 @@ for (const build of BUILDS) {
         `the shot at ${x},${y},${z} went dark on the way to the target: ` +
         lit.map((on) => (on ? '#' : '.')).join('')
       );
+    }
+  });
+
+  test(`${build.name}: a tracer never eats the wall it is clipped against`, () => {
+    // The checks above ask where the tracer went; this asks what the wall looks
+    // like while it goes there, which is the half a player actually sees. The
+    // wall is one cell thick over the top two thirds of the screen and
+    // drawBullets runs after drawTunnel, so a tracer allowed onto a wall column
+    // did not ride the wall - it replaced it, and the hole climbed with the
+    // shot. Fired from -4.5, frame 28 used to leave row 13 reading two bars
+    // where the rows either side of it carried blocks.
+    for (const { shipX } of TRACER_FLIGHTS) {
+      const game = emptyRun(build);
+      const s = game.state;
+      s.shipX = shipX;
+      s.shipY = 0;
+
+      const screen = new build.ScreenBuffer(W, H);
+      game.update(FRAME, {}, { SPACE: true });
+      build.renderGame(screen, s);
+
+      for (let frame = 0; frame < 70 && s.bullets.length; frame++) {
+        for (let row = HUD_ROWS; row < H - FOOTER_ROWS; row++) {
+          const span = build.tunnelSpan(row, HUD_ROWS, H - FOOTER_ROWS, W);
+          for (const col of [span.left, span.right]) {
+            const ch = screen.chars[row * W + col];
+            assert.ok(
+              WALL_CHARS.has(ch),
+              `fired from ${shipX}, frame ${frame} left the wall column ${col} ` +
+              `of row ${row} reading "${ch}" instead of a wall glyph`
+            );
+          }
+        }
+        game.update(FRAME, {}, {});
+        build.renderGame(screen, s);
+      }
     }
   });
 

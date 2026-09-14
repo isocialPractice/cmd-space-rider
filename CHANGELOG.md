@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.3.6-alpha] - 2026-09-14
+
+### Fixed
+
+- The tracer no longer erases the tunnel wall it is clipped against. The clip
+  admitted the two columns the walls are drawn on, and `drawBullets` runs after
+  `drawTunnel`, so a shot that reached a wall column replaced the wall glyph
+  with its own bar instead of stopping at it. The wall is a single cell thick
+  on every row above the bottom third, so there was nothing behind the bar: at
+  80x24, fired from -4.5, frame 28 left row 13 reading two bars where the rows
+  either side carried blocks, and the hole climbed the wall with the shot. Read
+  off the grid across a whole flight, 24 of the 218 tracer cells from -4.5 sat
+  on a wall column, 24 of 242 from 4.5, 12 of 47 from -6.5 and 23 of 70 from
+  6.5. Down the middle it never happened. The corridor is now what the walls
+  enclose rather than the walls themselves, which is what the comment above
+  `drawBullets` always claimed.
+- The figures the 0.3.5-alpha entry gave for how long a tracer is drawn are
+  superseded by the tighter clip, and the two sides no longer agree. A shot down
+  the middle is still drawn for all 59 of its frames. From 4.5 it is drawn for
+  46 and from -4.5 for 40; from the wall at 6.5 for 17 and at -6.5 for 11. That
+  split is quantisation, not a second fault: the corridor is symmetric about
+  `floor(w / 2)` while the projection floors a continuous column, so a shot at
+  -x sits a column further out than its mirror and meets the wall sooner.
+  Rounding the column instead makes the two agree exactly and costs real hits -
+  over the suite's own long-range sweep it took the centre bullet from 44/58 to
+  37/60, under the 65% that band is pinned at, because `SHOT_SLACK_COLS` is
+  tuned against the floor. Drawing rounded while registering floored is worse
+  again, putting the glyph a player aims by a column off what the hit test
+  reads on half of all positions. The flight, the hit rates and the drawn tunnel
+  are all unchanged; only the clip moved.
+- The 0.3.5-alpha entry credited `.gitattributes` to a `.gitignore` the
+  repository does not have. `.gitattributes` is tracked and is what every clone
+  gets; the `.gitignore` that un-ignores it lives in the working tree of the
+  machine the work was done on, is matched by the same global rule it works
+  around, and is never committed. The entry now says so, and README's Line
+  Endings section says what a clone actually needs, which is nothing, and what
+  staging a new dotfile can need, which is `git add -f`.
+
+### Added
+
+- A check per build in `test/pulse-cannon.test.mjs` read off the wall rather
+  than off the tracer: every wall column of every row carries one of the four
+  block glyphs or a ring end, on every frame of a flight from each of the five
+  firing positions. The span checks read where the tracer went, which a clip
+  that ate the wall still satisfied; this reads what the wall looks like while
+  it goes there. The two span checks now take the strict bound, and
+  `TRACER_FLIGHTS` carries its drawn-frame and climbed-row floors per firing
+  position instead of one figure per pair, since the sides are not mirrors.
+
 ## [0.3.5-alpha] - 2026-09-13
 
 ### Fixed
@@ -41,8 +90,14 @@
   still commits LF and the recurrence is closed rather than cleaned up again
   next time. Verified by hashing a CRLF copy of `src/render.ts` through
   `git hash-object --path`, which returns the same blob as the LF original.
-  The repository's `.gitignore` un-ignores the file, because a global dotfile
-  rule on this machine hid it from `git add` entirely.
+  It is tracked, so every clone gets it and ignore rules stop applying to it.
+  Adding it in the first place needed a local step: the authoring machine
+  carries a global excludes file that hides dotfiles from `git add` with no
+  error, and the untracked `.gitignore` in the working tree, which un-ignores
+  `.gitattributes`, is what let a plain `git add` reach it. That file is
+  matched by the same global rule and is never committed, so it is a workaround
+  on one machine rather than part of the repository. Anywhere else configured
+  that way, a new dotfile needs `git add -f`.
 - Three checks per build in `test/pulse-cannon.test.mjs`: that no tracer cell
   is ever drawn outside the tunnel's span on its own row, that a tracer once
   dark stays dark, and that clipping the drawing leaves the shot itself in

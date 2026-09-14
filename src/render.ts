@@ -230,14 +230,33 @@ function drawBlock(
  * the rest of the flight would otherwise be drawn out in the black margin
  * with the tunnel some distance to one side.
  *
+ * The corridor is what the walls enclose, not the walls themselves: drawTunnel
+ * lays its glyph on tunnelSpan's own two columns and thickens outward from
+ * there, so the corridor runs from left + 1 to right - 1. Admitting the wall
+ * columns punched a hole in the wall instead of stopping the shot at it, since
+ * drawBullets runs after drawTunnel and the wall is one cell thick over the top
+ * two thirds of the screen: a tracer landing on one replaced the block glyph
+ * with a bar, and the hole travelled up the wall with the shot.
+ *
  * Crossing the wall is also where the shot stops being able to hit anything.
  * Targets spawn within four and a half units of the axis and the walls are
  * drawn at eight, so every target sits inside this span at every depth; a
  * shot whose column has left the span is in a column no target can occupy at
  * that depth, and stays there for the rest of its life. Stopping the tracer
- * at the wall says so. Clamping it back onto the wall instead would keep
- * drawing a shot inside the corridor that can no longer hit a thing in it,
- * and would put back the column drift the aiming fix removed.
+ * short of the wall says so. Clamping it back into the corridor instead would
+ * keep drawing a shot that can no longer hit a thing in there, and would put
+ * back the column drift the aiming fix removed.
+ *
+ * A left-hand shot goes dark a few frames before its mirror on the right, and
+ * that is quantisation rather than a second fault. tunnelSpan is symmetric
+ * about floor(w / 2) while gameToScreen floors a continuous column, so a shot
+ * at -x lands ceil cells out and one at +x floor cells out - the left side
+ * reaches the wall a column sooner. Rounding the column instead makes the two
+ * agree exactly, and costs real hits: measured over the suite's own long-range
+ * sweep it took the centre bullet from 44/58 to 37/60, under the 65% the band
+ * is pinned at, because SHOT_SLACK_COLS is tuned against the floor. Drawing
+ * rounded while registering floored is worse again - the glyph the player aims
+ * by would sit a column off what the hit test reads, on half of all positions.
  *
  * Drawing only: the span the walls are drawn on runs a little narrower than
  * the tunnel radius projects to, so culling the bullet on it would cost real
@@ -249,7 +268,7 @@ function drawBullets(screen: ScreenBuffer, state: GameState, gameTop: number, ga
   const h = screen.height;
   const inCorridor = (col: number, row: number): boolean => {
     const span = tunnelSpan(row, gameTop, gameBottom, w);
-    return col >= span.left && col <= span.right;
+    return col > span.left && col < span.right;
   };
   for (const b of state.bullets) {
     const pos = gameToScreen(b.x, b.y, b.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);

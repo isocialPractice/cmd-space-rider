@@ -205,7 +205,13 @@ npm test           # Build, then run the test suite
 Everything in the repository is LF, pinned by `.gitattributes` rather than left
 to whichever editor writes a file last. Git normalizes on the way into the
 index, so an editor that writes CRLF still commits LF and a diff stays the size
-of the change rather than the size of the file. Nothing to configure locally.
+of the change rather than the size of the file. The file is tracked, so a clone
+needs nothing configured.
+
+Adding a new dotfile is the one thing that can need a local step. A global
+excludes file of the `.*` kind hides it from `git add` with no error and no
+output, so if a dotfile you staged never appears in `git status`, check it with
+`git check-ignore -v --no-index <file>` and stage it with `git add -f <file>`.
 
 ### Tests
 
