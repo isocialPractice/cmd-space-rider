@@ -20,6 +20,13 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
+### User Override
+
+- [ ] pulse cannon hit detection: Collision still not registering
+  - **Issue**: Hit detection works for maybe 1 out of 5 enemies
+  - **Goal**: Hit detection works for all enemies
+  - From: User Overrides
+
 ### Code Review Override - two claims the run wrote that its own measurements do not support
 
 - [ ] The left wall's climb floor is zero, and the comment above it says why in terms the grid does not show
@@ -122,7 +129,7 @@ the roadmap section each one came from.
 
 > 21 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Resolve "pulse cannon" collision detection is off
+- [x] **pulse cannon hit detection**: Resolve "pulse cannon" collision detection is off
   - **Issue**: Collision detection for the "pulse cannon" is off nearly 2/3 of the time.
   - **Goal**: Address and improve:
     - Hit registration
