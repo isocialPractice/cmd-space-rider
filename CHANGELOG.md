@@ -1,5 +1,74 @@
 # Changelog
 
+## [0.3.7-alpha] - 2026-09-15
+
+### Fixed
+
+- The pulse cannon now registers a hit the player aimed vertically by eye. The
+  hit test carried a column of slack either side of a target's block and none at
+  all above or below it, so the axis a player can read off the screen was the
+  forgiving one and the axis they cannot read demanded sub-cell precision.
+  Measured at 80 to 140 units out, where one row spans about two world units of
+  height: a volley aimed dead on the target's height still landed 82% of the
+  time a whole column wide, while the same volley aimed dead on the target's
+  column landed 95% at a tenth of a world unit of vertical error, 73% at half a
+  unit and 39% at a whole one - half a row of vertical error costing more than
+  three whole columns of horizontal error did. `SHOT_SLACK_ROWS` now puts a row
+  of slack on that axis too, taking all three to 100%.
+- Height is the axis with nothing to line up, which is why it needed the slack.
+  Y_FACTOR squashes the tunnel's whole height into a few rows, and the target's
+  glyph moves at its depth's scale while the ship's moves at full scale, so the
+  two never meet on a row even when the shot is dead on. The columns have no
+  such problem: ship and target sit in countable columns and can be lined up by
+  eye.
+- The slack forgives a misread, not an aim. At that range a shot a row clear of
+  the target - two world units - still misses a third of the time, one a row and
+  a half clear misses four times in five, and one two rows clear, which is a
+  target at the floor of the tunnel shot at from the roof, never lands at all.
+  Nearer in the block is taller than a cell and the fall-off starts later still.
+- `TRACER_FLIGHTS` pinned the left wall's climbed-row floor at 0, which pins
+  nothing: `firstRow - lastRow` cannot go below zero, so that row passed a
+  tracer drawn on a single row and passed one never drawn at all. The comment
+  above the table justified it by saying the shot goes dark before climbing a
+  row, and the grid says otherwise - read at 80x24, both builds alike, the -6.5
+  volley's 11 drawn frames carry topmost tracer rows of 19, 19, 19, 19, 18, 18,
+  18, 18, 18, 18, 18, a climb of one. The floor is back at 1 and the comment now
+  reports the climb rather than denying it.
+- The 0.3.5-alpha entry and README's Line Endings section both said a global
+  excludes file hides a dotfile from `git add` with no error. Only the bulk
+  forms do. Naming the path reports it - `git add .gitattributes` prints the
+  ignored-paths warning, points at `-f`, and exits 1 - so the old wording sent a
+  reader whose `git add <file>` had just failed loudly looking for a silent
+  failure, past the error that already named the fix. Both now say which form is
+  quiet and which is not; the `git check-ignore -v --no-index` and `git add -f`
+  advice was right either way and is unchanged.
+
+### Added
+
+- `SHOT_SLACK_ROWS` in both builds, carrying the measurement that sets it and
+  the reason the two axes are not symmetric in what they ask of a player. The
+  parity test pins the two builds to the same value, as it already does for
+  `SHOT_SLACK_COLS`.
+- Five checks per build in `test/pulse-cannon.test.mjs`. The first flies the
+  engagement with nothing but the painted screen to aim by: the hull is found by
+  its nose glyph, the target by its red block, and the height is simply the
+  middle of the tunnel, since that is the only standing guess the screen
+  supports. Every other rate in the file reads the target's height out of the
+  world, which no player can do, so this is the closest the suite comes to the
+  complaint the slack answers - a shot the player believes is lined up, missing
+  anyway. It lands 39 of 39 in both range bands, where the same walk against the
+  unslacked engine landed 35 of 39 at 35 to 80 and 31 of 39 at 80 to 140. The
+  other four place the shot directly: that one inside the vertical slack
+  registers from above the target and from below it, that one clear of the band
+  does not, that the long-range sweep holds 95% when the ship's height is
+  deliberately biased off the target's, and a ceiling saying the slack is
+  forgiveness rather than an aimbot - nothing lands four world units out, and no
+  better than half lands three units out. `engage` and `sweep` take that
+  vertical bias as an option, since aiming dead on was the one case the file
+  could already measure.
+- A README note that height is the forgiving axis and why, beside the existing
+  aim-by-column tip.
+
 ## [0.3.6-alpha] - 2026-09-14
 
 ### Fixed
@@ -92,9 +161,10 @@
   `git hash-object --path`, which returns the same blob as the LF original.
   It is tracked, so every clone gets it and ignore rules stop applying to it.
   Adding it in the first place needed a local step: the authoring machine
-  carries a global excludes file that hides dotfiles from `git add` with no
-  error, and the untracked `.gitignore` in the working tree, which un-ignores
-  `.gitattributes`, is what let a plain `git add` reach it. That file is
+  carries a global excludes file matching `.*`, so `git add .gitattributes`
+  refuses the path and exits non-zero, and a bulk `git add .` passes over it
+  without a word. The untracked `.gitignore` in the working tree, which
+  un-ignores `.gitattributes`, is what let either form reach it. That file is
   matched by the same global rule and is never committed, so it is a workaround
   on one machine rather than part of the repository. Anywhere else configured
   that way, a new dotfile needs `git add -f`.
