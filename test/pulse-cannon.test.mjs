@@ -21,7 +21,7 @@ const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
 const { renderGame: terminalRender, tunnelSpan: terminalTunnelSpan } =
   require(join(REPO_ROOT, 'out', 'render.js'));
-const { SHOT_SLACK_COLS, C: terminalC } = require(join(REPO_ROOT, 'out', 'types.js'));
+const { SHOT_SLACK_COLS, SHOT_SLACK_ROWS, C: terminalC } = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
 
@@ -48,6 +48,25 @@ const WALL_CHARS = new Set([
 ]);
 const HUD_ROWS = 3;
 const FOOTER_ROWS = 2;
+/** The squash toScreen puts on the tunnel's height, matching Y_FACTOR. */
+const Y_FACTOR = 0.4;
+
+/** The ship's nose. Nothing else in the game draws it, so it locates the hull. */
+const NOSE = '▲';
+/**
+ * An obstacle's block, near and far. Red is what tells it from a tunnel wall,
+ * which shares ▓, and from a mine, which blinks between ◈ and a grey ■.
+ */
+const BLOCK_CHARS = new Set(['■', '▓']);
+
+/**
+ * World units of height to one screen row at a given depth, which is what the
+ * vertical slack is worth in the units a target is placed in.
+ */
+function unitsPerRow(state, scale) {
+  const gameH = state.screenHeight - HUD_ROWS - FOOTER_ROWS;
+  return state.tunnelRadius / (gameH * Y_FACTOR * scale);
+}
 
 /**
  * The cells a tracer was drawn on. Its bright lower half is the one glyph and
@@ -109,6 +128,54 @@ function emptyRun(build) {
   return game;
 }
 
+/** The ship's hull row and column, found on the painted screen by its nose. */
+function seeShip(screen) {
+  for (let i = 0; i < screen.chars.length; i++) {
+    if (screen.chars[i] === NOSE) return { col: i % W, row: Math.floor(i / W) + 1 };
+  }
+  return null;
+}
+
+/**
+ * The target's drawn block, as the middle of the red cells on the screen.
+ *
+ * One staged target is what the engagements below give it, so every red cell
+ * on the screen belongs to that one block. A second obstacle arriving would
+ * widen the box and pull the aim off, which the floors would catch.
+ */
+function seeBlock(build, screen) {
+  let left = W, right = -1, top = H, bottom = -1;
+  for (let i = 0; i < screen.chars.length; i++) {
+    if (!BLOCK_CHARS.has(screen.chars[i])) continue;
+    if (screen.fg[i] !== build.C.RED && screen.fg[i] !== build.C.BRIGHT_RED) continue;
+    const col = i % W;
+    const row = Math.floor(i / W);
+    if (col < left) left = col;
+    if (col > right) right = col;
+    if (row < top) top = row;
+    if (row > bottom) bottom = row;
+  }
+  if (right < 0) return null;
+  return { col: Math.round((left + right) / 2), row: Math.round((top + bottom) / 2) };
+}
+
+/**
+ * The hull row halfway up the ship's travel, measured by flying to each end of
+ * it and reading the screen back. That is all a player has to find it with, and
+ * it is where a run is spent: every target spawns in the same band of heights,
+ * so the middle of the tunnel is the standing guess at where the next one is.
+ */
+function middleHullRow(build) {
+  const game = emptyRun(build);
+  const screen = new build.ScreenBuffer(W, H);
+  const flyTo = (keys) => {
+    for (let i = 0; i < 60; i++) game.update(FRAME, keys, {});
+    build.renderGame(screen, game.state);
+    return seeShip(screen).row;
+  };
+  return Math.round((flyTo({ W: true }) + flyTo({ S: true })) / 2);
+}
+
 /** Park a single obstacle out in the tunnel and clear everything else away. */
 function stageTarget(state, x, y, z) {
   state.obstacles = [{ x, y, z, rot: 0, rotSpeed: 0, scale: 1 }];
@@ -128,7 +195,7 @@ function stageTarget(state, x, y, z) {
  * that has to see what the engagement looked like rather than only how it
  * ended.
  */
-function engage(game, { x, y, z, dt = FRAME, volley = true, watch = null }) {
+function engage(game, { x, y, z, dt = FRAME, volley = true, watch = null, dy = 0 }) {
   const s = game.state;
   stageTarget(s, x, y, z);
   let fired = false;
@@ -137,15 +204,18 @@ function engage(game, { x, y, z, dt = FRAME, volley = true, watch = null }) {
     const o = s.obstacles[0];
     const target = game.toScreen(o.x, o.y, o.z);
     const ship = game.toScreen(s.shipX, s.shipY, 0);
+    // Where the player thinks the target's height is. `dy` is how far off that
+    // reading sits, which is the error the vertical slack is there to absorb.
+    const aimY = o.y + dy;
 
     const keys = {};
     const justPressed = {};
     if (!fired) {
       if (ship.col < target.col) keys.D = true;
       else if (ship.col > target.col) keys.A = true;
-      if (s.shipY < o.y - 0.05) keys.W = true;
-      else if (s.shipY > o.y + 0.05) keys.S = true;
-      if (ship.col === target.col && Math.abs(s.shipY - o.y) <= 0.15) {
+      if (s.shipY < aimY - 0.05) keys.W = true;
+      else if (s.shipY > aimY + 0.05) keys.S = true;
+      if (ship.col === target.col && Math.abs(s.shipY - aimY) <= 0.15) {
         justPressed.SPACE = true;
         fired = true;
       }
@@ -222,7 +292,7 @@ function stagedShot(build, { x, y, targetZ, dt, aimedAt }) {
 }
 
 /** Every engagement across a spread of target positions at one range band. */
-function sweep(build, { near, far, volley = true, dt = FRAME }) {
+function sweep(build, { near, far, volley = true, dt = FRAME, dy = 0 }) {
   let hit = 0;
   let shots = 0;
   for (let i = 0; i < 60; i++) {
@@ -230,13 +300,85 @@ function sweep(build, { near, far, volley = true, dt = FRAME }) {
     const x = -4.5 + (9 * i) / 59;
     const y = 0.5 + (4 * ((i * 7) % 60)) / 59;
     const z = -(near + ((far - near) * ((i * 13) % 60)) / 59);
-    const outcome = engage(emptyRun(build), { x, y, z, volley, dt });
+    const outcome = engage(emptyRun(build), { x, y, z, volley, dt, dy });
     if (outcome === 'hit' || outcome === 'miss') {
       shots++;
       if (outcome === 'hit') hit++;
     }
   }
   return { hit, shots };
+}
+
+/**
+ * One engagement flown with nothing but the painted screen to aim by.
+ *
+ * `engage` above steers to the target's column off toScreen, which is fair -
+ * a column is countable on the screen - but takes the target's height straight
+ * out of `o.y`, and no player has that. Here both axes are read off the
+ * rendered buffer: the ship is its nose glyph, the target is the red block,
+ * and the height is the middle of the tunnel rather than anything the target
+ * discloses. What is left is the vertical error a player cannot help carrying.
+ */
+function engageByEye(build, screen, { x, y, z, holdRow }) {
+  const game = emptyRun(build);
+  const s = game.state;
+  stageTarget(s, x, y, z);
+  let fired = false;
+
+  for (let frame = 0; frame < 800; frame++) {
+    build.renderGame(screen, s);
+    const keys = {};
+    const justPressed = {};
+    if (!fired) {
+      const ship = seeShip(screen);
+      const block = seeBlock(build, screen);
+      if (!ship || !block) { game.update(FRAME, {}, {}); continue; }
+      if (ship.col < block.col) keys.D = true;
+      else if (ship.col > block.col) keys.A = true;
+      if (ship.row > holdRow) keys.W = true;
+      else if (ship.row < holdRow) keys.S = true;
+      if (ship.col === block.col && ship.row === holdRow) {
+        justPressed.SPACE = true;
+        fired = true;
+      }
+    } else if (x >= 0) {
+      keys.A = true;
+    } else {
+      keys.D = true;
+    }
+
+    const shieldBefore = s.shield;
+    const bulletsBefore = s.bullets.length;
+    const zBefore = s.obstacles[0].z;
+    game.update(FRAME, keys, justPressed);
+    if (s.mode === 'dead') return 'dead';
+    if (s.obstacles[0].z < zBefore - 100) {
+      if (s.shield < shieldBefore) return 'ram';
+      return s.bullets.length < bulletsBefore ? 'hit' : 'miss';
+    }
+    if (fired && s.bullets.length === 0) return 'miss';
+    if (!fired && s.obstacles[0].z > 8) return 'no-shot';
+  }
+  return 'timeout';
+}
+
+/** The same walk of placements as `sweep`, flown by eye. */
+function sweepByEye(build, { near, far, count = 40 }) {
+  const screen = new build.ScreenBuffer(W, H);
+  const holdRow = middleHullRow(build);
+  let hit = 0;
+  let shots = 0;
+  for (let i = 0; i < count; i++) {
+    const x = -4.5 + (9 * i) / (count - 1);
+    const y = 0.5 + (4 * ((i * 7) % count)) / (count - 1);
+    const z = -(near + ((far - near) * ((i * 13) % count)) / (count - 1));
+    const outcome = engageByEye(build, screen, { x, y, z, holdRow });
+    if (outcome === 'hit' || outcome === 'miss') {
+      shots++;
+      if (outcome === 'hit') hit++;
+    }
+  }
+  return { hit, shots, holdRow };
 }
 
 for (const build of BUILDS) {
@@ -269,6 +411,33 @@ for (const build of BUILDS) {
       hit / shots >= 0.9,
       `long-range volley landed ${hit}/${shots}, wanted 90%`
     );
+  });
+
+  test(`${build.name}: a volley aimed at nothing but the screen still lands`, () => {
+    // Every rate above reads the target's height out of the world to aim with.
+    // This one reads the screen: the hull is found by its nose glyph, the
+    // target by its red block, and the height is simply the middle of the
+    // tunnel, which is the only standing guess the screen supports. That makes
+    // it the closest thing the suite has to the complaint the slack answers -
+    // a shot the player believes is lined up, missing anyway.
+    //
+    // Walked with SHOT_SLACK_ROWS back at 0, this sweep landed 35/39 at 35 to
+    // 80 and 31/39 at 80 to 140. With the row of slack in it lands 39 of 39 in
+    // both bands, and did so on eight runs in a row: the placements are walked
+    // and the outcome does not move, so the floors below are margin rather than
+    // noise.
+    for (const band of [
+      { near: 35, far: 80, floor: 0.95 },
+      { near: 80, far: 140, floor: 0.9 },
+    ]) {
+      const { hit, shots, holdRow } = sweepByEye(build, band);
+      assert.ok(shots > 20, `${band.near}-${band.far}: only ${shots} shots resolved`);
+      assert.ok(
+        hit / shots >= band.floor,
+        `${band.near}-${band.far} out, flown by eye from hull row ${holdRow}: ` +
+        `${hit}/${shots} landed, wanted ${band.floor * 100}%`
+      );
+    }
   });
 
   test(`${build.name}: a shot holds the screen column it was fired down`, () => {
@@ -351,14 +520,22 @@ for (const build of BUILDS) {
   // continuous column, so a shot at -x sits a column further out than one at
   // +x and reaches the wall that much sooner: 40 frames drawn against 46 from
   // 4.5, and 11 against 17 from the wall. drawBullets says why rounding that
-  // away costs more than it buys. Fired from the left wall a shot goes dark
-  // before it has climbed a row at all, so there the drawn count is the whole
-  // of what can be pinned.
+  // away costs more than it buys.
+  //
+  // Every flight climbs, the left wall's least of all. Read off the grid at
+  // 80x24, both builds alike, its 11 drawn frames carry topmost tracer rows of
+  // 19, 19, 19, 19, 18, 18, 18, 18, 18, 18, 18 - one row gained before the clip
+  // takes it, against 2 rows over 17 frames from the right wall and 10 over 59
+  // down the middle. So its floor is the climb itself with nothing to spare,
+  // where the others keep a row or two in hand. A floor of 0 there is no floor
+  // at all: firstRow - lastRow cannot go below zero, so a 0 passes a tracer
+  // drawn on a single row, and passes one never drawn at all, where both ends
+  // stay null and null - null is 0. Only minDrawn beside it would still fail.
   const TRACER_FLIGHTS = [
     { shipX: 0, minDrawn: 55, minClimb: 8 },
     { shipX: -4.5, minDrawn: 36, minClimb: 4 },
     { shipX: 4.5, minDrawn: 42, minClimb: 5 },
-    { shipX: -6.5, minDrawn: 9, minClimb: 0 },
+    { shipX: -6.5, minDrawn: 9, minClimb: 1 },
     { shipX: 6.5, minDrawn: 14, minClimb: 1 },
   ];
 
@@ -608,6 +785,92 @@ for (const build of BUILDS) {
     s.bullets = [{ x: (half + SHOT_SLACK_COLS - 0.5) * cell, y: 2, z, life: 2 }];
     game.update(FRAME, {}, {});
     assert.ok(s.obstacles[0].z < z - 100, 'the shot should have landed');
+  });
+
+  test(`${build.name}: a shot inside the vertical slack does register`, () => {
+    // The same pair of checks the columns get, on the axis the player cannot
+    // read. Above the target and below it both, since the tracer is two rows
+    // tall and the band is not symmetric about the glyph without the slack.
+    const z = -60;
+    for (const dir of [1, -1]) {
+      const game = emptyRun(build);
+      const s = game.state;
+      stageTarget(s, 0, 2, z);
+
+      const scale = game.projScale(z);
+      const row = unitsPerRow(s, scale);
+      const half = Math.floor(Math.max(1, Math.floor(scale * 2.5)) / 2);
+
+      s.bullets = [{ x: 0, y: 2 + dir * (half + SHOT_SLACK_ROWS - 0.5) * row, z, life: 2 }];
+      game.update(FRAME, {}, {});
+      assert.ok(
+        s.obstacles[0].z < z - 100,
+        `a shot ${dir > 0 ? 'above' : 'below'} the target inside the slack should have landed`
+      );
+    }
+  });
+
+  test(`${build.name}: a shot wide of the vertical slack does not register`, () => {
+    // A row of slack is not a licence to widen the target vertically either. A
+    // shot a row past the band has to miss, or the constant can drift upward
+    // unnoticed - which on this axis would go unseen for longer, because a row
+    // out at 60 units is most of the height a target ever spawns at.
+    const z = -60;
+    for (const dir of [1, -1]) {
+      const game = emptyRun(build);
+      const s = game.state;
+      stageTarget(s, 0, 2, z);
+
+      const scale = game.projScale(z);
+      const row = unitsPerRow(s, scale);
+      const half = Math.floor(Math.max(1, Math.floor(scale * 2.5)) / 2);
+
+      s.bullets = [{ x: 0, y: 2 + dir * (half + SHOT_SLACK_ROWS + 2) * row, z, life: 2 }];
+      game.update(FRAME, {}, {});
+      assert.equal(s.obstacles.length, 1, 'the target should still be there');
+      assert.ok(
+        s.obstacles[0].z > z - 100,
+        `a shot ${dir > 0 ? 'above' : 'below'} the target and clear of the slack should have missed`
+      );
+    }
+  });
+
+  test(`${build.name}: a volley survives the vertical aim error a player cannot avoid`, () => {
+    // The fault this slack answers. The ship's glyph and the target's move at
+    // different scales, so the two never meet on a row and there is nothing on
+    // screen to line up - all the player has is how high in the tunnel the
+    // target looks. Out at 80 to 140 a row is about two world units of height,
+    // so the errors below are a twentieth, a quarter and half of a row.
+    //
+    // Walked against the engine before the slack existed, this same sweep
+    // landed 95%, 73% and 39% - half a row of vertical error costing more than
+    // three whole columns of horizontal error did at the same range, on the one
+    // axis the player has no way to measure.
+    for (const dy of [0.1, 0.5, 1]) {
+      const { hit, shots } = sweep(build, { near: 80, far: 140, dy });
+      assert.ok(shots > 20, `dy ${dy}: only ${shots} shots resolved`);
+      assert.ok(
+        hit / shots >= 0.95,
+        `aimed ${dy} of a world unit off, ${hit}/${shots} landed, wanted 95%`
+      );
+    }
+  });
+
+  test(`${build.name}: the vertical slack is a cell of forgiveness, not an aimbot`, () => {
+    // The floor above would be met by removing the row test altogether, so the
+    // ceiling here is what says the axis still counts for something. Measured
+    // at 80 to 140, where a row is about two world units: a shot two units off
+    // the target's height lands 68% of the time, three units off 22%, and four
+    // units off - a target at the floor of the tunnel shot at from the roof -
+    // never at all.
+    const far = sweep(build, { near: 80, far: 140, dy: 4 });
+    assert.equal(far.hit, 0, `aimed four world units off, ${far.hit}/${far.shots} still landed`);
+
+    const wide = sweep(build, { near: 80, far: 140, dy: 3 });
+    assert.ok(
+      wide.hit / wide.shots <= 0.5,
+      `aimed three world units off, ${wide.hit}/${wide.shots} landed, wanted no better than half`
+    );
   });
 }
 
