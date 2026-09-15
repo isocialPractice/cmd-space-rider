@@ -92,6 +92,46 @@ export const ROLL_COOLDOWN = 1.2;
  */
 export const SHOT_SLACK_COLS = 1;
 
+/**
+ * Rows of slack the pulse cannon's hit test allows above and below a target's
+ * drawn block, matching SHOT_SLACK_COLS on the other axis.
+ *
+ * The flooring argument above applies to rows exactly as it does to columns,
+ * and the vertical is the worse of the two for a player. A column is something
+ * they can read off the screen: the ship's glyph and the target's glyph sit in
+ * countable columns and can be lined up by eye. A row cannot be read that way,
+ * because Y_FACTOR squashes the tunnel's height and the target's row moves at
+ * the depth's scale while the ship's moves at full scale, so the two glyphs
+ * never meet on a row even when the shot is dead on. All the player has to aim
+ * by is how high in the tunnel the target looks.
+ *
+ * What the two axes cost was measured the same way, by aiming dead on one axis
+ * and biasing the ship off the target on the other before firing. Out at 80 to
+ * 140 units one row spans about two world units of height, which is what makes
+ * the two columns below comparable:
+ *
+ *     vertical error   before   after      horizontal error   unchanged
+ *     0.1 units          95%     100%      1 column               82%
+ *     0.5 units          73%     100%      2 columns              59%
+ *     1.0 units          39%     100%      3 columns              45%
+ *     1.5 units           9%     100%      4 columns              14%
+ *     2.0 units           0%      68%
+ *     3.0 units           0%      22%
+ *     4.0 units           0%       0%
+ *
+ * That is the fault this constant answers. The horizontal test held 82% a whole
+ * column out, while the vertical was down to 39% at a world unit - half a row,
+ * half a character - so the axis the player cannot read was the one asking for
+ * sub-cell precision.
+ *
+ * A row of slack does not turn the axis off. A shot a row clear of the target
+ * still misses a third of the time, one a row and a half clear misses four
+ * times in five, and one two rows clear - a target at the floor of the tunnel
+ * shot at from the roof - never lands at all. Nearer in the block is taller
+ * than a cell and the fall-off starts later still.
+ */
+export const SHOT_SLACK_ROWS = 1;
+
 /** Seconds a combo chain survives without a kill before it drops to nothing. */
 export const COMBO_TIME = 2;
 

@@ -171,6 +171,26 @@ const ROLL_COOLDOWN=1.2;
 // little past what the three-shot volley's own spread already covers, at the
 // cost of counting a shot that visibly clears the target by a character.
 const SHOT_SLACK_COLS=1;
+// Rows of slack the pulse cannon's hit test allows above and below a target's
+// drawn block, matching SHOT_SLACK_COLS on the other axis.
+//
+// The flooring argument above applies to rows exactly as it does to columns, and
+// the vertical is the worse of the two for a player. A column is something they
+// can read off the screen: the ship's glyph and the target's glyph sit in
+// countable columns and can be lined up by eye. A row cannot be read that way,
+// because Y_FACTOR squashes the tunnel's height and the target's row moves at the
+// depth's scale while the ship's moves at full scale, so the two glyphs never meet
+// on a row even when the shot is dead on. All the player has to aim by is how high
+// in the tunnel the target looks.
+//
+// Measured over 80 to 140 units, where a row spans about two world units of
+// height: a volley aimed dead on the target's height held 82% a full column out
+// horizontally, while aimed dead on its column it was already down to 39% half a
+// row out vertically. One row of slack takes the vertical to 100% there, and does
+// not turn the axis off - a shot a row clear of the target still misses a third
+// of the time, one a row and a half clear misses four times in five, and one two
+// rows clear never lands at all.
+const SHOT_SLACK_ROWS=1;
 // Seconds a combo chain survives without a kill before it drops to nothing.
 const COMBO_TIME=2;
 // The highest multiplier a chain can reach. Without a ceiling the chain barely
@@ -717,6 +737,9 @@ class Game{
       // ratio of the two scales holds the column the shot was fired at.
       b.x*=this.projScale(fromZ)/this.projScale(b.z);
       const aimX=b.x*this.projScale(b.z);
+      // Bullet bbox: 1 col wide, 2 rows tall. Both axes carry a cell of slack
+      // around the target's block, because both are floored to a cell and neither
+      // is readable to that precision in play.
       let hit=false;
       if(!s.debugMode||s.debugMode==='obstacleCollision'||s.debugMode==='chaos'){
         for(let j=s.obstacles.length-1;j>=0;j--){
@@ -730,7 +753,8 @@ class Game{
           const size=max(1,floor(scale*2.5));
           const half=floor(size/2);
           if(abs(bScr.col-oScr.col)<=half+SHOT_SLACK_COLS&&
-             bScr.row>=oScr.row-half&&bScr.row-1<=oScr.row+half){
+             bScr.row>=oScr.row-half-SHOT_SLACK_ROWS&&
+             bScr.row-1<=oScr.row+half+SHOT_SLACK_ROWS){
             this.spawnParticles(o.x,o.y,o.z,208,12);
             if(s.debugMode==='chaos')s.trackerCount++;
             // The collision-tracking modes are not scored, so a kill in one of
@@ -755,7 +779,8 @@ class Game{
           const size=max(1,floor(scale*2.5));
           const half=floor(size/2);
           if(abs(bScr.col-mScr.col)<=half+SHOT_SLACK_COLS&&
-             bScr.row>=mScr.row-half&&bScr.row-1<=mScr.row+half){
+             bScr.row>=mScr.row-half-SHOT_SLACK_ROWS&&
+             bScr.row-1<=mScr.row+half+SHOT_SLACK_ROWS){
             m.hp-=1;this.spawnParticles(m.x,m.y,m.z,9,5);
             if(m.hp<=0){
               this.spawnParticles(m.x,m.y,m.z,9,20);

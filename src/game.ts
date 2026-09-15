@@ -4,7 +4,7 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, SHOT_SLACK_COLS,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, SHOT_SLACK_COLS, SHOT_SLACK_ROWS,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
@@ -697,7 +697,9 @@ export class Game {
       b.x *= this.projScale(fromZ) / this.projScale(b.z);
       const aimX = b.x * this.projScale(b.z);
 
-      // Bullet bbox: 1 col wide, 2 rows tall → (bCol, bRow-1) to (bCol, bRow)
+      // Bullet bbox: 1 col wide, 2 rows tall → (bCol, bRow-1) to (bCol, bRow).
+      // Both axes carry a cell of slack around the target's block, because both
+      // are floored to a cell and neither is readable to that precision in play.
       let hit = false;
 
       // Bullet-obstacle collision (2D character-grid overlap at the crossing)
@@ -714,7 +716,8 @@ export class Game {
           const half = floor(size / 2);
           // bullet col in obstacle col range, and bullet row range overlaps obstacle row range
           if (abs(bScr.col - oScr.col) <= half + SHOT_SLACK_COLS &&
-              bScr.row >= oScr.row - half && bScr.row - 1 <= oScr.row + half) {
+              bScr.row >= oScr.row - half - SHOT_SLACK_ROWS &&
+              bScr.row - 1 <= oScr.row + half + SHOT_SLACK_ROWS) {
             this.spawnParticles(o.x, o.y, o.z, 208, 12);
             if (s.debugMode === 'chaos') s.trackerCount++;
             const dm = s.debugMode as string | null;
@@ -746,7 +749,8 @@ export class Game {
           const size = max(1, floor(scale * 2.5));
           const half = floor(size / 2);
           if (abs(bScr.col - mScr.col) <= half + SHOT_SLACK_COLS &&
-              bScr.row >= mScr.row - half && bScr.row - 1 <= mScr.row + half) {
+              bScr.row >= mScr.row - half - SHOT_SLACK_ROWS &&
+              bScr.row - 1 <= mScr.row + half + SHOT_SLACK_ROWS) {
             m.hp -= 1;
             this.spawnParticles(m.x, m.y, m.z, 9, 5);
             if (m.hp <= 0) {

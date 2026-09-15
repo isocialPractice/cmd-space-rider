@@ -137,7 +137,7 @@ frames.
 - **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
-- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's three-column spread covers most of that for you. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit.
+- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's three-column spread covers most of that for you. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. Height is the forgiving axis: the tunnel's whole height is squashed into a few rows out at distance, and the ship's glyph and the target's sit at different scales, so there is nothing to line up the way the columns line up. Get the ship roughly as high in the tunnel as the target looks and the shot counts; misjudge it by a couple of characters and nothing lands.
 - **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on up to `COMBO x8`, where the multiplier stops climbing. Further kills still hold the chain open, they just do not raise it. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
 - **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
 - **Survive** &mdash; The game ends when shield reaches 0.
@@ -209,8 +209,11 @@ of the change rather than the size of the file. The file is tracked, so a clone
 needs nothing configured.
 
 Adding a new dotfile is the one thing that can need a local step. A global
-excludes file of the `.*` kind hides it from `git add` with no error and no
-output, so if a dotfile you staged never appears in `git status`, check it with
+excludes file of the `.*` kind will hide it, and how you find out depends on how
+you staged it: `git add <file>` names the path, so git refuses it out loud and
+points at `-f`, while a bulk `git add .` or `git add -A` passes over it without
+a word. The quiet case is the one to watch for - if a dotfile you thought you
+staged never appears in `git status`, check it with
 `git check-ignore -v --no-index <file>` and stage it with `git add -f <file>`.
 
 ### Tests
