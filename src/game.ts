@@ -4,10 +4,10 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, SHOT_SLACK_COLS, SHOT_SLACK_ROWS,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols,
 } from './types';
 
-const { PI, sin, cos, sqrt, abs, max, min, floor, random, atan2 } = Math;
+const { PI, sin, cos, sqrt, abs, max, min, floor, ceil, random, atan2 } = Math;
 const TAU = PI * 2;
 const rand = (a = 0, b = 1): number => a + random() * (b - a);
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -21,6 +21,19 @@ const Y_FACTOR = 0.4;
 // Ship sprite bounding-box half-sizes (matches drawShip in render.ts)
 const SHIP_HALF_W = 1; // ship drawn cols cx-1 .. cx+1
 const SHIP_HALF_H = 1; // ship drawn rows cy-1 .. cy+1
+
+/**
+ * The furthest the hit test's sweep lets a shot and its target close on each
+ * other between two samples, in world units.
+ *
+ * The contact it looks for is a pair of cells meeting on the screen, and a cell
+ * is worth well under a unit of depth at the ranges a shot is taken at, so a
+ * frame tested only at its ends can step a tracer clean over a block and never
+ * know. Three quarters of a unit keeps every sample inside a cell at thirty
+ * frames a second and still holds at a sixth of a second a frame, which is
+ * slower than anything the game runs at.
+ */
+const SWEEP_STEP = 0.75;
 
 export class Game {
   state: GameState;
@@ -634,19 +647,96 @@ export class Game {
   }
 
   /**
-   * How far into the frame just stepped a shot crossed an entity's depth, as a
-   * fraction of that step, or null when it did not cross it. Both ends move -
-   * the shot outward by its travel, the entity inward by `advance` - so the
-   * gap between them only ever closes and there is at most one crossing per
-   * frame. `entityZ` is where the entity finished the frame, so subtracting
-   * `advance` is where it started it.
+   * Whether a shot's tracer met a target's block on the screen at any point in
+   * the frame just stepped.
+   *
+   * The screen is the whole of the hit test, because the screen is the whole of
+   * what the player has. `drawBullets` puts the tracer on two cells, the row it
+   * is projected to and the row above; `drawEntitiesFar` gives a target a block
+   * of `size` cells about its own projected centre. The two either share a cell
+   * or they do not, and a target that is not being drawn at all cannot be shot.
+   *
+   * Depth is not compared. Shot and target are drawn at their own depths, so
+   * two things a frame apart in depth can be a cell apart on the screen and two
+   * things level in depth can be rows apart; testing them on one projected
+   * plane, as this used to, asks a question the player is never shown the
+   * answer to. A kill therefore lands with the shot well off the target's
+   * depth, tens of units either way, which is what this projection draws.
+   *
+   * Columns keep their slack and rows have none. A column is countable on the
+   * screen and a row is not - Y_FACTOR squashes the tunnel's height, and a
+   * target's row moves at its depth's scale while the ship's moves at full
+   * scale - so a row of slack was buying an aim the player could not have
+   * taken. Under the contact rule height stops deciding a kill at all: a tracer
+   * climbs its whole column and meets whatever is drawn in it.
+   *
+   * The frame is swept rather than sampled at its ends, so a long `dt` cannot
+   * carry a tracer over a block between two frames and leave the pair untested.
+   * Both sides move: the shot outward by its travel, the target inward by
+   * `advance`, which `updateObstacles` has already applied by the time this
+   * runs - so the target started the frame at `tz - advance`.
    */
-  private crossing(fromZ: number, toZ: number, entityZ: number, advance: number): number | null {
-    const gapBefore = fromZ - (entityZ - advance);
-    const gapAfter = toZ - entityZ;
-    if (gapBefore < 0 || gapAfter > 0) return null;
-    const closed = gapBefore - gapAfter;
-    return closed <= 0 ? 0 : gapBefore / closed;
+  private contacts(
+    aimX: number, bulletY: number, bulletFromZ: number, travel: number,
+    tx: number, ty: number, tz: number, advance: number, slackCols: number
+  ): boolean {
+    const s = this.state;
+    const gameTop = HUD_ROWS;
+    const gameBottom = s.screenHeight - FOOTER_ROWS;
+
+    // Holding the firing column means the shot's own column is constant for the
+    // whole flight, so it is worth one projection rather than one per sample.
+    const bCol = this.toScreen(aimX / this.projScale(bulletFromZ), bulletY, bulletFromZ).col;
+
+    // A target's column and its block both grow with its scale, which is
+    // monotonic in depth, so the frame's two ends bound everything between
+    // them: a bullet column outside that bound cannot touch the block at any
+    // point of the frame, and the sweep below can be skipped outright.
+    //
+    // The bound is the distance to the span the two ends enclose, not the
+    // nearer of the two distances. The column the target passes through mid
+    // frame is nearer than either end whenever the shot's column lies between
+    // them, so taking the nearer end skips a contact the sweep would have
+    // found - by measurement, 703 of 7625 contacts at 205x50 at a sixth of a
+    // second a frame, which is the slowest rate the suite walks.
+    let widest = -1;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const z of [tz - advance, tz]) {
+      widest = max(widest, floor(max(1, floor(this.projScale(z) * 2.5)) / 2));
+      const col = this.toScreen(tx, ty, z).col;
+      lo = min(lo, col);
+      hi = max(hi, col);
+    }
+    const nearest = bCol < lo ? lo - bCol : bCol > hi ? bCol - hi : 0;
+    if (nearest > widest + slackCols) return false;
+
+    const steps = max(1, ceil((travel + advance) / SWEEP_STEP));
+    for (let k = 0; k <= steps; k++) {
+      const f = k / steps;
+      const targetZ = tz - advance * (1 - f);
+      // drawEntitiesFar draws nothing outside this depth band.
+      if (targetZ < -s.maxViewZ || targetZ > 5) continue;
+      const tScr = this.toScreen(tx, ty, targetZ);
+      if (tScr.row < gameTop || tScr.row >= gameBottom) continue;
+
+      const bulletZ = bulletFromZ - travel * f;
+      const bScr = this.toScreen(aimX / this.projScale(bulletZ), bulletY, bulletZ);
+      // drawBullets drops the whole tracer when its lower half is off the play
+      // area, and draws the upper half only when there is a row above for it.
+      if (bScr.row < gameTop || bScr.row >= gameBottom) continue;
+
+      const half = floor(max(1, floor(this.projScale(targetZ) * 2.5)) / 2);
+      if (abs(bScr.col - tScr.col) > half + slackCols) continue;
+
+      // The block is clipped to the play area as drawBlock clips it; the tracer
+      // is its own row and, where there is room for it, the row above.
+      const blockTop = max(gameTop, tScr.row - half);
+      const blockBottom = min(gameBottom - 1, tScr.row + half);
+      const tracerTop = bScr.row - 1 >= gameTop ? bScr.row - 1 : bScr.row;
+      if (tracerTop <= blockBottom && bScr.row >= blockTop) return true;
+    }
+    return false;
   }
 
   /**
@@ -677,13 +767,14 @@ export class Game {
    * drawBullets in render.ts stops drawing the tracer there instead, and says
    * why the flight may not be cut short with it.
    *
-   * The hit is then resolved at the depth where the shot crossed the target
-   * rather than wherever the frame happened to leave it, so both are projected
-   * on one plane and the comparison holds at any frame rate.
+   * What a shot then registers against is decided on the screen, by `contacts`
+   * above: a tracer drawn on a target's block destroys it, and one that is not
+   * drawn on it does not.
    */
   private updateBullets(dt: number, advance: number): void {
     const s = this.state;
     const travel = 60 * dt;
+    const slackCols = shotSlackCols(s.screenWidth);
 
     for (let i = s.bullets.length - 1; i >= 0; i--) {
       const b = s.bullets[i];
@@ -697,75 +788,49 @@ export class Game {
       b.x *= this.projScale(fromZ) / this.projScale(b.z);
       const aimX = b.x * this.projScale(b.z);
 
-      // Bullet bbox: 1 col wide, 2 rows tall → (bCol, bRow-1) to (bCol, bRow).
-      // Both axes carry a cell of slack around the target's block, because both
-      // are floored to a cell and neither is readable to that precision in play.
       let hit = false;
 
-      // Bullet-obstacle collision (2D character-grid overlap at the crossing)
+      // Bullet-obstacle collision, taken on the screen the player is watching.
       if (!s.debugMode || s.debugMode === 'obstacleCollision' || s.debugMode === 'chaos') {
         for (let j = s.obstacles.length - 1; j >= 0; j--) {
           const o = s.obstacles[j];
-          const u = this.crossing(fromZ, b.z, o.z, advance);
-          if (u === null) continue;
-          const hitZ = fromZ - u * travel;
-          const scale = this.projScale(hitZ);
-          const bScr = this.toScreen(aimX / scale, b.y, hitZ);
-          const oScr = this.toScreen(o.x, o.y, hitZ);
-          const size = max(1, floor(scale * 2.5));
-          const half = floor(size / 2);
-          // bullet col in obstacle col range, and bullet row range overlaps obstacle row range
-          if (abs(bScr.col - oScr.col) <= half + SHOT_SLACK_COLS &&
-              bScr.row >= oScr.row - half - SHOT_SLACK_ROWS &&
-              bScr.row - 1 <= oScr.row + half + SHOT_SLACK_ROWS) {
-            this.spawnParticles(o.x, o.y, o.z, 208, 12);
-            if (s.debugMode === 'chaos') s.trackerCount++;
-            const dm = s.debugMode as string | null;
-            // The collision-tracking modes are not scored, so a kill in one of
-            // them carries no multiplier and never starts a chain either.
-            if (dm !== 'obstacleCollision' && dm !== 'mineCollision') {
-              s.score += 200 * this.registerKill();
-            }
-            o.z = -RECYCLE_Z + rand(-10, 10);
-            s.bullets.splice(i, 1);
-            hit = true;
-            break;
+          if (!this.contacts(aimX, b.y, fromZ, travel, o.x, o.y, o.z, advance, slackCols)) continue;
+          this.spawnParticles(o.x, o.y, o.z, 208, 12);
+          if (s.debugMode === 'chaos') s.trackerCount++;
+          const dm = s.debugMode as string | null;
+          // The collision-tracking modes are not scored, so a kill in one of
+          // them carries no multiplier and never starts a chain either.
+          if (dm !== 'obstacleCollision' && dm !== 'mineCollision') {
+            s.score += 200 * this.registerKill();
           }
+          o.z = -RECYCLE_Z + rand(-10, 10);
+          s.bullets.splice(i, 1);
+          hit = true;
+          break;
         }
       }
 
       if (hit) continue;
 
-      // Bullet-mine collision (2D character-grid overlap at the crossing)
+      // Bullet-mine collision, on the same rule.
       if (!s.debugMode || s.debugMode === 'mines' || s.debugMode === 'mineCollision' || s.debugMode === 'chaos') {
         for (let j = s.mines.length - 1; j >= 0; j--) {
           const m = s.mines[j];
-          const u = this.crossing(fromZ, b.z, m.z, advance);
-          if (u === null) continue;
-          const hitZ = fromZ - u * travel;
-          const scale = this.projScale(hitZ);
-          const bScr = this.toScreen(aimX / scale, b.y, hitZ);
-          const mScr = this.toScreen(m.x, m.y, hitZ);
-          const size = max(1, floor(scale * 2.5));
-          const half = floor(size / 2);
-          if (abs(bScr.col - mScr.col) <= half + SHOT_SLACK_COLS &&
-              bScr.row >= mScr.row - half - SHOT_SLACK_ROWS &&
-              bScr.row - 1 <= mScr.row + half + SHOT_SLACK_ROWS) {
-            m.hp -= 1;
-            this.spawnParticles(m.x, m.y, m.z, 9, 5);
-            if (m.hp <= 0) {
-              this.spawnParticles(m.x, m.y, m.z, 9, 20);
-              this.cue('mine');
-              if (s.debugMode === 'chaos') s.trackerCount++;
-              const dm2 = s.debugMode as string | null;
-              if (dm2 !== 'obstacleCollision' && dm2 !== 'mineCollision') {
-                s.score += 500 * this.registerKill();
-              }
-              s.mines.splice(j, 1);
+          if (!this.contacts(aimX, b.y, fromZ, travel, m.x, m.y, m.z, advance, slackCols)) continue;
+          m.hp -= 1;
+          this.spawnParticles(m.x, m.y, m.z, 9, 5);
+          if (m.hp <= 0) {
+            this.spawnParticles(m.x, m.y, m.z, 9, 20);
+            this.cue('mine');
+            if (s.debugMode === 'chaos') s.trackerCount++;
+            const dm2 = s.debugMode as string | null;
+            if (dm2 !== 'obstacleCollision' && dm2 !== 'mineCollision') {
+              s.score += 500 * this.registerKill();
             }
-            s.bullets.splice(i, 1);
-            break;
+            s.mines.splice(j, 1);
           }
+          s.bullets.splice(i, 1);
+          break;
         }
       }
     }

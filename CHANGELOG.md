@@ -1,5 +1,114 @@
 # Changelog
 
+## [0.4.0-alpha] - 2026-09-16
+
+### Changed
+
+- The pulse cannon registers a hit on the screen rather than in the world. A
+  shot destroys what its tracer is drawn on and nothing else: the cells
+  `drawBullets` gives the tracer against the cells `drawEntitiesFar` gives a
+  target's block, with the column slack either side and no row slack, and only
+  for a target that is actually being drawn. Depth is no longer compared at all.
+  The old test projected shot and target onto the one plane where they crossed
+  in depth, which asks a question the player is never shown the answer to: the
+  two are drawn at their own depths, so a pair level in depth can be rows apart
+  on the screen and a pair a frame apart in depth can share a cell. A kill now
+  lands with the shot anywhere from 32 units in front of its target to 44
+  behind, against a band of 132 units behind to level with it before.
+- Height stops deciding a kill. A tracer climbs its whole column and meets
+  whatever is drawn in it, so the gap between the ship's height and the
+  target's no longer matters: walked at 205x50 over 60 to 140 units, the kill
+  rate by height gap was 16/18 level with the target, 24/35 a unit off, 3/27 two
+  off, 0/19 three off and 0/12 four off, and is now 18/18, 35/35, 27/27, 19/19
+  and 12/12. The same walk at 80x24 went from 19/19, 35/35, 27/29, 15/20 and
+  4/12 to 19/19, 35/35, 29/29, 20/20 and 12/12.
+- The column slack scales with the grid. Both faults it answers are measured in
+  columns and both grow with the window: a target's outward creep over a long
+  flight scales with `colRange`, which is 37 columns at 80 wide and 99.5 at 205,
+  so a target at x 4.5 shot at from 140 units creeps 2.44 columns at 80x24 and
+  7.28 at 205x50. A fixed column was a generous slack on a narrow grid and none
+  at all on a wide one. `shotSlackCols` holds it at a constant share of the
+  tunnel's width instead - still one column at 80x24 and at the 60x20 floor, and
+  three at 205x50. At 205x50 that took a lone shot at 60 to 140 from 24/56 to
+  42/56 and the volley from 50/56 to 56/56, with the share of kills whose tracer
+  was neither on the block nor within the slack beside it unchanged at nil.
+- The frame is swept rather than sampled at its two ends. A contact is a pair of
+  cells meeting, and a cell is worth well under a unit of depth, so a long `dt`
+  could step a tracer clean over a block between frames. `SWEEP_STEP` samples
+  every three quarters of a unit of closure. Walked over 300 staged shots at
+  each grid, aimed at the target and a column past everything the hit test
+  allows, and flown at 1/60, 1/30, 1/20, 1/12 and 1/6 of a second a frame, no
+  shot changes its verdict with the rate. The cheap column test that skips the
+  sweep bounds the whole frame and not only its ends: the target's column moves
+  monotonically across the frame, so it passes nearer the shot mid-frame than at
+  either end whenever the shot's column lies between the two, and measuring the
+  distance to the nearer end instead dropped 703 of 7625 contacts at 205x50 at a
+  sixth of a second a frame.
+
+### Fixed
+
+- A tracer drawn through a block destroyed nothing about one time in five, which
+  is the fault the screen capture behind this work caught. Walked over 30
+  placements a band at ship heights 0, 1, 2.5 and 4.5, the engine as it stood
+  left a target standing under a tracer drawn on its own cells on 4 flights of
+  92 at 20 to 60 units and 15 of 116 at 60 to 140, both at 80x24, and on 33 of
+  87 and 28 of 112 at 205x50. It is now nil in all four. Flown as the capture
+  was - ship held on the floor, lined up by column and nothing else - the kill
+  rate went from 23/25 and 24/29 at 80x24 to 26/26 and 29/29, and from 9/26 and
+  8/28 at 205x50 to 24/26 and 28/28.
+- The suite was pinned at 80x24 alone and passed while the game a player sees
+  missed. Replayed against the engine as it stood, five of its six range bands
+  fell below their own floors at 205x50: a lone shot at 35 to 80 landed 43/52
+  against a floor of 90%, at 80 to 140 it landed 15/57 against 65%, the volley
+  at 80 to 140 landed 45/57 against 90%, and the two bands flown by eye landed
+  26/37 and 18/38 against 95% and 90%. The same bands now land 52/52, 38/57,
+  56/57, 37/37 and 38/38.
+- The engagement checks run at three grids: the 80x24 a terminal opens at, the
+  60x20 floor the browser build clamps a small window to, and the 205x50 a
+  full-screen window gives at the default font. The floors that legitimately
+  differ by grid are written per grid rather than levelled down to whichever
+  size is hardest.
+
+### Added
+
+- `test/engagement.mjs`, holding one pulse cannon engagement flown at whatever
+  grid the caller names. The tests and the probes fly the same flight out of it,
+  and the floors the bands are pinned at live there with it, so a floor a test
+  pins and a figure a probe prints cannot drift apart. `suite-replay` reads those
+  floors rather than carrying its own copy, and says "unpinned here" at a grid
+  the suite pins nothing at, which is the size a floor is checked at before a
+  test is written for it.
+- `test/probes/`, run by `npm run probe -- <name> [--grid WxH] [--build <name>]`.
+  Four probes: `seen-versus-kill`, which asks whether a kill agrees with what
+  the screen drew; `suite-replay`, which runs the test file's own bands at a
+  given grid; `frame-rate`, which walks a staged shot across five frame rates;
+  and `column`, which reports the volley's spread, a target's column creep and
+  the far band's kill rate with the contact shares beside it. Every probe prints
+  its method - grid, placement walk, ship heights, band and frame rate - above
+  its table, and runs against both real engines rather than a copy. `column`
+  takes over from the scratch horizontal probe the figures behind the old
+  vertical-slack table came from; the vertical one measured `SHOT_SLACK_ROWS`,
+  which is gone, and has nothing left to measure.
+- `shotSlackCols` and `SLACK_REF_WIDTH` in both builds. The parity test pins the
+  two builds to the same slack at every width from 60 to 240, since the slack is
+  now a function of the grid rather than a number.
+- Checks for what the screen showed, per build and per grid: that a tracer drawn
+  on a block always destroys it, that nothing is destroyed by a tracer that
+  never reached it, and that height is not an aiming axis. All three read the
+  rendered grid, with the block taken from a render with the volley out of the
+  way - `drawBullets` runs after `drawEntitiesFar` and a tracer standing on the
+  block replaces the very cell the reading is about.
+
+### Removed
+
+- `SHOT_SLACK_ROWS`, from both builds and from the parity test. Its premise was
+  that one row spans about two world units of height, which is an 80x24
+  measurement: at 205x50 a row is 0.7 to 1.1 units across the same band. Under
+  the screen rule there is nothing for it to forgive, since a tracer meets
+  whatever is drawn in its column at any height. Its table of what a vertical
+  error cost went with it, and with it the open review finding that the table
+  could not be reproduced from anything the repository shipped.
+
 ## [0.3.7-alpha] - 2026-09-15
 
 ### Fixed
@@ -8,8 +117,10 @@
   hit test carried a column of slack either side of a target's block and none at
   all above or below it, so the axis a player can read off the screen was the
   forgiving one and the axis they cannot read demanded sub-cell precision.
-  Measured at 80 to 140 units out, where one row spans about two world units of
-  height: a volley aimed dead on the target's height still landed 82% of the
+  Measured at 80 to 140 units out on an 80x24 grid, where one row spans about
+  two world units of height - a fact about that grid rather than about the
+  game, and nearer one unit a row on the 205x50 a full-screen browser window
+  gives: a volley aimed dead on the target's height still landed 82% of the
   time a whole column wide, while the same volley aimed dead on the target's
   column landed 95% at a tenth of a world unit of vertical error, 73% at half a
   unit and 39% at a whole one - half a row of vertical error costing more than
@@ -21,11 +132,12 @@
   two never meet on a row even when the shot is dead on. The columns have no
   such problem: ship and target sit in countable columns and can be lined up by
   eye.
-- The slack forgives a misread, not an aim. At that range a shot a row clear of
-  the target - two world units - still misses a third of the time, one a row and
-  a half clear misses four times in five, and one two rows clear, which is a
-  target at the floor of the tunnel shot at from the roof, never lands at all.
-  Nearer in the block is taller than a cell and the fall-off starts later still.
+- The slack forgives a misread, not an aim. At that range and on that grid a
+  shot a row clear of the target - two world units there - still misses a third
+  of the time, one a row and a half clear misses four times in five, and one two
+  rows clear, which is a target at the floor of the tunnel shot at from the roof,
+  never lands at all. Nearer in the block is taller than a cell and the fall-off
+  starts later still.
 - `TRACER_FLIGHTS` pinned the left wall's climbed-row floor at 0, which pins
   nothing: `firstRow - lastRow` cannot go below zero, so that row passed a
   tracer drawn on a single row and passed one never drawn at all. The comment
