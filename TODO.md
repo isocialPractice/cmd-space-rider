@@ -67,6 +67,44 @@ its origin survives archiving into `## Complete`.
     it, by forcing `contacts` to false and confirming it fails.
   - From: UI/UX Override - the pulse cannon in a real browser window
 
+### Code Review Override - a kill registered where the tracer was never drawn
+
+#### Resolve Issues
+
+- [ ] Unlit Tracer Kill 1
+  - **Issue**: `contacts` decides a kill on the cells `drawBullets` would put
+    down, but does not apply the clip `drawBullets` applies. A tracer whose
+    column has left the corridor is not drawn at all (`src/render.ts:276`), and
+    `contacts` never asks (`src/game.ts:679`). `drawEntitiesFar` draws a
+    target's block whether or not the corridor reaches it, so on one of those
+    frames the player sees the block, sees no bolt, and the block dies anyway.
+    Walked as geometry at dt 1/60 over every firing column the ship can hold,
+    every depth in a shot's life and every legal target placement: at 80x24,
+    2796 of 28320 undrawn-tracer frames can still register a kill - a shot at
+    screen column 17 of row 14 (aim x -4.91, y 0, z -59) registers against a
+    target at x -4.50, y 4.06, z -2. It is not introduced here: at 80x24 and
+    60x20 the scaled slack is still one column and the figure is the same
+    either way. It is widened here - at 205x50 the scaling took it from 74
+    configurations to 296.
+  - **Goal**: Decide whether the corridor clip belongs in the hit test, then
+    make the code, both docstrings and the check say the same thing. It is not
+    free: `drawBullets` records that the drawn span "runs a little narrower than
+    the tunnel radius projects to, so culling the bullet on it would cost real
+    hits at the far end", so testing `contacts` against that span moves every
+    kill rate the `0.4.0-alpha` entry pins. Measure it with
+    `npm run probe -- suite-replay` and the column probe before choosing, and
+    move the floors in `AIMED_BANDS`, `VOLLEY_BAND` and `EYE_BANDS` in
+    `test/engagement.mjs` with it. If the clip is deliberately left out of the
+    hit test, say so where the rule is stated - `updateBullets`'s "one that is
+    not drawn on it does not", in both builds - rather than stating a rule the
+    code does not hold. Either way, split `contactOf`'s `clear` verdict into a
+    tracer drawn wide of the block and a tracer not drawn at all: the two share
+    one bucket today, so "nothing is destroyed by a tracer that never reached
+    it" allows 5% of kills there and attributes them in its comment to
+    mid-sweep contacts, and the share that is this fault is not known. Both
+    builds together, as `test/parity.test.mjs` expects.
+  - From: User Overrides
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
