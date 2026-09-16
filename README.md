@@ -137,7 +137,7 @@ frames.
 - **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
-- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's three-column spread covers most of that for you. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. Height is the forgiving axis: the tunnel's whole height is squashed into a few rows out at distance, and the ship's glyph and the target's sit at different scales, so there is nothing to line up the way the columns line up. Get the ship roughly as high in the tunnel as the target looks and the shot counts; misjudge it by a couple of characters and nothing lands.
+- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's spread covers most of that for you, and it widens with the window as the drift does. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. Height is not an aiming axis at all. A shot registers where its tracer is drawn on the target and nowhere else, and a tracer climbs its whole column, so it meets whatever is drawn in that column however high or low in the tunnel the two of you are. What you see is what counts: a bolt drawn through a block destroys it, and one drawn past it does not.
 - **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on up to `COMBO x8`, where the multiplier stops climbing. Further kills still hold the chain open, they just do not raise it. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
 - **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
 - **Survive** &mdash; The game ends when shield reaches 0.
@@ -172,6 +172,8 @@ cmd-space-rider/
     types.ts        # Type definitions, shared constants, color constants
   test/
     helpers.mjs                 # Shared test rigging
+    engagement.mjs              # One pulse cannon engagement, at any grid
+    probes/                     # Figures the comments and tests quote, reported
     browser-engine.test.mjs     # Browser build behaviour
     terminal-engine.test.mjs    # Terminal build behaviour
     input.test.mjs              # Terminal input decoding and key repeat
@@ -198,6 +200,15 @@ npm run dev        # Build and run in one step
 npm run debug      # Build and run in debug mode
 npm run watch      # Watch mode for development
 npm test           # Build, then run the test suite
+npm run probe      # Build, then run a measurement probe
+```
+
+`npm run probe` with no arguments lists what there is to measure. Each probe
+takes a grid and a build:
+
+```bash
+npm run probe -- seen-versus-kill
+npm run probe -- column --grid 205x50 --build browser
 ```
 
 ### Line Endings
@@ -226,6 +237,25 @@ builds first. The browser build is a single self-contained `index.html` with no
 module boundary to import, so those tests read the file and evaluate its inline
 script up to the point where it starts touching the DOM. Everything above that
 line is game logic and rendering, which is what gets exercised.
+
+The pulse cannon checks run at three grid sizes rather than one: the 80x24 a
+terminal opens at, the 60x20 floor a small browser window is clamped to, and the
+205x50 a full-screen window gives at the default font. The hit test is not
+size-neutral - a row is worth about two world units of height at 80x24 and about
+one at 205x50 - so a check pinned at one size can pass while the game a player
+sees misses.
+
+### Probes
+
+A probe reports; it never asserts. The figures quoted in comments, tests and the
+changelog come from `test/probes/`, so a number can be rebuilt from the
+repository rather than taken on trust, and a number moving is something you read
+rather than a build that fails. Each probe prints its own method - the grid, the
+placement walk, the ship heights, the band and the frame rate - above its table.
+
+Probes and tests fly the same engagement, out of `test/engagement.mjs`, and both
+run against the two real engines. A figure taken off a scratch copy of the
+engine can be right about the copy and wrong about the game.
 
 ## Terminal Requirements
 

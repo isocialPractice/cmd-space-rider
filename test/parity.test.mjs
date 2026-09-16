@@ -36,7 +36,20 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.COMBO_TIME, terminalTypes.COMBO_TIME);
   assert.equal(browser.COMBO_MAX, terminalTypes.COMBO_MAX);
   assert.equal(browser.SHOT_SLACK_COLS, terminalTypes.SHOT_SLACK_COLS);
-  assert.equal(browser.SHOT_SLACK_ROWS, terminalTypes.SHOT_SLACK_ROWS);
+  assert.equal(browser.SLACK_REF_WIDTH, terminalTypes.SLACK_REF_WIDTH);
+});
+
+test('both builds scale the column slack the same way', () => {
+  // The slack the hit test reads is a function of the grid rather than a
+  // constant, so the two builds have to agree on the function and not only on
+  // the number it is built from. Walked from the 60 columns the browser build
+  // clamps a small window to, out past the 205 a full-screen window gives it.
+  for (let width = 60; width <= 240; width++) {
+    assert.equal(
+      browser.shotSlackCols(width), terminalTypes.shotSlackCols(width),
+      `column slack at ${width} wide`
+    );
+  }
 });
 
 test('both builds agree on the colour constants', () => {

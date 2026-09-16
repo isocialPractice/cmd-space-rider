@@ -75,7 +75,8 @@ export const ROLL_COOLDOWN = 1.2;
 
 /**
  * Columns of slack the pulse cannon's hit test allows either side of a target's
- * drawn block.
+ * drawn block, at the 80-column grid every figure in this repository was first
+ * measured on. `shotSlackCols` below is what the hit test reads.
  *
  * Past about 47 units out a target's block is a single character, so without
  * slack a shot has to land on one exact column. Two things go wrong with that.
@@ -85,52 +86,35 @@ export const ROLL_COOLDOWN = 1.2;
  * flight, which over a long one comes to about a column of lead the player has
  * no way to measure.
  *
- * One column covers both: the shot registers where it passes through the
- * target's block or immediately beside it. Two was measured as well and buys
- * little past what the three-shot volley's own spread already covers, at the
- * cost of counting a shot that visibly clears the target by a character.
+ * One column covers both at 80 wide: the shot registers where it passes through
+ * the target's block or immediately beside it. Two was measured as well and
+ * buys little past what the three-shot volley's own spread already covers, at
+ * the cost of counting a shot that visibly clears the target by a character.
  */
 export const SHOT_SLACK_COLS = 1;
 
+/** The grid width SHOT_SLACK_COLS was measured at. */
+export const SLACK_REF_WIDTH = 80;
+
 /**
- * Rows of slack the pulse cannon's hit test allows above and below a target's
- * drawn block, matching SHOT_SLACK_COLS on the other axis.
+ * The slack that constant is worth at the grid actually being played.
  *
- * The flooring argument above applies to rows exactly as it does to columns,
- * and the vertical is the worse of the two for a player. A column is something
- * they can read off the screen: the ship's glyph and the target's glyph sit in
- * countable columns and can be lined up by eye. A row cannot be read that way,
- * because Y_FACTOR squashes the tunnel's height and the target's row moves at
- * the depth's scale while the ship's moves at full scale, so the two glyphs
- * never meet on a row even when the shot is dead on. All the player has to aim
- * by is how high in the tunnel the target looks.
+ * Both of the faults it answers are measured in columns and both grow with the
+ * grid. A target's outward creep over a long flight scales with `colRange`,
+ * which is 37 columns at 80 wide and 99.5 at 205, so the same flight that ends
+ * a column out at 80 ends nearly three columns out on a full-screen browser
+ * window. A fixed column of slack is therefore a wide slack on a narrow screen
+ * and no slack at all on a wide one, and the long band fell from 98% to 83%
+ * across exactly that change of grid.
  *
- * What the two axes cost was measured the same way, by aiming dead on one axis
- * and biasing the ship off the target on the other before firing. Out at 80 to
- * 140 units one row spans about two world units of height, which is what makes
- * the two columns below comparable:
- *
- *     vertical error   before   after      horizontal error   unchanged
- *     0.1 units          95%     100%      1 column               82%
- *     0.5 units          73%     100%      2 columns              59%
- *     1.0 units          39%     100%      3 columns              45%
- *     1.5 units           9%     100%      4 columns              14%
- *     2.0 units           0%      68%
- *     3.0 units           0%      22%
- *     4.0 units           0%       0%
- *
- * That is the fault this constant answers. The horizontal test held 82% a whole
- * column out, while the vertical was down to 39% at a world unit - half a row,
- * half a character - so the axis the player cannot read was the one asking for
- * sub-cell precision.
- *
- * A row of slack does not turn the axis off. A shot a row clear of the target
- * still misses a third of the time, one a row and a half clear misses four
- * times in five, and one two rows clear - a target at the floor of the tunnel
- * shot at from the roof - never lands at all. Nearer in the block is taller
- * than a cell and the fall-off starts later still.
+ * Scaling it by `colRange` holds the slack at a constant share of the tunnel's
+ * width instead, which is the thing the creep is a share of. It never falls
+ * below the one column a narrow grid needs for the flooring alone.
  */
-export const SHOT_SLACK_ROWS = 1;
+export function shotSlackCols(screenWidth: number): number {
+  const scaled = SHOT_SLACK_COLS * ((screenWidth - 6) / (SLACK_REF_WIDTH - 6));
+  return Math.max(SHOT_SLACK_COLS, Math.round(scaled));
+}
 
 /** Seconds a combo chain survives without a kill before it drops to nothing. */
 export const COMBO_TIME = 2;
