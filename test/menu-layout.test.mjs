@@ -15,6 +15,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
@@ -267,3 +268,141 @@ for (const build of BUILDS) {
     assert.notEqual(dim, lit, `the hint should change colour across the pulse, saw ${lit} both times`);
   });
 }
+
+// ----- Fitting the grid into a browser window -----
+//
+// Browser only: the CLI build's grid is the terminal's own, and a terminal
+// cannot be smaller than the grid it is showing. A canvas can, and clamping
+// the grid up to the 60x20 floor built a buffer the window had no room for
+// and painted the overflow where nothing displayed it. What went was the
+// right of the HUD, taking the SHIELD readout, and the whole footer with the
+// control hints and the speed - with nothing on screen saying so.
+
+/** A cell the size Courier New draws at a given font size, near enough. */
+const modelCell = (size) => ({ w: Math.max(1, Math.ceil(size * 0.6)), h: size + browser.CELL_LEADING });
+
+/** Window sizes the fitting is walked over, in device pixels. */
+const WINDOWS = [];
+for (let px = 120; px <= 1920; px += 17) WINDOWS.push({ w: px, h: Math.max(80, Math.round(px * 0.6)) });
+
+test('browser: the grid the buffer is built at always fits the window', () => {
+  // The fault itself, stated as the invariant it broke: every cell the buffer
+  // holds has somewhere on the canvas to be drawn. Measured against the grid
+  // rather than against the window, because the grid is what the renderer
+  // writes into and the buffer is what the overflow was lost from.
+  for (const win of WINDOWS) {
+    const grid = browser.fitGrid(win.w, win.h, modelCell);
+    const painted = `${grid.cols * grid.cellW}x${grid.rows * grid.cellH}`;
+    assert.ok(
+      grid.cols * grid.cellW <= win.w && grid.rows * grid.cellH <= win.h,
+      `${win.w}x${win.h} window: a ${grid.cols}x${grid.rows} grid paints ${painted}`
+    );
+    assert.ok(
+      grid.fontSize <= browser.FONT_SIZE && grid.fontSize >= browser.MIN_FONT_SIZE,
+      `${win.w}x${win.h} window: font ${grid.fontSize} is outside the range the page draws at`
+    );
+  }
+});
+
+test('browser: a window that can hold the floor at any font gets the whole grid', () => {
+  // The other half: shrinking the font is only worth doing if it is actually
+  // tried. A window with room for 60x20 at some font in the range has to come
+  // back fitting, whatever font that takes.
+  for (const win of WINDOWS) {
+    const grid = browser.fitGrid(win.w, win.h, modelCell);
+    const smallest = modelCell(browser.MIN_FONT_SIZE);
+    const couldFit = Math.floor(win.w / smallest.w) >= browser.MIN_WIDTH
+      && Math.floor(win.h / smallest.h) >= browser.MIN_HEIGHT;
+    assert.equal(
+      grid.fits, couldFit,
+      `${win.w}x${win.h} window: fits was ${grid.fits} with the floor ${couldFit ? '' : 'un'}reachable`
+    );
+    if (!grid.fits) continue;
+    assert.ok(
+      grid.cols >= browser.MIN_WIDTH && grid.rows >= browser.MIN_HEIGHT,
+      `${win.w}x${win.h} window: a fitting grid came back ${grid.cols}x${grid.rows}`
+    );
+  }
+});
+
+test('browser: the windows the fault was measured in now carry the whole screen', () => {
+  // The three sizes read off a real chromium window against the furthest
+  // painted cell. 600x360 showed the whole 60x20 grid; 500x320 lost 10 columns
+  // and 3 rows, and 380x240 lost 22 columns and 7 rows.
+  for (const win of [{ w: 600, h: 360 }, { w: 500, h: 320 }, { w: 380, h: 240 }]) {
+    const grid = browser.fitGrid(win.w, win.h, modelCell);
+    assert.ok(grid.fits, `${win.w}x${win.h}: should reach the floor`);
+
+    const game = new browser.Game();
+    game.startGame();
+    game.state.stars = [];
+    game.state.screenWidth = grid.cols;
+    game.state.screenHeight = grid.rows;
+    const screen = new browser.ScreenBuffer(grid.cols, grid.rows);
+    browser.renderGame(screen, game.state);
+    const rows = screenText(screen).split('\n');
+
+    // The two readouts the overflow took: SHIELD off the right of the HUD, and
+    // the speed off the footer. Both are drawn, and every cell of the buffer
+    // they are drawn in is inside the window.
+    assert.ok(rows.some((row) => row.includes('SHIELD:')), `${win.w}x${win.h}: SHIELD readout`);
+    assert.ok(rows.some((row) => row.includes('SPD:')), `${win.w}x${win.h}: speed readout`);
+    assert.ok(
+      grid.cols * grid.cellW <= win.w && grid.rows * grid.cellH <= win.h,
+      `${win.w}x${win.h}: the grid holding them paints outside the window`
+    );
+  }
+});
+
+test('browser: a window too small for the floor says so, inside its own buffer', () => {
+  // Below what the smallest font can reach, the page draws the notice the CLI
+  // build draws into a terminal too small for it. It is the one screen that
+  // has to survive a grid under the floor, so it is checked for writing
+  // nothing off the buffer it was given.
+  for (const win of [{ w: 240, h: 150 }, { w: 200, h: 120 }, { w: 120, h: 80 }]) {
+    const grid = browser.fitGrid(win.w, win.h, modelCell);
+    assert.equal(grid.fits, false, `${win.w}x${win.h}: should be under the floor`);
+
+    const { screen, outside } = recordingScreen(
+      { ScreenBuffer: browser.ScreenBuffer }, grid.cols, grid.rows
+    );
+    browser.renderTooSmall(screen);
+
+    const label = `${win.w}x${win.h} window, ${grid.cols}x${grid.rows} grid`;
+    assert.deepEqual(outside, [], `${label}: nothing should be written off the buffer`);
+    const text = screenText(screen);
+    assert.ok(text.includes('Window too small!'), `${label}: the notice should name the fault`);
+    assert.ok(
+      text.includes(`Need ${browser.MIN_WIDTH}x${browser.MIN_HEIGHT}`),
+      `${label}: the notice should give the size needed`
+    );
+    assert.ok(text.includes('Please resize'), `${label}: the notice should say what to do`);
+  }
+});
+
+test('browser: a window under the floor cuts the engine hum', () => {
+  // The notice freezes the run where it stood, which means `frame()` returns
+  // before it reaches `audio.frame` - and `audio.frame` is the only thing that
+  // ever stops the hum. Without a call on the way out, shrinking a running,
+  // unmuted window below the floor leaves the oscillator sounding at the pitch
+  // it was last set to for as long as the notice is up, while the run it
+  // belongs to is not advancing.
+  //
+  // `frame()` sits below the marker `loadBrowserEngine` stops at, so it is read
+  // off the page as source, the way the keypress wiring is in sound.test.mjs.
+  // The method it names is asked of the loaded engine, so a rename cannot leave
+  // this passing against a call that no longer resolves.
+  const html = readFileSync(join(REPO_ROOT, 'index.html'), 'utf8');
+  const start = html.indexOf('if(!gridFits){');
+  assert.ok(start > 0, 'the page should have a branch for a window under the floor');
+  const branch = html.slice(start, html.indexOf('\n  }', start));
+
+  assert.ok(
+    branch.includes('audio.engineOff()'),
+    'the too-small branch should stop the hum before it returns'
+  );
+  assert.equal(
+    typeof browser.RetroAudio.prototype.engineOff, 'function',
+    'and the method it calls should be the one the audio layer stops the hum with'
+  );
+});

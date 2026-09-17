@@ -137,7 +137,7 @@ frames.
 - **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
 - **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
 - **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
-- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's spread covers most of that for you, and it widens with the window as the drift does. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. Height is not an aiming axis at all. A shot registers where its tracer is drawn on the target and nowhere else, and a tracer climbs its whole column, so it meets whatever is drawn in that column however high or low in the tunnel the two of you are. What you see is what counts: a bolt drawn through a block destroys it, and one drawn past it does not.
+- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's spread covers most of that for you, and it widens with the window as the drift does. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. A dark shot keeps flying and registers nothing while it is dark, so a block you can see with no bolt on it survives. Height is not an aiming axis at all. A shot registers where its tracer is drawn on the target and nowhere else, and a tracer climbs its whole column, so it meets whatever is drawn in that column however high or low in the tunnel the two of you are. What you see is what counts: a bolt drawn through a block destroys it, and one drawn past it does not.
 - **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on up to `COMBO x8`, where the multiplier stops climbing. Further kills still hold the chain open, they just do not raise it. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
 - **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
 - **Survive** &mdash; The game ends when shield reaches 0.
@@ -177,7 +177,8 @@ cmd-space-rider/
     browser-engine.test.mjs     # Browser build behaviour
     terminal-engine.test.mjs    # Terminal build behaviour
     input.test.mjs              # Terminal input decoding and key repeat
-    menu-layout.test.mjs        # Menu screens fit every supported size
+    menu-layout.test.mjs        # Menu screens fit every supported size, and the
+                                #   grid a browser window is given fits the window
     barrel-roll.test.mjs        # Roll timing, invincibility, and cooldown
     combo.test.mjs              # Combo chaining, decay, and the HUD counter
     sound.test.mjs              # Sound cues and the browser synthesizer
@@ -257,9 +258,17 @@ Probes and tests fly the same engagement, out of `test/engagement.mjs`, and both
 run against the two real engines. A figure taken off a scratch copy of the
 engine can be right about the copy and wrong about the game.
 
+Most of them stage that engagement - one target parked in an emptied run, the
+ship steered onto it - which isolates the shot, and is not the shape a fault
+turns up in. `free-flight` is the other end: a run the engine opens for itself,
+sixty obstacles in the tunnel and volleys overlapping, watched frame by frame,
+with the walk over the firing columns no flown engagement ever reaches printed
+underneath it.
+
 ## Terminal Requirements
 
 - **Minimum size**: 60 columns x 20 rows &mdash; the menu screens fit themselves to the height available, giving up spacing and then the per-mode descriptions rather than dropping a line off the bottom.
+- **In the browser**: the same 60x20 is the floor, and the page shrinks the font to reach it rather than letting the grid overrun the window. A window too small for 60x20 even at the smallest font shows a "Window too small!" notice instead of the game, as the CLI build does in a terminal it cannot fit; the run is left where it stood and the engine hum stops with it, so resizing back brings the same game up.
 - **Color support**: 256-color ANSI (most modern terminals)
 - **Unicode support**: Box-drawing and block element characters
 - **Recommended terminals**: Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty
@@ -272,6 +281,6 @@ The game uses a custom double-buffered screen renderer built on raw ANSI escape 
 
 ### Browser Version
 
-The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size, and keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
+The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size: the font is drawn at its full size wherever the window has room for at least the 60x20 the game is laid out against, and shrinks toward that floor in a window that does not, so every cell the buffer holds has somewhere on the canvas to be drawn. Keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
 
 Four things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. A cue is played only when the audio context is actually running: a browser that blocks sound until the page has been touched hands back a suspended one, and the cues raised meanwhile are dropped rather than queued, so a run opened straight from a `?mode=` link is silent until the first key and then plays from that moment on rather than releasing everything it missed. A browser that permits the sound outright &mdash; a returning player's high media engagement, or the site given a sound permission &mdash; hands back one already running, and the same link plays from its first frame. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal.

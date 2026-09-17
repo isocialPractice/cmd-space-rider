@@ -1,5 +1,86 @@
 # Changelog
 
+## [0.5.0-alpha] - 2026-09-17
+
+### Fixed
+
+- A small browser window drew more grid than it could show. `handleResize`
+  clamped the grid up to the 60x20 floor the game is laid out against while the
+  canvas stayed the size of the window, so the cells past the edge were painted
+  where nothing displayed them. Measured in a chromium window against the
+  furthest painted cell, 600x360 showed the whole grid, 500x320 lost 10 columns
+  and 3 rows, and 380x240 lost 22 columns and 7 rows - taking the SHIELD readout
+  off the right of the HUD and the whole footer with the control hints and the
+  speed, with nothing on screen saying so. The font shrinks to reach the floor
+  instead, down to 6 pixels: 500x320 now gives a 62x21 grid at 13 pixels and
+  380x240 a 63x20 grid at 10. A window too small for 60x20 even at the smallest
+  font gets the notice the CLI build shows in a terminal it cannot fit, drawn at
+  the largest font that still holds it, and the run is left where it stood so
+  resizing back brings the same game up. The engine hum is cut on the way into
+  the notice: the frame that draws it returns before reaching the audio layer,
+  which is the only thing that ever stops the hum, so a run shrunk below the
+  floor would otherwise have droned on at its last pitch while it was not
+  advancing. The terminal build has no equivalent of any of this, since a
+  terminal cannot be smaller than its own grid.
+- A kill could register where the tracer was never drawn. `drawBullets` stops
+  drawing a tracer whose column has left the corridor, `drawEntitiesFar` draws a
+  target's block whether or not the corridor reaches it, and `contacts` never
+  asked - so the player saw the block, saw no bolt, and the block died anyway.
+  Walked over every firing column and height the ship can hold, every depth of a
+  shot's life and every legal target placement, 594 configurations at 80x24,
+  2241 at 60x20 and 76 at 205x50 registered a kill from a frame that drew
+  nothing. All three are nil now. It costs nothing: every band the suite pins
+  came back on the figure it had, at all three grids and in both builds, and the
+  0.4.0-alpha kill rates stand unchanged.
+
+### Changed
+
+- The corridor has one definition. `tunnelSpan` moves from the renderer to
+  `types.ts` with `tracerLit` beside it, and drawTunnel, drawBullets and the hit
+  test now read the same pair. The clip stops the tracer being drawn and stops a
+  shot registering while it is dark; it does not cut the flight short, so a shot
+  that crosses back into the corridor lights and registers again.
+- `contactOf` tells a tracer drawn wide of the block from one not drawn at all.
+  The two shared a `clear` bucket, which is why the share of kills that were the
+  clip fault was never known - "nothing is destroyed by a tracer that never
+  reached it" allowed 5% there and attributed all of it to mid-sweep contacts.
+  Split, the staged walk gives 8 `wide` in 860 kills and no `unlit` at all, and
+  a free flight 5 to 8 in 850. The staged walk pins `unlit` at nil rather than
+  allowing it a share, and `wide` keeps the 5% the sweep inside a frame earns.
+
+### Added
+
+- A free-flight check, on a pilot that flies the run `startGame` opens rather
+  than staging one: sixty obstacles in the tunnel, the ship held at a height and
+  steered onto a block's drawn column read off the rendered buffer, firing every
+  0.12 seconds, for 1200 frames at each of the three grids in both builds. Both
+  contact invariants are asked of it. No frame of any flight drew a tracer on a
+  block that was still there the frame after with the shot still in the air, and
+  98% or better of kills had their tracer on the killed block or within the
+  grid's column slack of it - measured over three passes of the whole matrix,
+  847 to 870 kills a pass with 5 to 8 outside it, and none at all landing with
+  no tracer drawn. Replacing `contacts` with a flat refusal turns the first
+  figure into 662 to 29,594 ignored contacts a flight, which is the same
+  detector that counted 164 of them in a real browser window with the hit rule
+  switched off.
+- A walk over the hit test itself, for the shots no flown engagement can
+  produce. Every engagement in the suite steers onto the target's column before
+  firing and no target spawns outside four and a half units of the axis, so a
+  flown shot is never taken from a column the tunnel has stopped reaching - and
+  the ship can hold six and a half. Of 9,477,000 configurations walked, 3.5 to
+  3.9 million draw no tracer at each grid, and the few hundred of those whose
+  cells would otherwise have met are put to the engine one frame at a time.
+- `test/probes/free-flight.mjs`, printing both of the above: the flight's
+  volleys, kills, ignored contacts and kill-contact shares per ship height, with
+  the dark walk's counts under them.
+- The browser grid fitting is pinned in `test/menu-layout.test.mjs`, against the
+  grid the buffer is built at rather than against the window: every grid fits
+  the window it was measured for, every window with room for the floor at some
+  font reaches it, the too-small notice writes nothing off the buffer it was
+  given, and the frame that draws that notice cuts the hum before it returns.
+  Walked over 106 window sizes, the sizing this replaces painted outside
+  the window on 29 of them.
+
 ## [0.4.0-alpha] - 2026-09-16
 
 ### Changed

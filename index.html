@@ -201,6 +201,33 @@ function shotSlackCols(screenWidth){
   const scaled=SHOT_SLACK_COLS*((screenWidth-6)/(SLACK_REF_WIDTH-6));
   return max(SHOT_SLACK_COLS,round(scaled));
 }
+// The two columns the tunnel's walls are drawn on for a given row.
+//
+// Three things read it, and that is why it sits here with the tuning constants
+// rather than down in the rendering section: drawTunnel lays the walls down from
+// it, drawBullets reads it back to decide whether a tracer is still inside the
+// corridor, and the pulse cannon's hit test reads it to decide whether that
+// tracer was drawn at all. The corridor the player sees, the corridor a shot is
+// drawn in and the corridor a shot can register in are then one corridor and
+// cannot drift apart.
+function tunnelSpan(row,gameTop,gameBottom,w){
+  const center=floor(w/2);
+  const t=(row-gameTop)/(gameBottom-gameTop);
+  const halfSpan=floor(3+t*(center-4));
+  return {left:center-halfSpan,right:center+halfSpan};
+}
+
+// Whether a tracer at this column and row is inside the corridor, which is what
+// drawBullets draws it in.
+//
+// The corridor is what the walls enclose and not the walls themselves:
+// drawTunnel lays its glyph on tunnelSpan's own two columns and thickens outward
+// from there, so the corridor runs from left + 1 to right - 1.
+function tracerLit(col,row,gameTop,gameBottom,w){
+  const span=tunnelSpan(row,gameTop,gameBottom,w);
+  return col>span.left&&col<span.right;
+}
+
 // Seconds a combo chain survives without a kill before it drops to nothing.
 const COMBO_TIME=2;
 // The highest multiplier a chain can reach. Without a ceiling the chain barely
@@ -697,9 +724,24 @@ class Game{
   //
   // The screen is the whole of the hit test, because the screen is the whole of
   // what the player has. drawBullets puts the tracer on two cells, the row it is
-  // projected to and the row above; drawEntitiesFar gives a target a block of
-  // `size` cells about its own projected centre. The two either share a cell or
-  // they do not, and a target that is not being drawn at all cannot be shot.
+  // projected to and the row above, and on neither of them where that column has
+  // left the corridor; drawEntitiesFar gives a target a block of `size` cells
+  // about its own projected centre. The two either share a cell or they do not,
+  // and neither a target that is not being drawn nor a tracer that is not being
+  // drawn can be half of a contact.
+  //
+  // The corridor clip is read from tracerLit, which is what drawBullets draws
+  // by, so the two cannot come to state different corridors. Leaving it out -
+  // which is how this stood until the clip was measured - let a shot register
+  // from a column the tunnel no longer reaches: drawEntitiesFar draws a target's
+  // block whether or not the corridor covers it, so the player saw the block,
+  // saw no bolt, and the block died anyway. Walked as geometry over every firing
+  // column and height the ship can hold, every depth of a shot's life and every
+  // legal target placement, 594 undrawn-tracer configurations at 80x24
+  // registered a kill, 2241 at 60x20 and 76 at 205x50; `npm run probe --
+  // free-flight` prints the walk. Reading the clip here costs nothing
+  // measurable: every band the suite pins, at all three grids and in both
+  // builds, came back on the figure it had.
   //
   // Depth is not compared. Shot and target are drawn at their own depths, so two
   // things a frame apart in depth can be a cell apart on the screen and two
@@ -768,8 +810,13 @@ class Game{
       // is its own row and, where there is room for it, the row above.
       const blockTop=max(gameTop,tScr.row-half);
       const blockBottom=min(gameBottom-1,tScr.row+half);
-      const tracerTop=bScr.row-1>=gameTop?bScr.row-1:bScr.row;
-      if(tracerTop<=blockBottom&&bScr.row>=blockTop)return true;
+      const lowLit=tracerLit(bScr.col,bScr.row,gameTop,gameBottom,s.screenWidth);
+      const highLit=bScr.row-1>=gameTop
+        &&tracerLit(bScr.col,bScr.row-1,gameTop,gameBottom,s.screenWidth);
+      if(!lowLit&&!highLit)continue; // nothing drawn, so nothing to register
+      const tracerTop=highLit?bScr.row-1:bScr.row;
+      const tracerBottom=lowLit?bScr.row:bScr.row-1;
+      if(tracerTop<=blockBottom&&tracerBottom>=blockTop)return true;
     }
     return false;
   }
@@ -802,7 +849,11 @@ class Game{
   //
   // What a shot then registers against is decided on the screen, by contacts
   // above: a tracer drawn on a target's block destroys it, and one that is not
-  // drawn on it does not.
+  // drawn on it does not. That second half covers a tracer drawn beside the
+  // block and a tracer not drawn at all, which are the two ways of not being
+  // drawn on it - so a shot whose column has left the corridor registers nothing
+  // for as long as it is dark, and a block the player can see with no bolt on it
+  // survives.
   updateBullets(dt,advance){
     const s=this.state;
     const travel=60*dt;
@@ -924,18 +975,6 @@ function drawStarfield(screen,state,gameTop,gameBottom){
   }
 }
 
-/**
- * The two columns the tunnel's walls are drawn on for a given row.
- * drawTunnel lays the walls down from this and drawBullets reads it back to
- * tell whether a tracer is still in the corridor, so the corridor the player
- * sees and the corridor the renderer tests a shot against cannot drift apart.
- */
-function tunnelSpan(row,gameTop,gameBottom,w){
-  const center=floor(w/2);
-  const t=(row-gameTop)/(gameBottom-gameTop);
-  const halfSpan=floor(3+t*(center-4));
-  return {left:center-halfSpan,right:center+halfSpan};
-}
 function drawTunnel(screen,state,gameTop,gameBottom){
   const w=screen.width;
   const gameH=gameBottom-gameTop;
@@ -1049,17 +1088,19 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom){
  * rounded while registering floored is worse again - the glyph the player aims
  * by would sit a column off what the hit test reads, on half of all positions.
  *
- * Drawing only: the span the walls are drawn on runs a little narrower than
- * the tunnel radius projects to, so culling the bullet on it would cost real
- * hits at the far end. Each half is tested on its own row, because the span
- * narrows going up and the dim upper half leaves the corridor first.
+ * The hit test reads the same clip, and that is the whole of what it shares
+ * with this: a frame that draws no tracer registers nothing on that frame. The
+ * flight itself is not cut short. The span the walls are drawn on runs a little
+ * narrower than the tunnel radius projects to, so culling the bullet outright
+ * where it crosses would cost real hits at the far end - instead the shot goes
+ * dark, and lights again if the corridor widens back around its column.
+ *
+ * Each half is tested on its own row, because the span narrows going up and the
+ * dim upper half leaves the corridor first.
  */
 function drawBullets(screen,state,gameTop,gameBottom){
   const w=screen.width,h=screen.height;
-  const inCorridor=(col,row)=>{
-    const span=tunnelSpan(row,gameTop,gameBottom,w);
-    return col>span.left&&col<span.right;
-  };
+  const inCorridor=(col,row)=>tracerLit(col,row,gameTop,gameBottom,w);
   for(const b of state.bullets){
     const pos=gameToScreen(b.x,b.y,b.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
     if(pos.row<gameTop||pos.row>=gameBottom)continue;
@@ -1457,6 +1498,95 @@ function drawMenuStars(screen,state,w,h){
   }
 }
 
+// ===== Grid fitting =====
+// How many cells the window gets, and at what font size.
+//
+// The grid is the game's whole layout: every screen is written for a terminal
+// of at least MIN_WIDTH by MIN_HEIGHT, and the menus, the HUD and the footer
+// are placed against that floor. A terminal cannot be smaller than its own
+// grid, so the CLI build only has to notice it and say so. A browser window
+// can: the canvas is the window, and the grid is whatever the cell size
+// divides it into.
+//
+// Clamping the grid up to the floor - which is what this used to do - builds a
+// buffer bigger than the canvas can show and paints the overflow where nothing
+// displays it. Measured in a chromium window against the furthest painted
+// cell, 500x320 lost 10 columns and 3 rows and 380x240 lost 22 columns and 7
+// rows, taking the SHIELD readout off the right of the HUD and the whole
+// footer with the control hints and the speed, with nothing on screen saying
+// so.
+//
+// So the font shrinks instead, down to MIN_FONT_SIZE, until the floor fits in
+// the window the player actually has. That keeps the promise the CLI build
+// makes - 60x20 is the minimum and the whole screen is on it - rather than
+// quietly dropping the parts that fell off the edge.
+
+/** The grid every screen in the game is laid out against. */
+const MIN_WIDTH=60;
+const MIN_HEIGHT=20;
+/** The font the grid is drawn at whenever the window has room for it. */
+const FONT_SIZE=16;
+/** The smallest font the grid is drawn at before the page gives up on it. */
+const MIN_FONT_SIZE=6;
+/** Leading under each row, which is what makes a cell taller than its font. */
+const CELL_LEADING=2;
+
+/** The notice drawn when no font in that range gives the window its grid. */
+const TOO_SMALL_TITLE='Window too small!';
+const TOO_SMALL_HINT='Please resize your window.';
+/** The grid that notice needs: its longest line, and a row either side. */
+const NOTICE_COLS=TOO_SMALL_HINT.length;
+const NOTICE_ROWS=3;
+
+/**
+ * The grid a window of the given pixel size gets.
+ *
+ * `measure` takes a font size and gives back the cell it draws, which is the
+ * one thing here that needs a canvas - so it is passed in, and the fitting
+ * itself is arithmetic a test can walk without a DOM.
+ *
+ * `fits` is false when even MIN_FONT_SIZE cannot reach the floor. The grid
+ * that comes back with it is still one the window can show whole, so the
+ * notice drawn on it is readable rather than clipped; it is simply smaller
+ * than the game can be played on.
+ */
+function fitGrid(pxW,pxH,measure){
+  const at=(fontSize)=>{
+    const cell=measure(fontSize);
+    return {
+      fontSize,cellW:cell.w,cellH:cell.h,
+      cols:max(1,floor(pxW/cell.w)),rows:max(1,floor(pxH/cell.h)),
+    };
+  };
+  for(let size=FONT_SIZE;size>=MIN_FONT_SIZE;size--){
+    const grid=at(size);
+    if(grid.cols>=MIN_WIDTH&&grid.rows>=MIN_HEIGHT)return{...grid,fits:true};
+  }
+  // No font in the range gives the game its floor, so the window gets the
+  // notice instead - at the largest font that still holds the notice, since a
+  // message the player cannot read says no more than the blank screen did.
+  for(let size=FONT_SIZE;size>=MIN_FONT_SIZE;size--){
+    const grid=at(size);
+    if(grid.cols>=NOTICE_COLS&&grid.rows>=NOTICE_ROWS)return{...grid,fits:false};
+  }
+  return {...at(MIN_FONT_SIZE),fits:false};
+}
+
+/**
+ * What the page draws instead of the game when the window cannot hold the
+ * grid: the same three lines the CLI build writes into a terminal too small
+ * for it, so the two builds fail the same way in front of the player.
+ */
+function renderTooSmall(screen){
+  const w=screen.width;
+  const h=screen.height;
+  const mid=floor(h/2);
+  screen.clear(C.BLACK);
+  screen.putStringCenter(mid-1,TOO_SMALL_TITLE,C.BRIGHT_RED,C.BLACK);
+  screen.putStringCenter(mid,`Need ${MIN_WIDTH}x${MIN_HEIGHT}, have ${w}x${h}`,C.WHITE,C.BLACK);
+  screen.putStringCenter(mid+1,TOO_SMALL_HINT,C.WHITE,C.BLACK);
+}
+
 // ===== Sound (Web Audio) =====
 // Every cue is synthesized on the spot: there are no audio files to fetch, so
 // nothing to load before a run and nothing to keep in step with the build.
@@ -1575,30 +1705,32 @@ class RetroAudio{
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 
-const FONT_SIZE=16;
-const FONT=`${FONT_SIZE}px 'Courier New', 'Consolas', monospace`;
-let cellW,cellH;
+const fontOf=(size)=>`${size}px 'Courier New', 'Consolas', monospace`;
 
-function measureCell(){
-  ctx.font=FONT;
-  const m=ctx.measureText('M');
-  cellW=Math.ceil(m.width);
-  cellH=FONT_SIZE+2;
+/** The cell a given font size draws, measured off the canvas it is drawn on. */
+function measureCell(size){
+  ctx.font=fontOf(size);
+  return {w:max(1,ceil(ctx.measureText('M').width)),h:size+CELL_LEADING};
 }
 
+let FONT=fontOf(FONT_SIZE);
+let cellW,cellH;
 let termWidth,termHeight;
+/** Whether the window can hold the grid the game is laid out for. */
+let gridFits=true;
 let screen;
 const game=new Game();
-
-const MIN_WIDTH=60;
-const MIN_HEIGHT=20;
 
 function handleResize(){
   canvas.width=window.innerWidth;
   canvas.height=window.innerHeight;
-  measureCell();
-  termWidth=max(MIN_WIDTH,floor(canvas.width/cellW));
-  termHeight=max(MIN_HEIGHT,floor(canvas.height/cellH));
+  const grid=fitGrid(canvas.width,canvas.height,measureCell);
+  FONT=fontOf(grid.fontSize);
+  cellW=grid.cellW;
+  cellH=grid.cellH;
+  gridFits=grid.fits;
+  termWidth=grid.cols;
+  termHeight=grid.rows;
   screen=new ScreenBuffer(termWidth,termHeight);
   game.initStars(termWidth,termHeight);
   game.state.screenWidth=termWidth;
@@ -1678,6 +1810,27 @@ function frame(now){
   if(accumulator>FRAME_MS*2)accumulator=0; // prevent spiral
 
   const dt=min(FRAME_MS/1000,0.05);
+
+  // The window cannot hold the grid even at the smallest font, so it gets the
+  // notice and nothing else - as the CLI build does in a terminal too small
+  // for it. The run is left exactly where it stood: resizing back brings the
+  // same game up rather than a fresh one.
+  //
+  // The hum is cut on the way out. RetroAudio.frame is what normally stops it,
+  // and this returns before reaching it, so without the call here a run shrunk
+  // below the floor would drone on at the pitch it was last set to for as long
+  // as the notice was up - the run is not advancing, which is the one condition
+  // the hum runs under. The cues need no such handling: update clears the queue
+  // at the top of every frame, so the frame that resumes plays its own.
+  if(!gridFits){
+    audio.engineOff();
+    ctx.fillStyle='#000';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    renderTooSmall(screen);
+    screen.render(ctx,cellW,cellH,FONT);
+    for(const k of Object.keys(justPressed))delete justPressed[k];
+    return;
+  }
 
   // Handle menu input
   game.handleMenuInput(justPressed);
