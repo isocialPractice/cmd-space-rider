@@ -20,91 +20,6 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### UI/UX Override - the pulse cannon in a real browser window
-
-#### Found Issues
-
-- [ ] **Small windows draw more grid than the canvas can show**
-  - **Issue**: `handleResize` clamps `termWidth` and `termHeight` at the 60x20
-    floor and builds a 60x20 ScreenBuffer, but the canvas is only as large as
-    the window, so below that floor the extra cells are painted where nothing
-    can display them. Measured in a real chromium window against the furthest
-    painted cell: 600x360 shows the whole 60x20 grid; 500x320 loses 10 columns
-    and 3 rows; 380x240 loses 22 columns and 7 rows. What goes is the right of
-    the HUD, including the SHIELD readout, and the whole footer with the control
-    hints and the speed. Nothing tells the player anything is missing. Pre-dates
-    the screen-space hit rule - `MIN_WIDTH`, `MIN_HEIGHT` and `handleResize` are
-    untouched by it - and the terminal build has no equivalent, since a terminal
-    cannot be smaller than its own grid.
-  - **Goal**: Decide what a window under the floor should do and make the page
-    do it. Scaling the font down until 60x20 fits keeps the whole screen
-    readable and matches the terminal build's promise that 60x20 is the minimum;
-    drawing at the window's real size below the floor gives up the menu layouts
-    the floor exists to protect. Either way the HUD and footer stay on screen or
-    the player is told they cannot be. Pin it in `test/menu-layout.test.mjs` or
-    beside it, against the grid the buffer is built at rather than the window.
-  - From: UI/UX Override - the pulse cannon in a real browser window
-- [ ] **The screen-space hit rule has no free-flight guard**
-  - **Issue**: `test/pulse-cannon.test.mjs` pins both contact invariants at
-    three grids in both builds, but every one of them flies a staged engagement:
-    one target parked in an emptied run. The fault this work answers was found
-    in free flight, with sixty obstacles in the air and volleys overlapping, and
-    that is the shape no check in the suite has. Verified in a real browser
-    instead - 1200 frames a flight at 192x60, 205x50 and 60x20, held on the
-    floor and at the roof, with 0 frames showing a tracer drawn on a live block
-    against 164 for the same detector with the hit rule switched off - which
-    means the only guard against this regressing runs when the UI/UX agent runs,
-    and not on a change.
-  - **Goal**: Add a free-flight check to `test/pulse-cannon.test.mjs` on a pilot
-    in `test/engagement.mjs` that flies a real run rather than staging one: hold
-    the ship at a fixed height, line up on a target's drawn column off the
-    rendered buffer, fire, and render every frame with `renderGame`. Assert over
-    the run that no rendered frame leaves a tracer drawn on a block that is
-    still there the frame after with the shot still in the air, and that every
-    kill's contact sits inside `shotSlackCols` of the block's drawn edge. Fly it
-    at all three grids in `GRIDS` and in both builds, as
-    `test/parity.test.mjs` expects. Check it against the fault before trusting
-    it, by forcing `contacts` to false and confirming it fails.
-  - From: UI/UX Override - the pulse cannon in a real browser window
-
-### Code Review Override - a kill registered where the tracer was never drawn
-
-#### Resolve Issues
-
-- [ ] Unlit Tracer Kill 1
-  - **Issue**: `contacts` decides a kill on the cells `drawBullets` would put
-    down, but does not apply the clip `drawBullets` applies. A tracer whose
-    column has left the corridor is not drawn at all (`src/render.ts:276`), and
-    `contacts` never asks (`src/game.ts:679`). `drawEntitiesFar` draws a
-    target's block whether or not the corridor reaches it, so on one of those
-    frames the player sees the block, sees no bolt, and the block dies anyway.
-    Walked as geometry at dt 1/60 over every firing column the ship can hold,
-    every depth in a shot's life and every legal target placement: at 80x24,
-    2796 of 28320 undrawn-tracer frames can still register a kill - a shot at
-    screen column 17 of row 14 (aim x -4.91, y 0, z -59) registers against a
-    target at x -4.50, y 4.06, z -2. It is not introduced here: at 80x24 and
-    60x20 the scaled slack is still one column and the figure is the same
-    either way. It is widened here - at 205x50 the scaling took it from 74
-    configurations to 296.
-  - **Goal**: Decide whether the corridor clip belongs in the hit test, then
-    make the code, both docstrings and the check say the same thing. It is not
-    free: `drawBullets` records that the drawn span "runs a little narrower than
-    the tunnel radius projects to, so culling the bullet on it would cost real
-    hits at the far end", so testing `contacts` against that span moves every
-    kill rate the `0.4.0-alpha` entry pins. Measure it with
-    `npm run probe -- suite-replay` and the column probe before choosing, and
-    move the floors in `AIMED_BANDS`, `VOLLEY_BAND` and `EYE_BANDS` in
-    `test/engagement.mjs` with it. If the clip is deliberately left out of the
-    hit test, say so where the rule is stated - `updateBullets`'s "one that is
-    not drawn on it does not", in both builds - rather than stating a rule the
-    code does not hold. Either way, split `contactOf`'s `clear` verdict into a
-    tracer drawn wide of the block and a tracer not drawn at all: the two share
-    one bucket today, so "nothing is destroyed by a tracer that never reached
-    it" allows 5% of kills there and attributes them in its comment to
-    mid-sweep contacts, and the share that is this fault is not known. Both
-    builds together, as `test/parity.test.mjs` expects.
-  - From: User Overrides
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -120,6 +35,23 @@ already has. Most touch a single flag, key binding, or HUD field.
   Decide whether the reach should cover the draw distance - a longer `life`, a
   faster shot, or a shorter `maxViewZ` - and pin it in `test/pulse-cannon.test.mjs`
   beside the range bands. Both builds together, as `test/parity.test.mjs` expects.
+- [ ] **The page's use of the fitted grid has no check** - `fitGrid` itself is
+  pinned in `test/menu-layout.test.mjs`, but what the page does with it is not:
+  `handleResize` carrying the fitted grid through to the `ScreenBuffer` the
+  renderer writes into, and `frame()` drawing the notice and returning early
+  while the window is under the floor. Both sit below the
+  `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at, so
+  nothing in the suite can reach them, and the browser is the only thing that
+  has ever checked either. Measured in a real chromium window: a run at 900x600
+  taken down to 200x120 and back came up on the same run, score 159 to 189 and
+  distance 18.0 to 21.0, with no title screen in between. Lift the re-seating
+  out of `handleResize` the way `fitGrid` was already lifted out of it - a pure
+  function taking the game and a fitted grid - and export it through
+  `test/helpers.mjs`. Then assert that re-seating a playing run at a grid under
+  the floor and again at one above it leaves `mode`, `score` and `distance`
+  untouched and leaves the buffer at the new grid's size. Browser only: a
+  terminal cannot be smaller than its own grid, so the CLI build has no
+  equivalent and `test/parity.test.mjs` has nothing to pair it with.
 
 ## Medium Effort
 
@@ -159,56 +91,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 32 earlier items in `TODO-archive.md`, newest last.
+> 35 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Probe rig on the real engines** - A tracked home for the probes, such
-  as `test/probes/`, which `node --test "test/*.test.mjs"` does not pick up,
-  run through an `npm run probe -- <name> --grid <W>x<H>` script that builds
-  `out/` first, as `npm test` does. The rig loads the browser engine through
-  `loadBrowserEngine` and the terminal engine from `out/`, and runs every
-  probe against both, so no probe measures a transcription: the pulse cannon
-  figures under `## Current` were taken on a sandbox copy, and a copy drifts.
-  Move `engage`, `sweep`, `stagedShot`, `seeShip` and `seeBlock` out of
-  `test/pulse-cannon.test.mjs` into a shared module that takes the grid as a
-  parameter, so the tests and the probes fly the same engagement; the pulse
-  cannon item's first child needs the same move, and whichever lands first
-  makes it. Every probe prints the grid, the placement walk, the ship
-  heights, the band and `dt` above its table. `.tmp/hits/horizontal.mjs`
-  folds into the column probe below; `.tmp/hits/vertical.mjs` measures
-  `SHOT_SLACK_ROWS`, which the pulse cannon item retires, so it goes with it.
-  Say which happened to each in the CHANGELOG.
-  - From: Measurement
-- [x] **Seen-versus-kill probe** - Whether a kill agrees with what the screen
-  drew, which is the measurement behind the pulse cannon item. Walk 150
-  placements - x = -4.5 + 9i/149, y = 0.5 + 4((7i) mod 150)/149,
-  z = -(near + (far - near)((13i) mod 150)/149) - at ship heights 0, 1, 2.5
-  and 4.5, set the ship on the target's drawn column, fire the volley, and
-  render every frame with `renderGame`. Report per grid and per band (20 to
-  60, 60 to 140): the kill rate; the share of flights with a tracer drawn on
-  the block that end without a kill; the share of kills with no tracer on the
-  block; and the share with no tracer even beside it within
-  `SHOT_SLACK_COLS`. Score the kill frame from the target as it stood before
-  the kill recycled it and from the killing shot before it was spliced - read
-  after the frame, every kill looks unseen. Tell a ram apart by the shield,
-  as `engage` does. Break the kills down by the height gap between ship and
-  target, rounded to a unit, and give the spread of shot z minus target z at
-  the kill, since those two say whether height still decides a hit. Also fly
-  the ship held at the floor alone, which is how the capture was played. The
-  sandbox copy gave, at 80x24, kills of 93% and 84% with 7% and 18% drawn
-  through, and at 205x50, 50% and 33% with 52% and 66%; floor-held over a
-  120-placement walk, 109/120 and 100/120 at 80x24 and 35/120 and 30/120 at
-  205x50.
-  - From: Measurement
-- [x] **Suite replay at any grid** - Run the test file's own bands at a given
-  grid - `sweep` at 15 to 35, 35 to 80 and 80 to 140 for a lone shot, 80 to
-  140 for the volley, and `sweepByEye` at 35 to 80 and 80 to 140 - and print
-  each as landed over resolved beside the floor the test pins, with the ram
-  count. This is how a floor is checked at a new size before a test is
-  written for it. The sandbox copy gave, at 80x24, 21 resolved at 15 to 35
-  (39 rams), then 58/58, 44/58 and 57/58; at 205x50, 12 resolved (48 rams),
-  then 43/52, 16/57 and 45/57. `sweepByEye` was not replayed and has no
-  figure at 205x50 yet.
-  - From: Measurement
 - [x] **Frame-rate walk** - Fly each placement at `dt` 1/60, 1/30, 1/20, 1/12
   and 1/6 and count the placements whose verdict changes, over 300 flights:
   150 placements between 20 and 140 units at ship heights 0 and 2.5. The
@@ -230,3 +114,78 @@ the roadmap section each one came from.
   and 54% at 205x50 with the side bullets pinned one column out. Takes over
   from `.tmp/hits/horizontal.mjs`.
   - From: Measurement
+- [x] **Small windows draw more grid than the canvas can show**
+  - **Issue**: `handleResize` clamps `termWidth` and `termHeight` at the 60x20
+    floor and builds a 60x20 ScreenBuffer, but the canvas is only as large as
+    the window, so below that floor the extra cells are painted where nothing
+    can display them. Measured in a real chromium window against the furthest
+    painted cell: 600x360 shows the whole 60x20 grid; 500x320 loses 10 columns
+    and 3 rows; 380x240 loses 22 columns and 7 rows. What goes is the right of
+    the HUD, including the SHIELD readout, and the whole footer with the control
+    hints and the speed. Nothing tells the player anything is missing. Pre-dates
+    the screen-space hit rule - `MIN_WIDTH`, `MIN_HEIGHT` and `handleResize` are
+    untouched by it - and the terminal build has no equivalent, since a terminal
+    cannot be smaller than its own grid.
+  - **Goal**: Decide what a window under the floor should do and make the page
+    do it. Scaling the font down until 60x20 fits keeps the whole screen
+    readable and matches the terminal build's promise that 60x20 is the minimum;
+    drawing at the window's real size below the floor gives up the menu layouts
+    the floor exists to protect. Either way the HUD and footer stay on screen or
+    the player is told they cannot be. Pin it in `test/menu-layout.test.mjs` or
+    beside it, against the grid the buffer is built at rather than the window.
+  - From: UI/UX Override - the pulse cannon in a real browser window
+- [x] **The screen-space hit rule has no free-flight guard**
+  - **Issue**: `test/pulse-cannon.test.mjs` pins both contact invariants at
+    three grids in both builds, but every one of them flies a staged engagement:
+    one target parked in an emptied run. The fault this work answers was found
+    in free flight, with sixty obstacles in the air and volleys overlapping, and
+    that is the shape no check in the suite has. Verified in a real browser
+    instead - 1200 frames a flight at 192x60, 205x50 and 60x20, held on the
+    floor and at the roof, with 0 frames showing a tracer drawn on a live block
+    against 164 for the same detector with the hit rule switched off - which
+    means the only guard against this regressing runs when the UI/UX agent runs,
+    and not on a change.
+  - **Goal**: Add a free-flight check to `test/pulse-cannon.test.mjs` on a pilot
+    in `test/engagement.mjs` that flies a real run rather than staging one: hold
+    the ship at a fixed height, line up on a target's drawn column off the
+    rendered buffer, fire, and render every frame with `renderGame`. Assert over
+    the run that no rendered frame leaves a tracer drawn on a block that is
+    still there the frame after with the shot still in the air, and that every
+    kill's contact sits inside `shotSlackCols` of the block's drawn edge. Fly it
+    at all three grids in `GRIDS` and in both builds, as
+    `test/parity.test.mjs` expects. Check it against the fault before trusting
+    it, by forcing `contacts` to false and confirming it fails.
+  - From: UI/UX Override - the pulse cannon in a real browser window
+- [x] Unlit Tracer Kill 1
+  - **Issue**: `contacts` decides a kill on the cells `drawBullets` would put
+    down, but does not apply the clip `drawBullets` applies. A tracer whose
+    column has left the corridor is not drawn at all (`src/render.ts:276`), and
+    `contacts` never asks (`src/game.ts:679`). `drawEntitiesFar` draws a
+    target's block whether or not the corridor reaches it, so on one of those
+    frames the player sees the block, sees no bolt, and the block dies anyway.
+    Walked as geometry at dt 1/60 over every firing column the ship can hold,
+    every depth in a shot's life and every legal target placement: at 80x24,
+    2796 of 28320 undrawn-tracer frames can still register a kill - a shot at
+    screen column 17 of row 14 (aim x -4.91, y 0, z -59) registers against a
+    target at x -4.50, y 4.06, z -2. It is not introduced here: at 80x24 and
+    60x20 the scaled slack is still one column and the figure is the same
+    either way. It is widened here - at 205x50 the scaling took it from 74
+    configurations to 296.
+  - **Goal**: Decide whether the corridor clip belongs in the hit test, then
+    make the code, both docstrings and the check say the same thing. It is not
+    free: `drawBullets` records that the drawn span "runs a little narrower than
+    the tunnel radius projects to, so culling the bullet on it would cost real
+    hits at the far end", so testing `contacts` against that span moves every
+    kill rate the `0.4.0-alpha` entry pins. Measure it with
+    `npm run probe -- suite-replay` and the column probe before choosing, and
+    move the floors in `AIMED_BANDS`, `VOLLEY_BAND` and `EYE_BANDS` in
+    `test/engagement.mjs` with it. If the clip is deliberately left out of the
+    hit test, say so where the rule is stated - `updateBullets`'s "one that is
+    not drawn on it does not", in both builds - rather than stating a rule the
+    code does not hold. Either way, split `contactOf`'s `clear` verdict into a
+    tracer drawn wide of the block and a tracer not drawn at all: the two share
+    one bucket today, so "nothing is destroyed by a tracer that never reached
+    it" allows 5% of kills there and attributes them in its comment to
+    mid-sweep contacts, and the share that is this fault is not known. Both
+    builds together, as `test/parity.test.mjs` expects.
+  - From: User Overrides
