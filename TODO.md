@@ -20,6 +20,89 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
+### Code Review Override - the free flight guard reads looser than it states
+
+#### Found Issues
+
+- [ ] **A kill's contact is read against every shot the frame spent**
+  - **Issue**: `freeFlight` reduces both readings - `now` over `stepped` and
+    `before` over `drawnShots` - across every bullet the frame spent, for each
+    block the frame killed (`test/engagement.mjs`, the `for (const killed of
+    gone)` loop). Nothing pairs a spent shot to the block it actually killed, so
+    the verdict recorded for one kill can be another shot's contact. Measured
+    over the same matrix the test flies, 1200 frames at both heights, all three
+    grids, both builds: 95 of 884 kills - 11% - landed on a frame that spent
+    more than one shot. The check's own comment says the opposite, "with both
+    readings taken against the killing shot alone", as does the docstring in
+    `engagement.mjs`, "the killing shots against the killed block and nothing
+    else". A shot drawn wide of the block it killed is recorded as `on` whenever
+    a sibling shot spent in the same frame was standing on that block, so the
+    98% the test reports is a ceiling on what it can catch, not a measurement.
+    Second leniency in the same reading: `gone` filters on `o.ref.z < o.z - 100
+    && o.z <= 5`, which `updateObstacles` satisfies for a ram as well as
+    `updateBullets` does for a kill, so a frame that rams and spends a shot
+    scores the rammed obstacle as a kill. It does not bite today - a flight rams
+    0 or 1 times in 1200 frames and never on a frame that also spent a shot -
+    but nothing in the reading keeps it that way.
+  - **Goal**: Pair each killed block to the shot that killed it before reading
+    the contact, or say in the comment and the docstring what the reduction
+    actually does. Pairing is the stronger answer and needs the frame's own
+    resolution order: `updateBullets` walks the bullets from the end and breaks
+    on the first obstacle it registers against, so the pairing is derivable
+    rather than guessable. Exclude a rammed obstacle from `gone` either way -
+    the shield drop already names the frame, and `updateObstacles` runs before
+    `updateBullets`, so the two are separable. Re-measure the kill-contact
+    shares after the change and move the figures in the test comment,
+    `test/probes/free-flight.mjs` and the `0.5.0-alpha` CHANGELOG entry with
+    them. Both builds together, as `test/parity.test.mjs` expects.
+  - From: Code Review Override - the free flight guard reads looser than it states
+- [ ] **The free flight's figures cannot be rebuilt from the repository**
+  - **Issue**: `freeFlight` flies the run `startGame` opens, which seeds sixty
+    obstacles from `Math.random` with nothing seeding it, so every pass flies a
+    different run. The figures the repository quotes for it were taken from one
+    draw and the first rerun falls outside them. `npm run probe -- free-flight`
+    on a clean tree gives 824 kills over the whole matrix against the
+    `0.5.0-alpha` CHANGELOG's "847 to 870 kills a pass", and terminal at 205x50
+    held at 0 gives 140 volleys and 44 kills against the test comment's "a
+    flight fires 145 to 297 volleys, lands 45 to 117 kills" - while browser at
+    60x20 held at 6.5 gives 121 kills, over the same comment's ceiling. The
+    assertions themselves hold with room to spare (`>= 100` volleys, `>= 25`
+    kills, and 98% on-or-beside against a 90% floor, stable over 8 consecutive
+    runs of the file), so this is the quoted measurement drifting rather than
+    the check being flaky. `## Measurement` exists so a figure can be rebuilt
+    from the repository alone, and these cannot be.
+  - **Goal**: Either seed the flight so a figure is reproducible - a seeded RNG
+    the two builds share, which nothing in the engine has today and which the
+    parity check would have to cover - or state the figures as what they are,
+    the spread over a named number of passes, and widen them until a rerun lands
+    inside. Whichever way, the numbers in the test comments, in
+    `test/probes/free-flight.mjs` and in the `0.5.0-alpha` CHANGELOG entry come
+    from the same source and say the same thing. The dark walk beside it is
+    already deterministic and its 9,477,000 / 594 / 2241 / 76 figures reproduce
+    exactly, so only the flown half needs this.
+  - From: Code Review Override - the free flight guard reads looser than it states
+- [ ] **The corridor has one definition and the test keeps a second**
+  - **Issue**: `tracerLit` was added to `src/types.ts` and to `index.html` this
+    run so that drawTunnel, drawBullets and the hit test read one corridor.
+    `test/engagement.mjs` then defines its own `tracerLit(build, col, row, ...)`
+    that reads `build.tunnelSpan` and restates the boundary as `col > span.left
+    && col < span.right`, and its docstring says it does not: "read out of the
+    build that is flying rather than restated here ... a test carrying its own
+    copy would be pinning the copy". `darkWalk` decides which configurations are
+    dark from that copy and then asserts the engine registers nothing on them,
+    so widening the engine's corridor to include its walls would leave the walk
+    calling those configurations dark and the assertion failing against code
+    that is right, while narrowing it would let the walk stop reaching the
+    frames the check exists for. The copy is reachable only because
+    `tracerLit` is exported from neither build's test surface: it is absent from
+    `EXPORTS` in `test/helpers.mjs` and from `BUILDS` in `test/engagement.mjs`.
+  - **Goal**: Add `tracerLit` to `EXPORTS` and to both entries of `BUILDS`
+    beside `tunnelSpan`, and have the test's helper call `build.tracerLit`
+    rather than restate the boundary - or drop the helper and call it directly.
+    The walk's counts must not move: 594 candidates at 80x24, 2241 at 60x20 and
+    76 at 205x50, with 0 registered, and the same in both builds.
+  - From: Code Review Override - the free flight guard reads looser than it states
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
