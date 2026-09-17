@@ -615,17 +615,26 @@ export function sweepByEye(build, grid, { near, far, count = 40 }) {
 
 /**
  * How close a frame's tracer came to the block the renderer drew: `on` a cell
- * of it, `beside` it within the grid's column slack, or `clear` of it.
+ * of it, `beside` it within the grid's column slack, `wide` of it, or `unlit` -
+ * no tracer drawn at all.
  *
- * `hidden` is the fourth answer and not a degree of the other three: the target
- * was drawn on cells the ship then drew over, so the frame has nothing to read.
+ * The last two used to share one `clear` bucket, and they are different faults.
+ * `wide` is a shot the player watched go past: the bolt is on the screen, a
+ * column or more off the block, and the block dies anyway. `unlit` is a shot
+ * the player never saw at all - `drawBullets` clips the tracer at the corridor
+ * wall and `contacts` does not, so a bolt whose column has left the tunnel is
+ * drawn nowhere and still registers. One bucket could not tell which of the two
+ * a kill belonged to, so the share that was the clip was not known.
+ *
+ * `hidden` is the fifth answer and not a degree of the others: the target was
+ * drawn on cells something later drew over, so the frame has nothing to read.
  * The ship sits where the tunnel's near end sits, so a target low and far can
- * project into the hull, and calling that `clear` would score a kill against a
+ * project into the hull, and calling that `wide` would score a kill against a
  * block the reading could never have found.
  */
 export function contactOf(tracer, block, slack) {
   if (!block.length) return 'hidden';
-  if (!tracer.length) return 'clear';
+  if (!tracer.length) return 'unlit';
   const on = new Set();
   const rows = new Map();
   for (const c of block) {
@@ -639,16 +648,17 @@ export function contactOf(tracer, block, slack) {
     const cols = rows.get(t.y);
     if (cols && cols.some((c) => Math.abs(c - t.x) <= slack)) beside = true;
   }
-  return beside ? 'beside' : 'clear';
+  return beside ? 'beside' : 'wide';
 }
 
 /**
- * The nearer of two contact readings, `on` beating `beside` beating `clear`
- * beating `hidden` - a frame with nothing to read losing to one that had the
- * block in view and found the tracer clear of it.
+ * The nearer of two contact readings, `on` beating `beside` beating `wide`
+ * beating `unlit` beating `hidden` - a frame with nothing to read losing to one
+ * that had the block in view and found the tracer clear of it, and a tracer
+ * drawn wide of the block beating one that was never drawn at all.
  */
 export function closerContact(a, b) {
-  const rank = { on: 3, beside: 2, clear: 1, hidden: 0 };
+  const rank = { on: 4, beside: 3, wide: 2, unlit: 1, hidden: 0 };
   return rank[a] >= rank[b] ? a : b;
 }
 
@@ -682,7 +692,9 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
 
   let drawnThrough = false;
   let snapshot = null;
-  let lastDrawn = 'clear';
+  // The weakest reading there is short of one that could see nothing at all,
+  // which is what a flight with no frame read yet has taken.
+  let lastDrawn = 'unlit';
   // Where the trigger was pulled from, for the one frame where the shot that
   // lands was also raised. Read at the bottom of the frame, which is where the
   // ship already was when `updatePlaying` pushed the volley.
@@ -705,10 +717,10 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
     // A tracer found on a cell that is still showing settles the question
     // whatever else is covered. Only a reading that found nothing has to say
     // whether it could have.
-    if (seen !== 'clear') return seen;
+    if (seen === 'on' || seen === 'beside') return seen;
     return block.length < drawnBlockCells(game, target ?? { x: 0, y: 0, z: 1e9 }).length
       ? 'hidden'
-      : 'clear';
+      : seen;
   };
 
   const outcome = engage(game, {
@@ -770,4 +782,415 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
   }
 
   return { outcome, drawnThrough, killContact, killGapZ, targetY, slack };
+}
+
+/**
+ * Whether a tracer at this column and row is inside the corridor, read out of
+ * the build that is flying rather than restated here. `tunnelSpan` is the one
+ * definition of the corridor - drawTunnel lays the walls from it, drawBullets
+ * draws the tracer inside it, and `contacts` registers inside it - so a test
+ * carrying its own copy would be pinning the copy.
+ */
+export function tracerLit(build, col, row, gameTop, gameBottom, w) {
+  const span = build.tunnelSpan(row, gameTop, gameBottom, w);
+  return col > span.left && col < span.right;
+}
+
+/** A cell as a key, for the set arithmetic the free flight below runs on. */
+const cellKey = (c) => `${c.x},${c.y}`;
+
+/**
+ * How often the flight below pulls the trigger, in seconds.
+ *
+ * The engine puts no cooldown on the trigger - the rate is whatever the player
+ * can tap - so the figure is taken from the one place the game fires itself:
+ * chaos mode's auto-fire. It is fast enough that volleys overlap in the air,
+ * which is the condition a staged engagement never produces.
+ */
+export const FREE_FIRE_INTERVAL = 0.12;
+
+/**
+ * A real run, flown for a stretch, with every frame rendered and read.
+ *
+ * Every other engagement in this module stages its world: one target parked in
+ * an emptied run, the ship steered onto it, one volley in the air. That is the
+ * right shape for a rate - it isolates the shot from everything else - and the
+ * wrong shape for the invariant, because the fault the screen-space hit rule
+ * answers was found in free flight, with sixty obstacles in the air and volleys
+ * overlapping. A guard that only ever flies a staged engagement leaves the
+ * shape the fault was found in unchecked.
+ *
+ * So this flies the run the game actually starts: `startGame` with no debug
+ * mode, which puts sixty obstacles and the orbs among them into the tunnel, and
+ * then plays it - hold a height, line up on a block's drawn column read off the
+ * rendered buffer, fire on the interval, and render every frame.
+ *
+ * Two things are read off each frame, and both are anchored to the screen:
+ *
+ * - **Ignored contacts.** A tracer drawn on a block, where that same block is
+ *   still there the frame after with that same shot still in the air. The pair
+ *   is the rule `updateBullets` states failing in front of the player, and the
+ *   sweep in `contacts` tests exactly the frame that was drawn - its first
+ *   sample is where the two stood when the frame was painted - so there is no
+ *   slack in the reading to argue about.
+ * - **Kill contacts.** Where the tracer stood against the block on the frame a
+ *   kill resolved, or the frame before, by `contactOf`'s reading. The kill
+ *   frame is rebuilt rather than read, for the reason `watchEngagement` gives:
+ *   the frame that resolves a kill splices the shot and recycles the target
+ *   inside itself, so a render taken afterwards shows neither.
+ *
+ * Three things are held steady, and each is presentation or bookkeeping rather
+ * than anything the hit test reads. The starfield is emptied, because it is
+ * seeded from Math.random in each build independently. The shake is held at
+ * zero, because the two builds apply it differently - the CLI build shifts the
+ * grid's play area by whole columns and the browser build translates the
+ * finished canvas - so a jolt would move the drawn cells in one build and not
+ * in the other. And the shield is topped up at the top of every frame, so a
+ * flight runs its full length rather than ending on the first run of bad luck:
+ * chasing a block down its own column is a collision course by construction.
+ */
+export function freeFlight(build, grid, {
+  frames = 600, holdY = 0, dt = FRAME, fireInterval = FREE_FIRE_INTERVAL,
+} = {}) {
+  const game = new build.Game();
+  game.startGame();
+  const s = game.state;
+  s.screenWidth = grid.w;
+  s.screenHeight = grid.h;
+  s.stars = [];
+  s.shipY = holdY;
+
+  const screen = new build.ScreenBuffer(grid.w, grid.h);
+  const scratch = new build.ScreenBuffer(grid.w, grid.h);
+  const slack = build.shotSlackCols(grid.w);
+  const gameTop = HUD_ROWS;
+  const gameBottom = grid.h - FOOTER_ROWS;
+
+  const report = {
+    frames: 0, volleys: 0, kills: 0, rams: 0,
+    drawnThrough: 0, ignored: 0, ignoredAt: [],
+    killContacts: new Map(), mostBlocksDrawn: 0, mostShotsInAir: 0, slack,
+  };
+
+  /** What the player is looking at: the blocks drawn, and the tracers over them. */
+  const readFrame = () => {
+    const held = s.bullets;
+    s.bullets = [];
+    build.renderGame(screen, s);
+    const lit = new Set(blockCells(build, screen).map(cellKey));
+    s.bullets = held;
+    build.renderGame(screen, s);
+    return { lit, tracer: tracerCellsBothHalves(build, screen) };
+  };
+
+  /**
+   * Where one bullet's tracer went, in two readings that have to be kept apart.
+   *
+   * `laid` is what `drawBullets` put down: its own row and the row above, each
+   * only where the corridor covers that row. `cells` is what survived to the
+   * finished screen, which is less wherever something drawn after it stands on
+   * it - drawParticles and drawShip both run later, and the hull sits exactly
+   * where a shot leaving the muzzle is.
+   *
+   * The difference is the whole of the distinction between a tracer nobody
+   * could see and a tracer nothing drew. A reading that collapses the two
+   * reports the corridor fault every time the hull covers a bolt.
+   */
+  const tracerOf = (bullet, drawn) => {
+    const pos = game.toScreen(bullet.x, bullet.y, bullet.z);
+    const laid = [];
+    if (pos.row >= gameTop && pos.row < gameBottom) {
+      for (const y of [pos.row, pos.row - 1]) {
+        if (y < gameTop) continue;
+        if (tracerLit(build, pos.col, y, gameTop, gameBottom, grid.w)) laid.push({ x: pos.col, y });
+      }
+    }
+    return { laid, cells: laid.filter((c) => drawn.has(cellKey(c))) };
+  };
+
+  /**
+   * How one shot stood against one block, with a frame that cannot answer
+   * saying so. `contactOf` calls a tracer it cannot find `unlit`, which is the
+   * right reading only when the renderer drew nothing; where it drew something
+   * and the hull covered it, the frame is `hidden` and the other reading of the
+   * pair is what settles the kill.
+   */
+  const seen = (shot, block) => {
+    const verdict = contactOf(shot.cells, block, slack);
+    return verdict === 'unlit' && shot.laid.length ? 'hidden' : verdict;
+  };
+
+  /** A target's block, kept to the cells the finished screen still shows. */
+  const blockOf = (o, lit) => drawnBlockCells(game, o).filter((c) => lit.has(cellKey(c)));
+
+  let sinceFired = fireInterval;
+
+  for (let frame = 0; frame < frames; frame++) {
+    s.shield = 100;
+    s.shake = 0;
+    const { lit, tracer } = readFrame();
+    const ship = seeShip(screen);
+    const drawn = new Set(tracer.map(cellKey));
+
+    // Where every shot and every block stood on the frame just painted.
+    const shots = s.bullets.map((b) => ({ bullet: b, ...tracerOf(b, drawn) }));
+    const blocks = [];
+    for (const o of s.obstacles) {
+      const cells = blockOf(o, lit);
+      if (cells.length) blocks.push({ o, cells, keys: new Set(cells.map(cellKey)) });
+    }
+    report.mostBlocksDrawn = Math.max(report.mostBlocksDrawn, blocks.length);
+    report.mostShotsInAir = Math.max(report.mostShotsInAir, s.bullets.length);
+
+    // Every drawn block against every shot, one pair at a time. A run with
+    // volleys overlapping has a dozen tracers on the screen at once, so a
+    // reading taken against all of them at once would credit one shot's
+    // contact to whichever block another shot happened to be crossing.
+    const drawnShots = new Map(shots.map((shot) => [shot.bullet, shot]));
+    const drawnBlocks = new Map(blocks.map((block) => [block.o, block.cells]));
+    const contacts = [];
+    for (const block of blocks) {
+      for (const shot of shots) {
+        if (!shot.cells.some((c) => block.keys.has(cellKey(c)))) continue;
+        contacts.push({ o: block.o, bullet: shot.bullet, z: block.o.z });
+        report.drawnThrough++;
+      }
+    }
+
+    // Steer by the screen: hold the height, close on the nearest drawn block's
+    // column, and fire on the interval whenever the ship is standing in one.
+    const keys = {};
+    const justPressed = {};
+    if (s.shipY < holdY - 0.05) keys.W = true;
+    else if (s.shipY > holdY + 0.05) keys.S = true;
+    const columns = [...new Set(blocks.flatMap((b) => b.cells.map((c) => c.x)))];
+    sinceFired += dt;
+    if (ship && columns.length) {
+      const aim = columns.reduce((a, b) => (Math.abs(b - ship.col) < Math.abs(a - ship.col) ? b : a));
+      if (ship.col < aim) keys.D = true;
+      else if (ship.col > aim) keys.A = true;
+      if (ship.col === aim && sinceFired >= fireInterval) {
+        justPressed.SPACE = true;
+        sinceFired = 0;
+        report.volleys++;
+      }
+    }
+
+    const was = {
+      shield: s.shield,
+      obstacles: s.obstacles.map((o) => ({ ref: o, x: o.x, y: o.y, z: o.z, rot: o.rot, rotSpeed: o.rotSpeed, scale: o.scale })),
+      bullets: s.bullets.map((b) => ({ ref: b, x: b.x, y: b.y, z: b.z, life: b.life })),
+    };
+
+    game.update(dt, keys, justPressed);
+    report.frames++;
+    if (s.shield < was.shield) report.rams++;
+
+    // A contact on the frame just painted had to resolve in the frame that
+    // followed it, which is the one just stepped: the block goes, or the shot
+    // does. Both surviving is the rule failing. The frame's sweep starts at the
+    // positions the painting was taken at, so this is the contact the hit test
+    // was handed rather than one it might have been.
+    for (const c of contacts) {
+      const standing = s.obstacles.includes(c.o) && c.o.z > c.z - 100;
+      if (!standing || !s.bullets.includes(c.bullet)) continue;
+      report.ignored++;
+      if (report.ignoredAt.length < 5) {
+        report.ignoredAt.push(`frame ${report.frames} on a block at z ${c.z.toFixed(1)}`);
+      }
+    }
+
+    // What the frame resolved. A shot that ran out of life leaves the air on
+    // its own, so only a shot with life left in it was spent on something.
+    const air = new Set(s.bullets);
+    const spent = was.bullets.filter((b) => !air.has(b.ref) && b.life - dt > 0);
+    const gone = was.obstacles.filter((o) => o.ref.z < o.z - 100 && o.z <= 5);
+    if (!spent.length || !gone.length) continue;
+    report.kills += gone.length;
+
+    // The kill frame, rebuilt. `s.speed` is set once a frame and then used for
+    // the advance, so reading it back after the update gives what the frame ran
+    // on; the shot holds its screen ray, so x is carried forward by the ratio of
+    // the two scales exactly as updateBullets carries it.
+    const advance = s.speed * 60 * dt;
+    const travel = 60 * dt;
+    const stepped = spent.map((b) => {
+      const z = b.z - travel;
+      return { x: (b.x * game.projScale(b.z)) / game.projScale(z), y: b.y, z, life: b.life };
+    });
+    const live = {
+      obstacles: s.obstacles, mines: s.mines, orbs: s.orbs,
+      bullets: s.bullets, particles: s.particles,
+    };
+    s.mines = [];
+    s.orbs = [];
+    s.particles = [];
+    for (const killed of gone) {
+      s.obstacles = [{
+        x: killed.x, y: killed.y, z: killed.z + advance,
+        rot: killed.rot, rotSpeed: killed.rotSpeed, scale: killed.scale,
+      }];
+      // The block is read with the tracer out of the way, for the reason
+      // watchEngagement gives: drawBullets runs after drawEntitiesFar and
+      // stands on the very cells this reading is about.
+      s.bullets = [];
+      build.renderGame(scratch, s);
+      const block = blockCells(build, scratch);
+      s.bullets = stepped;
+      build.renderGame(scratch, s);
+      const shown = new Set(tracerCellsBothHalves(build, scratch).map(cellKey));
+      // The kill frame or the one before, as watchEngagement takes it: a shot
+      // can meet a block part way through a frame, on a step the sweep tests
+      // and neither end of the frame draws. Both readings are the killing
+      // shots against the killed block and nothing else.
+      const at = (shot) => seen(shot, block);
+      const now = stepped.map((b) => tracerOf(b, shown)).reduce(
+        (best, shot) => closerContact(best, at(shot)), 'hidden'
+      );
+      const before = spent.map((b) => drawnShots.get(b.ref)).reduce(
+        (best, shot) => (shot
+          ? closerContact(best, seen(shot, drawnBlocks.get(killed.ref) ?? []))
+          : best),
+        'hidden'
+      );
+      // A shot raised inside the frame that resolved it has no start-of-frame
+      // reading, and the end-of-frame one alone cannot say a tracer was never
+      // drawn: the contact can land on a sweep step the frame's far end has
+      // already climbed past the corridor from. So the frame says it cannot
+      // answer rather than saying nothing was drawn.
+      const raised = spent.some((b) => !drawnShots.has(b.ref));
+      const settled = closerContact(now, before);
+      const verdict = settled === 'unlit' && raised ? 'hidden' : settled;
+      report.killContacts.set(verdict, (report.killContacts.get(verdict) ?? 0) + 1);
+    }
+    Object.assign(s, live);
+  }
+
+  return report;
+}
+
+/**
+ * The firing columns the walk below sweeps, in the world x a shot leaves the
+ * muzzle at. The ship is clamped to `tunnelRadius - 1.5`, so this is every
+ * column it can shoot from - including the outer ones no target ever spawns in,
+ * which is where a shot leaves the corridor and goes dark.
+ */
+export const FIRING_AIMS = [];
+for (let aim = -6.5; aim <= 6.5001; aim += 0.5) FIRING_AIMS.push(Number(aim.toFixed(2)));
+
+/** Every legal target placement, walked as a cross product of its three axes. */
+export const TARGET_XS = [];
+for (let x = -4.5; x <= 4.5001; x += 0.75) TARGET_XS.push(Number(x.toFixed(2)));
+export const TARGET_YS = [];
+for (let y = 0.5; y <= 4.5001; y += 0.5) TARGET_YS.push(Number(y.toFixed(2)));
+export const TARGET_ZS = [];
+for (let z = -2; z >= -140; z -= 6) TARGET_ZS.push(z);
+
+/** The heights the ship can fire from, which set the row a tracer climbs. */
+export const FIRING_HEIGHTS = [0, 1.5, 3, 4.5, 6.5];
+
+/** The depths a shot passes through in its life: 60 units a second for two. */
+export const SHOT_DEPTHS = [];
+for (let z = -5; z >= -125; z -= 5) SHOT_DEPTHS.push(z);
+
+/**
+ * Whether the hit test can register from a frame that drew no tracer.
+ *
+ * This is the one question the flown engagements cannot reach. `engage` steers
+ * onto the target's column before firing and a target never spawns outside four
+ * and a half units of the axis, so a flown shot is never taken from a column the
+ * tunnel has stopped reaching - and the fault needs exactly that. So the hit
+ * test is walked instead of flown: every firing column the ship can hold,
+ * against every depth of a shot's life, against the placement walk.
+ *
+ * A configuration counts as **dark** when `drawBullets` would draw the tracer
+ * nowhere: outside the play area, or outside the corridor on both of its two
+ * rows. Lit-ness only ever runs one way over a flight - the shot climbs the
+ * screen and the corridor narrows going up - so a shot dark where the frame was
+ * painted is dark for every step of the sweep inside it.
+ *
+ * A dark configuration is a **candidate** when the cells would otherwise meet:
+ * the block's drawn rows against the tracer's, inside the grid's column slack.
+ * Those are the frames where the player sees the block, sees no bolt, and the
+ * old hit test killed the block anyway. Each one is then put to the engine for
+ * a single frame, and `registered` counts the ones that still resolve.
+ */
+export function darkWalk(build, grid, { dt = 1 / 60 } = {}) {
+  const probe = emptyRun(build, grid);
+  const ps = probe.state;
+  const gameTop = HUD_ROWS;
+  const gameBottom = grid.h - FOOTER_ROWS;
+  const slack = build.shotSlackCols(grid.w);
+
+  // Every legal target placement, as a cross product rather than as the
+  // coupled walk the sweeps fly. A walk pairs one x with one y with one z, and
+  // the configurations this is about are particular pairings - a target out at
+  // the tunnel's edge, high, and close in - which a walk of the same size
+  // reaches only by luck.
+  const places = [];
+  for (const x of TARGET_XS) {
+    for (const y of TARGET_YS) {
+      for (const z of TARGET_ZS) {
+        if (z < -ps.maxViewZ || z > 5) continue;
+        const pos = probe.toScreen(x, y, z);
+        if (pos.row < gameTop || pos.row >= gameBottom) continue;
+        const half = Math.floor(Math.max(1, Math.floor(pos.scale * 2.5)) / 2);
+        places.push({
+          x, y, z, col: pos.col, half,
+          top: Math.max(gameTop, pos.row - half),
+          bottom: Math.min(gameBottom - 1, pos.row + half),
+        });
+      }
+    }
+  }
+
+  const out = { walked: 0, dark: 0, candidates: 0, registered: 0, at: [] };
+
+  for (const aim of FIRING_AIMS) {
+    for (const by of FIRING_HEIGHTS) {
+    for (const bz of SHOT_DEPTHS) {
+      const bullet = { x: aim / probe.projScale(bz), y: by, z: bz, life: STAGED_LIFE };
+      const bPos = probe.toScreen(bullet.x, bullet.y, bullet.z);
+      const low = bPos.row >= gameTop && bPos.row < gameBottom
+        && tracerLit(build, bPos.col, bPos.row, gameTop, gameBottom, grid.w);
+      const high = bPos.row - 1 >= gameTop && bPos.row < gameBottom
+        && tracerLit(build, bPos.col, bPos.row - 1, gameTop, gameBottom, grid.w);
+
+      for (const place of places) {
+        out.walked++;
+        if (low || high) continue; // the player can see this one
+        out.dark++;
+
+        // Would the cells have met, had the tracer been drawn? Read at the
+        // positions the frame was painted at, which is the sweep's first step.
+        if (Math.abs(bPos.col - place.col) > place.half + slack) continue;
+        if (bPos.row - 1 > place.bottom || bPos.row < place.top) continue;
+        out.candidates++;
+
+        // Put it to the engine for one frame. The ship is parked at the far
+        // wall so nothing it does can register, as stagedShot parks it.
+        const game = emptyRun(build, grid);
+        const s = game.state;
+        stageTarget(s, place.x, place.y, place.z);
+        s.shipX = place.x >= 0 ? -6.5 : 6.5;
+        s.shipY = 0;
+        s.bullets = [{ ...bullet }];
+        const zBefore = s.obstacles[0].z;
+        const bullets = s.bullets.length;
+        game.update(dt, {}, {});
+        if (s.obstacles[0].z >= zBefore - 100 || s.bullets.length >= bullets) continue;
+
+        out.registered++;
+        if (out.at.length < 5) {
+          out.at.push(
+            `a shot at screen column ${bPos.col} of row ${bPos.row} (aim x ${aim}, y ${by}, z ${bz}) ` +
+            `against a target at x ${place.x.toFixed(2)}, y ${place.y.toFixed(2)}, ` +
+            `z ${place.z.toFixed(0)}`
+          );
+        }
+      }
+    }
+    }
+  }
+  return out;
 }

@@ -26,7 +26,7 @@ const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : '-');
 function tally(build, grid, band, { count, heights }) {
   const r = {
     flights: 0, kills: 0, drawnThroughAlive: 0,
-    on: 0, beside: 0, clear: 0, hidden: 0,
+    on: 0, beside: 0, wide: 0, unlit: 0, hidden: 0,
     gapMin: Infinity, gapMax: -Infinity,
     byGap: new Map(),
   };
@@ -61,13 +61,14 @@ export async function run({ grids = GRIDS, builds = BUILDS, count = 150 } = {}) 
   console.log(`  ship heights: ${HEIGHTS.join(', ')}, and held at the floor alone as the capture was flown`);
   console.log(`  volley: all three shots    dt: 1/${Math.round(1 / FRAME)}`);
   console.log('  drawn through: flights whose tracer stood on a block cell and killed nothing');
+  console.log('  wide: the tracer was drawn, a column or more off the block; unlit: no tracer drawn at all');
   console.log('  kill frame: where the killing tracer was, on the kill frame or the one before');
   console.log('');
 
   for (const build of builds) {
     for (const grid of grids) {
       console.log(`${build.name} at ${grid.name} (column slack ${build.shotSlackCols(grid.w)})`);
-      console.log('  aim      band          kills        drawn through   on    beside  clear  hidden   kill z gap');
+      console.log('  aim      band          kills        drawn through   on    beside    wide   unlit  hidden   kill z gap');
       for (const [label, heights] of [['heights', HEIGHTS], ['floor', [0]]]) {
         for (const band of BANDS) {
           const r = tally(build, grid, band, { count, heights });
@@ -77,7 +78,8 @@ export async function run({ grids = GRIDS, builds = BUILDS, count = 150 } = {}) 
             `${String(r.kills).padStart(4)}/${String(r.flights).padEnd(4)} ${pct(r.kills, r.flights).padStart(4)}  ` +
             `${String(r.drawnThroughAlive).padStart(9)}    ` +
             `${pct(r.on, r.kills).padStart(5)} ${pct(r.beside, r.kills).padStart(6)} ` +
-            `${pct(r.clear, r.kills).padStart(6)} ${pct(r.hidden, r.kills).padStart(6)}   ${gap}`
+            `${pct(r.wide, r.kills).padStart(6)} ${pct(r.unlit, r.kills).padStart(7)} ` +
+            `${pct(r.hidden, r.kills).padStart(6)}   ${gap}`
           );
           if (label === 'heights') {
             const gaps = [...r.byGap.entries()].sort((a, b) => a[0] - b[0])

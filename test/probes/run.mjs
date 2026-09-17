@@ -29,6 +29,7 @@ const PROBES = {
   'suite-replay': () => import('./suite-replay.mjs'),
   'frame-rate': () => import('./frame-rate.mjs'),
   'column': () => import('./column.mjs'),
+  'free-flight': () => import('./free-flight.mjs'),
 };
 
 function parseArgs(argv) {

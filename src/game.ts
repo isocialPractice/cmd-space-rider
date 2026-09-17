@@ -4,7 +4,7 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols, tracerLit,
 } from './types';
 
 const { PI, sin, cos, sqrt, abs, max, min, floor, ceil, random, atan2 } = Math;
@@ -652,9 +652,24 @@ export class Game {
    *
    * The screen is the whole of the hit test, because the screen is the whole of
    * what the player has. `drawBullets` puts the tracer on two cells, the row it
-   * is projected to and the row above; `drawEntitiesFar` gives a target a block
-   * of `size` cells about its own projected centre. The two either share a cell
-   * or they do not, and a target that is not being drawn at all cannot be shot.
+   * is projected to and the row above, and on neither of them where that column
+   * has left the corridor; `drawEntitiesFar` gives a target a block of `size`
+   * cells about its own projected centre. The two either share a cell or they
+   * do not, and neither a target that is not being drawn nor a tracer that is
+   * not being drawn can be half of a contact.
+   *
+   * The corridor clip is read from `tracerLit`, which is what `drawBullets`
+   * draws by, so the two cannot come to state different corridors. Leaving it
+   * out - which is how this stood until the clip was measured - let a shot
+   * register from a column the tunnel no longer reaches: `drawEntitiesFar`
+   * draws a target's block whether or not the corridor covers it, so the player
+   * saw the block, saw no bolt, and the block died anyway. Walked as geometry
+   * over every firing column and height the ship can hold, every depth of a
+   * shot's life and every legal target placement, 594 undrawn-tracer
+   * configurations at 80x24 registered a kill, 2241 at 60x20 and 76 at 205x50;
+   * `npm run probe -- free-flight` prints the walk. Reading the clip here costs
+   * nothing measurable: every band the suite pins, at all three grids and in
+   * both builds, came back on the figure it had.
    *
    * Depth is not compared. Shot and target are drawn at their own depths, so
    * two things a frame apart in depth can be a cell apart on the screen and two
@@ -730,11 +745,18 @@ export class Game {
       if (abs(bScr.col - tScr.col) > half + slackCols) continue;
 
       // The block is clipped to the play area as drawBlock clips it; the tracer
-      // is its own row and, where there is room for it, the row above.
+      // is its own row and, where there is room for it, the row above - and
+      // each half only where drawBullets would actually draw it, which is
+      // inside the corridor and nowhere else.
       const blockTop = max(gameTop, tScr.row - half);
       const blockBottom = min(gameBottom - 1, tScr.row + half);
-      const tracerTop = bScr.row - 1 >= gameTop ? bScr.row - 1 : bScr.row;
-      if (tracerTop <= blockBottom && bScr.row >= blockTop) return true;
+      const lowLit = tracerLit(bScr.col, bScr.row, gameTop, gameBottom, s.screenWidth);
+      const highLit = bScr.row - 1 >= gameTop
+        && tracerLit(bScr.col, bScr.row - 1, gameTop, gameBottom, s.screenWidth);
+      if (!lowLit && !highLit) continue; // nothing drawn, so nothing to register
+      const tracerTop = highLit ? bScr.row - 1 : bScr.row;
+      const tracerBottom = lowLit ? bScr.row : bScr.row - 1;
+      if (tracerTop <= blockBottom && tracerBottom >= blockTop) return true;
     }
     return false;
   }
@@ -769,7 +791,11 @@ export class Game {
    *
    * What a shot then registers against is decided on the screen, by `contacts`
    * above: a tracer drawn on a target's block destroys it, and one that is not
-   * drawn on it does not.
+   * drawn on it does not. That second half covers a tracer drawn beside the
+   * block and a tracer not drawn at all, which are the two ways of not being
+   * drawn on it - so a shot whose column has left the corridor registers
+   * nothing for as long as it is dark, and a block the player can see with no
+   * bolt on it survives.
    */
   private updateBullets(dt: number, advance: number): void {
     const s = this.state;

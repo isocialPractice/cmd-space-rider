@@ -442,3 +442,54 @@ still be found by name.
     `## Measurement`. Correct the one-column wording whichever way it goes.
     Both builds together, as `test/parity.test.mjs` expects.
   - From: User Overrides
+
+## Archived 09-17-26
+
+- [x] **Probe rig on the real engines** - A tracked home for the probes, such
+  as `test/probes/`, which `node --test "test/*.test.mjs"` does not pick up,
+  run through an `npm run probe -- <name> --grid <W>x<H>` script that builds
+  `out/` first, as `npm test` does. The rig loads the browser engine through
+  `loadBrowserEngine` and the terminal engine from `out/`, and runs every
+  probe against both, so no probe measures a transcription: the pulse cannon
+  figures under `## Current` were taken on a sandbox copy, and a copy drifts.
+  Move `engage`, `sweep`, `stagedShot`, `seeShip` and `seeBlock` out of
+  `test/pulse-cannon.test.mjs` into a shared module that takes the grid as a
+  parameter, so the tests and the probes fly the same engagement; the pulse
+  cannon item's first child needs the same move, and whichever lands first
+  makes it. Every probe prints the grid, the placement walk, the ship
+  heights, the band and `dt` above its table. `.tmp/hits/horizontal.mjs`
+  folds into the column probe below; `.tmp/hits/vertical.mjs` measures
+  `SHOT_SLACK_ROWS`, which the pulse cannon item retires, so it goes with it.
+  Say which happened to each in the CHANGELOG.
+  - From: Measurement
+- [x] **Seen-versus-kill probe** - Whether a kill agrees with what the screen
+  drew, which is the measurement behind the pulse cannon item. Walk 150
+  placements - x = -4.5 + 9i/149, y = 0.5 + 4((7i) mod 150)/149,
+  z = -(near + (far - near)((13i) mod 150)/149) - at ship heights 0, 1, 2.5
+  and 4.5, set the ship on the target's drawn column, fire the volley, and
+  render every frame with `renderGame`. Report per grid and per band (20 to
+  60, 60 to 140): the kill rate; the share of flights with a tracer drawn on
+  the block that end without a kill; the share of kills with no tracer on the
+  block; and the share with no tracer even beside it within
+  `SHOT_SLACK_COLS`. Score the kill frame from the target as it stood before
+  the kill recycled it and from the killing shot before it was spliced - read
+  after the frame, every kill looks unseen. Tell a ram apart by the shield,
+  as `engage` does. Break the kills down by the height gap between ship and
+  target, rounded to a unit, and give the spread of shot z minus target z at
+  the kill, since those two say whether height still decides a hit. Also fly
+  the ship held at the floor alone, which is how the capture was played. The
+  sandbox copy gave, at 80x24, kills of 93% and 84% with 7% and 18% drawn
+  through, and at 205x50, 50% and 33% with 52% and 66%; floor-held over a
+  120-placement walk, 109/120 and 100/120 at 80x24 and 35/120 and 30/120 at
+  205x50.
+  - From: Measurement
+- [x] **Suite replay at any grid** - Run the test file's own bands at a given
+  grid - `sweep` at 15 to 35, 35 to 80 and 80 to 140 for a lone shot, 80 to
+  140 for the volley, and `sweepByEye` at 35 to 80 and 80 to 140 - and print
+  each as landed over resolved beside the floor the test pins, with the ram
+  count. This is how a floor is checked at a new size before a test is
+  written for it. The sandbox copy gave, at 80x24, 21 resolved at 15 to 35
+  (39 rams), then 58/58, 44/58 and 57/58; at 205x50, 12 resolved (48 rams),
+  then 43/52, 16/57 and 45/57. `sweepByEye` was not replayed and has no
+  figure at 205x50 yet.
+  - From: Measurement

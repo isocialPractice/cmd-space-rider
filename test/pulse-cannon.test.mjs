@@ -30,7 +30,7 @@ import {
   HUD_ROWS, FOOTER_ROWS, WALL_CHARS,
   emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk,
   watchEngagement, tracerCells, tracerCellsBothHalves,
-  unitsPerCol,
+  unitsPerCol, freeFlight, darkWalk,
 } from './engagement.mjs';
 
 /**
@@ -62,7 +62,7 @@ function seenWalk(build, grid) {
   if (seenWalks.has(key)) return seenWalks.get(key);
 
   const result = {
-    flights: 0, kills: 0, drawnThroughAlive: 0, clear: 0, hidden: 0,
+    flights: 0, kills: 0, drawnThroughAlive: 0, wide: 0, unlit: 0, hidden: 0,
     byGap: new Map(), gapMin: Infinity, gapMax: -Infinity,
   };
   for (const band of SEEN_BANDS) {
@@ -77,7 +77,8 @@ function seenWalk(build, grid) {
         if (seen.outcome === 'hit') {
           result.kills++;
           at.kills++;
-          if (seen.killContact === 'clear') result.clear++;
+          if (seen.killContact === 'wide') result.wide++;
+          if (seen.killContact === 'unlit') result.unlit++;
           if (seen.killContact === 'hidden') result.hidden++;
           if (seen.killGapZ !== null) {
             result.gapMin = Math.min(result.gapMin, seen.killGapZ);
@@ -177,16 +178,27 @@ for (const build of BUILDS) {
       // has to have its tracer on the block, or within the grid's column slack
       // beside it, on the kill frame or the one before.
       //
-      // A few per cent are neither, and that is the sweep inside the frame
-      // doing its job rather than a kill nobody earned. A frame carries a shot
-      // a row or so up the screen, so two cells can meet on a step the sweep
-      // tests and neither end of the frame draws - the player sees the tracer a
-      // row short, then the block goes. Measured across all three grids it is
-      // at most 3 kills in 150.
+      // The two ways of failing that are counted apart, because they are
+      // different faults and used to share one bucket. `unlit` is a kill with
+      // no tracer drawn anywhere: the corridor clip took the bolt off the
+      // screen and the hit test registered from it anyway, which is nil now
+      // that `contacts` reads the same clip `drawBullets` draws by, and is the
+      // regression this pins.
+      //
+      // `wide` is a tracer the player watched go past a column or more off the
+      // block. A few per cent of those are the sweep inside the frame doing its
+      // job rather than a kill nobody earned: a frame carries a shot a row or
+      // so up the screen, so two cells can meet on a step the sweep tests and
+      // neither end of the frame draws. Measured across all three grids and
+      // both builds it is 8 kills in 860, and at most 3 in 150 at one grid.
       const seen = seenWalk(build, grid);
+      assert.equal(
+        seen.unlit, 0,
+        `${seen.unlit} of ${seen.kills} kills landed with no tracer drawn at all`
+      );
       assert.ok(
-        seen.clear / seen.kills <= 0.05,
-        `${seen.clear} of ${seen.kills} kills had no tracer on or beside the block`
+        seen.wide / seen.kills <= 0.05,
+        `${seen.wide} of ${seen.kills} kills had a tracer drawn wide of the block`
       );
       // A kill lands well off the target's own depth, which is what a screen
       // rule means: the two are drawn at their own depths and meet where the
@@ -660,3 +672,162 @@ test('both builds draw the tracer on the same cells, frame for frame', () => {
     );
   }
 });
+
+// ----- The rule, in free flight -----
+//
+// Everything above stages its engagement: one target parked in an emptied run,
+// one volley in the air. That isolates the shot, which is what a rate needs,
+// and it is not the shape the fault was found in. The screen capture behind
+// this whole rule was a real run - sixty obstacles in the tunnel, volleys
+// overlapping, the ship held on the floor - and the two invariants had no check
+// in that shape at all. They were verified in a browser instead, which means
+// they were only ever guarded when the UI/UX agent ran, and not on a change.
+//
+// So the same pair is asked of a run the engine starts for itself. The pilot is
+// in engagement.mjs; these read what it brings back.
+
+/** Held on the floor, and held at the ceiling the tunnel clamps the ship to. */
+const FREE_HEIGHTS = [0, 6.5];
+
+/** Frames per flight, matching the length the browser verification flew. */
+const FREE_FRAMES = 1200;
+
+/** One flight per height, kept for every check below that reads it. */
+const freeFlights = new Map();
+function freeRun(build, grid) {
+  const key = `${build.name}:${grid.name}`;
+  if (!freeFlights.has(key)) {
+    freeFlights.set(key, FREE_HEIGHTS.map((holdY) => ({
+      holdY, ...freeFlight(build, grid, { frames: FREE_FRAMES, holdY }),
+    })));
+  }
+  return freeFlights.get(key);
+}
+
+for (const build of BUILDS) {
+  for (const grid of GRIDS) {
+    const at = `${build.name} at ${grid.name}`;
+
+    test(`${at}: the free flight is a real run, crowded and firing`, () => {
+      // The guard on the pilot rather than on the cannon. Both checks below
+      // pass on a flight that never fires, never meets anything, or dies in its
+      // first seconds, so what the flight actually contained is pinned here:
+      // volleys pulled, kills landed, blocks on the screen at once, and shots
+      // in the air at once. Measured over 1200 frames, a flight fires 145 to
+      // 297 volleys, lands 45 to 117 kills, draws up to 34 blocks at once and
+      // holds up to 45 shots in the air.
+      for (const flight of freeRun(build, grid)) {
+        const held = `held at ${flight.holdY}`;
+        assert.equal(flight.frames, FREE_FRAMES, `${held}: the flight should run its length`);
+        assert.ok(flight.volleys >= 100, `${held}: only ${flight.volleys} volleys fired`);
+        assert.ok(flight.kills >= 25, `${held}: only ${flight.kills} kills landed`);
+        assert.ok(
+          flight.mostBlocksDrawn >= 8,
+          `${held}: at most ${flight.mostBlocksDrawn} blocks were ever drawn at once`
+        );
+        assert.ok(
+          flight.mostShotsInAir >= 9,
+          `${held}: at most ${flight.mostShotsInAir} shots were ever in the air, so no volley overlapped`
+        );
+      }
+    });
+
+    test(`${at}: no tracer is drawn through a block a whole run long`, () => {
+      // The complaint, asked of free flight: a bolt drawn on a block that is
+      // still there the frame after, with the same shot still in the air. The
+      // sweep's first sample is where the two stood when the frame was painted,
+      // so a contact the player can see is one the hit test was handed.
+      //
+      // It comes back nil, and so does the count of frames that drew a tracer
+      // on a block at all - the contact resolves on the frame it would first be
+      // drawn, so the player never sees a bolt standing on a live block. Flown
+      // in a real chromium window the same detector counted 164 such frames
+      // with the hit rule switched off; forcing `contacts` to return false here
+      // gives 662 to 29,594 a flight, so the check has plenty of grip.
+      for (const flight of freeRun(build, grid)) {
+        assert.equal(
+          flight.ignored, 0,
+          `held at ${flight.holdY}: ${flight.ignored} contacts were drawn and ignored, ` +
+          `first at ${flight.ignoredAt.join('; ')}`
+        );
+      }
+    });
+
+    test(`${at}: every kill in free flight was earned on the screen`, () => {
+      // The other half. A kill has to have had its tracer on the killed block
+      // or within the grid's column slack beside it, on the kill frame or the
+      // one before, with both readings taken against the killing shot alone.
+      //
+      // `unlit` is a kill with no bolt drawn anywhere, which is the corridor
+      // clip fault, and it is nil now that `contacts` reads the same clip
+      // `drawBullets` draws by. Measured over three passes of the whole matrix
+      // it stayed nil in all three, at 847 to 870 kills a pass.
+      //
+      // The rest is 98% or better on or beside - 5 to 8 kills a pass were
+      // neither, and the worst any one build and grid came back at was 97.5%.
+      // That remainder is the sweep inside the frame doing its job rather than
+      // a kill nobody earned: a frame carries a shot a row or more up the
+      // screen, so two cells can meet on a step the sweep tests and neither end
+      // of the frame draws.
+      const flights = freeRun(build, grid);
+      const count = (verdict) => flights.reduce(
+        (n, f) => n + (f.killContacts.get(verdict) ?? 0), 0
+      );
+      const kills = flights.reduce((n, f) => n + f.kills, 0);
+      const reached = count('on') + count('beside');
+
+      assert.equal(
+        count('unlit'), 0,
+        `${count('unlit')} of ${kills} kills landed with no tracer drawn at all`
+      );
+      assert.ok(
+        reached / kills >= 0.9,
+        `${reached}/${kills} kills had their tracer on or within ${flights[0].slack} ` +
+        `columns of the block, wanted 90%`
+      );
+    });
+  }
+}
+
+// ----- The corridor clip, walked rather than flown -----
+//
+// `drawBullets` stops drawing a tracer whose column has left the corridor, and
+// `drawEntitiesFar` draws a target's block whether or not the corridor reaches
+// it - so before `contacts` read the same clip, a shot could register from a
+// column the tunnel no longer covered. The player saw the block, saw no bolt,
+// and the block died anyway.
+//
+// None of the flown engagements can reach that. They steer onto the target's
+// column before firing, and a target never spawns outside four and a half units
+// of the axis, so a flown shot is never taken from a column the tunnel has
+// stopped reaching. The ship can hold six and a half. So the hit test is walked
+// instead: every firing column and height the ship can hold, every depth of a
+// shot's life, against every legal target placement.
+
+for (const build of BUILDS) {
+  for (const grid of GRIDS) {
+    test(`${build.name} at ${grid.name}: a shot the player cannot see registers nothing`, () => {
+      // Every configuration the walk calls a candidate is one where the tracer
+      // was drawn nowhere and the cells would otherwise have met - which is to
+      // say, one the hit test killed on before it read the clip. Walked against
+      // the tail as it stood then, every single one registers: 594 of 594 at
+      // 80x24, 2241 of 2241 at 60x20 and 76 of 76 at 205x50, out of 3.5 to 3.9
+      // million dark configurations at each grid. They now register none.
+      const walked = darkWalk(build, grid);
+
+      assert.equal(
+        walked.registered, 0,
+        `${walked.registered} of ${walked.candidates} undrawn-tracer configurations ` +
+        `still registered, first ${walked.at[0]}`
+      );
+      // The guard on the walk rather than on the hit test: a walk that produces
+      // no candidate asserts nothing, and the candidate count is the one thing
+      // that moves if the corridor, the slack or the projection is retuned.
+      assert.ok(
+        walked.candidates > 0,
+        `the walk found no undrawn-tracer configuration to put to the hit test, ` +
+        `out of ${walked.dark} dark ones`
+      );
+    });
+  }
+}

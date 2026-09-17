@@ -116,6 +116,41 @@ export function shotSlackCols(screenWidth: number): number {
   return Math.max(SHOT_SLACK_COLS, Math.round(scaled));
 }
 
+/**
+ * The two columns the tunnel's walls are drawn on for a given row.
+ *
+ * Three things read it, and that is why it lives here rather than in the
+ * renderer: drawTunnel lays the walls down from it, drawBullets reads it back
+ * to decide whether a tracer is still inside the corridor, and the pulse
+ * cannon's hit test reads it to decide whether that tracer was drawn at all.
+ * The corridor the player sees, the corridor a shot is drawn in and the
+ * corridor a shot can register in are then one corridor and cannot drift
+ * apart.
+ */
+export function tunnelSpan(
+  row: number, gameTop: number, gameBottom: number, w: number
+): { left: number; right: number } {
+  const center = Math.floor(w / 2);
+  const t = (row - gameTop) / (gameBottom - gameTop); // 0=far(top), 1=near(bottom)
+  const halfSpan = Math.floor(3 + t * (center - 4));
+  return { left: center - halfSpan, right: center + halfSpan };
+}
+
+/**
+ * Whether a tracer at this column and row is inside the corridor, which is
+ * what drawBullets draws it in.
+ *
+ * The corridor is what the walls enclose and not the walls themselves:
+ * drawTunnel lays its glyph on tunnelSpan's own two columns and thickens
+ * outward from there, so the corridor runs from left + 1 to right - 1.
+ */
+export function tracerLit(
+  col: number, row: number, gameTop: number, gameBottom: number, w: number
+): boolean {
+  const span = tunnelSpan(row, gameTop, gameBottom, w);
+  return col > span.left && col < span.right;
+}
+
 /** Seconds a combo chain survives without a kill before it drops to nothing. */
 export const COMBO_TIME = 2;
 

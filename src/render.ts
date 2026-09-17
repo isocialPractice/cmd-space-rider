@@ -1,7 +1,16 @@
 // src/render.ts — Terminal renderer: tunnel, ship, entities, HUD, effects
 
 import { ScreenBuffer } from './screen';
-import { GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME } from './types';
+import {
+  GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME,
+  tunnelSpan, tracerLit,
+} from './types';
+
+// The tunnel's geometry moved to types.ts, where the hit test can read the same
+// corridor this draws in. Re-exported from its old home so the drawing tests,
+// which ask the renderer for the span they check a tracer against, go on
+// reading it off the module that draws with it.
+export { tunnelSpan };
 
 const { sin, cos, floor, round, max, min, abs, sqrt } = Math;
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -89,21 +98,6 @@ function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, 
       screen.put(floor(star.x) % w, floor(y), star.char, star.color, C.BLACK);
     }
   }
-}
-
-/**
- * The two columns the tunnel's walls are drawn on for a given row.
- * drawTunnel lays the walls down from this and drawBullets reads it back to
- * tell whether a tracer is still in the corridor, so the corridor the player
- * sees and the corridor the renderer tests a shot against cannot drift apart.
- */
-export function tunnelSpan(
-  row: number, gameTop: number, gameBottom: number, w: number
-): { left: number; right: number } {
-  const center = floor(w / 2);
-  const t = (row - gameTop) / (gameBottom - gameTop); // 0=far(top), 1=near(bottom)
-  const halfSpan = floor(3 + t * (center - 4));
-  return { left: center - halfSpan, right: center + halfSpan };
 }
 
 function drawTunnel(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
@@ -258,18 +252,23 @@ function drawBlock(
  * rounded while registering floored is worse again - the glyph the player aims
  * by would sit a column off what the hit test reads, on half of all positions.
  *
- * Drawing only: the span the walls are drawn on runs a little narrower than
- * the tunnel radius projects to, so culling the bullet on it would cost real
- * hits at the far end. Each half is tested on its own row, because the span
- * narrows going up and the dim upper half leaves the corridor first.
+ * The hit test reads the same clip, and that is the whole of what it shares
+ * with this: a frame that draws no tracer registers nothing on that frame. The
+ * flight itself is not cut short. The span the walls are drawn on runs a little
+ * narrower than the tunnel radius projects to, so culling the bullet outright
+ * when it crosses would cost real hits at the far end - the shot goes dark, and
+ * lights again if the corridor widens back around its column. Measured across
+ * every band the suite pins, at all three grids and in both builds, matching
+ * the two cost nothing: every rate came back on the figure it had.
+ *
+ * Each half is tested on its own row, because the span narrows going up and the
+ * dim upper half leaves the corridor first.
  */
 function drawBullets(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
   const w = screen.width;
   const h = screen.height;
-  const inCorridor = (col: number, row: number): boolean => {
-    const span = tunnelSpan(row, gameTop, gameBottom, w);
-    return col > span.left && col < span.right;
-  };
+  const inCorridor = (col: number, row: number): boolean =>
+    tracerLit(col, row, gameTop, gameBottom, w);
   for (const b of state.bullets) {
     const pos = gameToScreen(b.x, b.y, b.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
     if (pos.row < gameTop || pos.row >= gameBottom) continue;

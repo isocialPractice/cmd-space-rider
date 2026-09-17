@@ -80,7 +80,8 @@ export async function run({ grids = GRIDS, builds = BUILDS, count = 24 } = {}) {
         );
       }
 
-      let kills = 0; let flights = 0; let beside = 0; let clear = 0; let through = 0; let hidden = 0;
+      let kills = 0; let flights = 0; let beside = 0; let wide = 0; let unlit = 0;
+      let through = 0; let hidden = 0;
       for (const place of walk(count, { near: 60, far: 140 })) {
         for (const shipY of [0, 1, 2.5, 4.5]) {
           const seen = watchEngagement(build, grid, { ...place, holdY: shipY });
@@ -90,14 +91,16 @@ export async function run({ grids = GRIDS, builds = BUILDS, count = 24 } = {}) {
           if (seen.outcome === 'hit') {
             kills++;
             if (seen.killContact === 'beside') beside++;
-            if (seen.killContact === 'clear') clear++;
+            if (seen.killContact === 'wide') wide++;
+            if (seen.killContact === 'unlit') unlit++;
             if (seen.killContact === 'hidden') hidden++;
           }
         }
       }
       console.log(
         `  contact at 60 to 140: ${kills}/${flights} killed ${pct(kills, flights)},  ` +
-        `${pct(beside, kills)} of kills beside the block, ${pct(clear, kills)} clear of it, ${pct(hidden, kills)} hidden by the hull, ` +
+        `${pct(beside, kills)} of kills beside the block, ${pct(wide, kills)} wide of it, ` +
+        `${pct(unlit, kills)} with no tracer drawn, ${pct(hidden, kills)} hidden by the hull, ` +
         `${through} tracers drawn through a survivor`
       );
       console.log('');
