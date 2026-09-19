@@ -692,6 +692,18 @@ const FREE_HEIGHTS = [0, 6.5];
 /** Frames per flight, matching the length the browser verification flew. */
 const FREE_FRAMES = 1200;
 
+// Every figure quoted in the three checks below is a spread over ten passes of
+// the whole matrix rather than a number, and each says so where it is quoted.
+//
+// The flight is the run `startGame` opens, which seeds sixty obstacles from an
+// unseeded `Math.random`, so each pass flies a different run and no figure off
+// it is repeatable the way the staged walks beside it are. Quoting one pass as
+// though it were the measurement is what put figures in these comments that the
+// first rerun fell outside of. `npm run probe -- free-flight --passes 10`
+// prints them all again; a rerun can still sit a little outside a ten-pass
+// spread, which is why the floors asserted below are set well under the low end
+// rather than against it.
+
 /** One flight per height, kept for every check below that reads it. */
 const freeFlights = new Map();
 function freeRun(build, grid) {
@@ -713,14 +725,16 @@ for (const build of BUILDS) {
       // pass on a flight that never fires, never meets anything, or dies in its
       // first seconds, so what the flight actually contained is pinned here:
       // volleys pulled, kills landed, blocks on the screen at once, and shots
-      // in the air at once. Measured over 1200 frames, a flight fires 145 to
-      // 297 volleys, lands 45 to 117 kills, draws up to 34 blocks at once and
-      // holds up to 45 shots in the air.
+      // in the air at once. Over ten passes of the whole matrix, a
+      // 1200-frame flight fired 136 to 298 volleys, landed 27 to 129 kills,
+      // drew 12 to 34 blocks at once and held 42 to 45 shots in the air. The
+      // floors sit well under the low end of each, because the next pass is
+      // another draw and not the same one.
       for (const flight of freeRun(build, grid)) {
         const held = `held at ${flight.holdY}`;
         assert.equal(flight.frames, FREE_FRAMES, `${held}: the flight should run its length`);
-        assert.ok(flight.volleys >= 100, `${held}: only ${flight.volleys} volleys fired`);
-        assert.ok(flight.kills >= 25, `${held}: only ${flight.kills} kills landed`);
+        assert.ok(flight.volleys >= 80, `${held}: only ${flight.volleys} volleys fired`);
+        assert.ok(flight.kills >= 15, `${held}: only ${flight.kills} kills landed`);
         assert.ok(
           flight.mostBlocksDrawn >= 8,
           `${held}: at most ${flight.mostBlocksDrawn} blocks were ever drawn at once`
@@ -740,10 +754,11 @@ for (const build of BUILDS) {
       //
       // It comes back nil, and so does the count of frames that drew a tracer
       // on a block at all - the contact resolves on the frame it would first be
-      // drawn, so the player never sees a bolt standing on a live block. Flown
-      // in a real chromium window the same detector counted 164 such frames
-      // with the hit rule switched off; forcing `contacts` to return false here
-      // gives 662 to 29,594 a flight, so the check has plenty of grip.
+      // drawn, so the player never sees a bolt standing on a live block. Both
+      // were nil on every flight of ten passes of the matrix. Flown in a real
+      // chromium window the same detector counted 164 such frames with the hit
+      // rule switched off; forcing `contacts` to return false here gives 406 to
+      // 27,514 a flight over five passes, so the check has plenty of grip.
       for (const flight of freeRun(build, grid)) {
         assert.equal(
           flight.ignored, 0,
@@ -758,32 +773,58 @@ for (const build of BUILDS) {
       // or within the grid's column slack beside it, on the kill frame or the
       // one before, with both readings taken against the killing shot alone.
       //
+      // "The killing shot alone" is the frame's own resolution order rather
+      // than a figure of speech: the pilot pairs each kill to the shot that
+      // made it before reading either contact, walking the spent shots and the
+      // kill bursts from the same end updateBullets walks the bullets from. It
+      // used to reduce both readings over every shot the frame spent, which on
+      // a crowded frame let one shot's contact answer for another shot's kill -
+      // 11% of kills were landed on a frame that spent more than one shot, so
+      // the share this asserts was a ceiling on what it could catch.
+      //
       // `unlit` is a kill with no bolt drawn anywhere, which is the corridor
       // clip fault, and it is nil now that `contacts` reads the same clip
-      // `drawBullets` draws by. Measured over three passes of the whole matrix
-      // it stayed nil in all three, at 847 to 870 kills a pass.
+      // `drawBullets` draws by. Over ten passes of the whole matrix it stayed
+      // nil in every one, at 90 to 197 kills a grid a pass.
       //
-      // The rest is 98% or better on or beside - 5 to 8 kills a pass were
-      // neither, and the worst any one build and grid came back at was 97.5%.
-      // That remainder is the sweep inside the frame doing its job rather than
-      // a kill nobody earned: a frame carries a shot a row or more up the
-      // screen, so two cells can meet on a step the sweep tests and neither end
-      // of the frame draws.
+      // The rest is 96% or better on or beside at every grid and in both
+      // builds, taken over the kills the frame could pair. That remainder is
+      // the sweep inside the frame doing its job rather than a kill nobody
+      // earned: a frame carries a shot a row or more up the screen, so two
+      // cells can meet on a step the sweep tests and neither end of the frame
+      // draws.
+      //
+      // The pairing is what the last assertion guards. A frame that also spends
+      // a shot on a mine cannot say which shot went where, so its kills are
+      // counted and left unread - 0 to 16 a grid a pass, which is 90% of them
+      // read at the worst pass of the ten.
+      //
+      // The share above is the grip on the pairing itself. Flown with the spent
+      // shots walked from the wrong end, so that each kill is read against a
+      // shot that did not make it, it falls to 87% and 89% at two of the six
+      // build-and-grid pairs and the 90% floor catches them.
       const flights = freeRun(build, grid);
       const count = (verdict) => flights.reduce(
         (n, f) => n + (f.killContacts.get(verdict) ?? 0), 0
       );
       const kills = flights.reduce((n, f) => n + f.kills, 0);
+      const read = count('on') + count('beside') + count('wide')
+        + count('unlit') + count('hidden');
       const reached = count('on') + count('beside');
 
       assert.equal(
         count('unlit'), 0,
-        `${count('unlit')} of ${kills} kills landed with no tracer drawn at all`
+        `${count('unlit')} of ${read} read kills landed with no tracer drawn at all`
       );
       assert.ok(
-        reached / kills >= 0.9,
-        `${reached}/${kills} kills had their tracer on or within ${flights[0].slack} ` +
+        reached / read >= 0.9,
+        `${reached}/${read} kills had their tracer on or within ${flights[0].slack} ` +
         `columns of the block, wanted 90%`
+      );
+      assert.ok(
+        read / kills >= 0.75,
+        `only ${read} of ${kills} kills could be paired to the shot that made them, ` +
+        `wanted three quarters`
       );
     });
   }

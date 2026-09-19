@@ -210,6 +210,7 @@ takes a grid and a build:
 ```bash
 npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
+npm run probe -- free-flight --passes 10
 ```
 
 ### Line Endings
@@ -264,6 +265,14 @@ turns up in. `free-flight` is the other end: a run the engine opens for itself,
 sixty obstacles in the tunnel and volleys overlapping, watched frame by frame,
 with the walk over the firing columns no flown engagement ever reaches printed
 underneath it.
+
+A staged walk places what it flies, so it gives the same numbers every time and
+one pass of it is the figure. The run the engine opens for itself is seeded from
+an unseeded `Math.random`, so every pass of `free-flight` flies a different run
+and one pass of it is a sample. That probe therefore takes `--passes` and prints
+each figure as the spread over them, and a figure quoted from it anywhere in the
+repository carries the pass count it was taken over. The walk printed beneath it
+is arithmetic and needs no passes at all.
 
 ## Terminal Requirements
 

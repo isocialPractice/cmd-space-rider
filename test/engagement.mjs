@@ -38,12 +38,14 @@ export const BUILDS = [
   {
     name: 'terminal', Game: TerminalGame,
     ScreenBuffer: TerminalScreen, renderGame: terminalRender, C: terminalTypes.C,
-    tunnelSpan: terminalTunnelSpan, shotSlackCols: terminalTypes.shotSlackCols,
+    tunnelSpan: terminalTunnelSpan, tracerLit: terminalTypes.tracerLit,
+    shotSlackCols: terminalTypes.shotSlackCols,
   },
   {
     name: 'browser', Game: browser.Game,
     ScreenBuffer: browser.ScreenBuffer, renderGame: browser.renderGame, C: browser.C,
-    tunnelSpan: browser.tunnelSpan, shotSlackCols: browser.shotSlackCols,
+    tunnelSpan: browser.tunnelSpan, tracerLit: browser.tracerLit,
+    shotSlackCols: browser.shotSlackCols,
   },
 ];
 
@@ -784,20 +786,95 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
   return { outcome, drawnThrough, killContact, killGapZ, targetY, slack };
 }
 
-/**
- * Whether a tracer at this column and row is inside the corridor, read out of
- * the build that is flying rather than restated here. `tunnelSpan` is the one
- * definition of the corridor - drawTunnel lays the walls from it, drawBullets
- * draws the tracer inside it, and `contacts` registers inside it - so a test
- * carrying its own copy would be pinning the copy.
- */
-export function tracerLit(build, col, row, gameTop, gameBottom, w) {
-  const span = build.tunnelSpan(row, gameTop, gameBottom, w);
-  return col > span.left && col < span.right;
-}
-
 /** A cell as a key, for the set arithmetic the free flight below runs on. */
 const cellKey = (c) => `${c.x},${c.y}`;
+
+/**
+ * The colour an obstacle's own debris is thrown in, which is how the free
+ * flight below tells a kill from the other two ways a block leaves the tunnel.
+ *
+ * A block goes three ways and all three look identical once the frame has
+ * ended, because all three set `o.z` back by `RECYCLE_Z` and nothing records
+ * which did it: shot down by `updateBullets`, rammed by `updateObstacles`, or
+ * wrapped round after passing the ship. `updateObstacles` runs first, so a
+ * reading that watches the depth alone scores a rammed block as a kill on any
+ * frame that also spent a shot.
+ *
+ * The explosion says which. Only `updateBullets` throws debris in this colour;
+ * a ram throws the damage colour, and a wrap throws none at all. The bursts are
+ * also pushed in resolution order and nothing reorders `state.particles`, so
+ * the order they appear in is the order the kills resolved in - which is what
+ * pairs each kill to the shot that made it.
+ */
+const KILL_DEBRIS = 208;
+
+/**
+ * How many pieces a kill's burst is thrown in, which is what tells one kill's
+ * debris from the next kill's.
+ *
+ * The count is fixed - `updateBullets` spawns this many on every kill and no
+ * other number - and `spawnParticles` pushes a whole burst in one loop, so the
+ * frame's fresh kill debris is its bursts laid end to end, this many at a time,
+ * in the order the kills resolved. A ram and an orb throw their debris in other
+ * colours and a mine's is pushed whole like this one, so filtering on the
+ * colour leaves the kill bursts contiguous and in order.
+ *
+ * The boundary is counted rather than read off the positions, because the two
+ * blocks that have to be told apart are the two a frame shot, and those are the
+ * closest together of any pair on the screen: the pilot closes on the nearest
+ * drawn block's column before it fires, so a frame that kills twice usually
+ * kills twice down the same column. Measured over 60 flights of the matrix,
+ * adjacent bursts came as close as 0.19 units on every axis at once - well
+ * inside `DEBRIS_DRIFT` below - so grouping the debris by where it landed
+ * merged those two kills into one, dropped a kill, and handed the remainder
+ * that `rams` is taken as a ram that never happened.
+ */
+const KILL_DEBRIS_COUNT = 12;
+
+/**
+ * How far a piece of debris can be from the block it came off, one frame on.
+ *
+ * `spawnParticles` puts a whole burst on the block's own position, and the
+ * frame then moves every particle once before anything can read it, so the
+ * piece this module reads a burst's position off has drifted from the block by
+ * one frame of its own velocity - under a tenth of a unit on each axis at the
+ * frame rates this module flies, against blocks spread over nine units of x and
+ * four of y.
+ *
+ * This bounds a burst against its own block and nothing else. It is not what
+ * separates one burst from the next, which is counted: see
+ * `KILL_DEBRIS_COUNT`.
+ *
+ * Nothing here restates how a particle moves: the bound is loose on purpose,
+ * and a burst that fails to name exactly one block is counted as unpaired
+ * rather than guessed at.
+ */
+const DEBRIS_DRIFT = 0.5;
+
+/** Whether a burst and a block are close enough to be the same block. */
+const nearby = (a, b) => Math.abs(a.x - b.x) <= DEBRIS_DRIFT
+  && Math.abs(a.y - b.y) <= DEBRIS_DRIFT
+  && Math.abs(a.z - b.z) <= DEBRIS_DRIFT;
+
+/**
+ * The kill bursts one frame added to `state.particles`, in resolution order.
+ *
+ * Every particle spawned this frame outlives it - `life` starts at 0.3 at the
+ * least, against a frame of a thirtieth - so the frame's own bursts are all
+ * still there, in the order they were pushed, with the older ones the caller
+ * already held ahead of them.
+ */
+function killBurstsSince(particles, before) {
+  const fresh = [];
+  for (const p of particles) {
+    if (!before.has(p) && p.color === KILL_DEBRIS) fresh.push(p);
+  }
+  const out = [];
+  for (let i = 0; i + KILL_DEBRIS_COUNT <= fresh.length; i += KILL_DEBRIS_COUNT) {
+    out.push({ x: fresh[i].x, y: fresh[i].y, z: fresh[i].z });
+  }
+  return out;
+}
 
 /**
  * How often the flight below pulls the trigger, in seconds.
@@ -833,11 +910,27 @@ export const FREE_FIRE_INTERVAL = 0.12;
  *   sweep in `contacts` tests exactly the frame that was drawn - its first
  *   sample is where the two stood when the frame was painted - so there is no
  *   slack in the reading to argue about.
- * - **Kill contacts.** Where the tracer stood against the block on the frame a
- *   kill resolved, or the frame before, by `contactOf`'s reading. The kill
- *   frame is rebuilt rather than read, for the reason `watchEngagement` gives:
- *   the frame that resolves a kill splices the shot and recycles the target
- *   inside itself, so a render taken afterwards shows neither.
+ * - **Kill contacts.** Where the killing shot's tracer stood against the block
+ *   it killed, on the frame the kill resolved or the frame before, by
+ *   `contactOf`'s reading. The kill frame is rebuilt rather than read, for the
+ *   reason `watchEngagement` gives: the frame that resolves a kill splices the
+ *   shot and recycles the target inside itself, so a render taken afterwards
+ *   shows neither.
+ *
+ * A kill is paired to the shot that made it before either reading is taken,
+ * because a crowded frame spends several shots and a reading taken across all
+ * of them credits one shot's contact to another shot's kill. The pairing is the
+ * frame's own resolution order rather than a guess at it: `updateBullets` walks
+ * the bullets from the end and stops on the first obstacle each registers
+ * against, and every kill spawns its debris where it resolved, so the kill
+ * bursts in `state.particles` are the kills in bullet order. Walk the spent
+ * shots from the end alongside them and the pairing falls out.
+ *
+ * It falls out on every frame that spent its shots on obstacles, which is all
+ * but a handful: a shot can also be spent on a mine, and a mine's burst is the
+ * same colour as several others, so a frame that spends more shots than it
+ * landed kills cannot say which shot went where. Those kills are counted in
+ * `unpaired` and left unread rather than read against the wrong shot.
  *
  * Three things are held steady, and each is presentation or bookkeeping rather
  * than anything the hit test reads. The starfield is emptied, because it is
@@ -867,7 +960,7 @@ export function freeFlight(build, grid, {
   const gameBottom = grid.h - FOOTER_ROWS;
 
   const report = {
-    frames: 0, volleys: 0, kills: 0, rams: 0,
+    frames: 0, volleys: 0, kills: 0, rams: 0, unpaired: 0,
     drawnThrough: 0, ignored: 0, ignoredAt: [],
     killContacts: new Map(), mostBlocksDrawn: 0, mostShotsInAir: 0, slack,
   };
@@ -895,6 +988,11 @@ export function freeFlight(build, grid, {
    * The difference is the whole of the distinction between a tracer nobody
    * could see and a tracer nothing drew. A reading that collapses the two
    * reports the corridor fault every time the hull covers a bolt.
+   *
+   * The corridor is `build.tracerLit`, called out of the build that is flying.
+   * There is one definition of it - drawTunnel lays the walls from it,
+   * drawBullets draws the tracer inside it, and `contacts` registers inside it
+   * - and a test restating the boundary here would be pinning its own copy.
    */
   const tracerOf = (bullet, drawn) => {
     const pos = game.toScreen(bullet.x, bullet.y, bullet.z);
@@ -902,7 +1000,7 @@ export function freeFlight(build, grid, {
     if (pos.row >= gameTop && pos.row < gameBottom) {
       for (const y of [pos.row, pos.row - 1]) {
         if (y < gameTop) continue;
-        if (tracerLit(build, pos.col, y, gameTop, gameBottom, grid.w)) laid.push({ x: pos.col, y });
+        if (build.tracerLit(pos.col, y, gameTop, gameBottom, grid.w)) laid.push({ x: pos.col, y });
       }
     }
     return { laid, cells: laid.filter((c) => drawn.has(cellKey(c))) };
@@ -977,14 +1075,13 @@ export function freeFlight(build, grid, {
     }
 
     const was = {
-      shield: s.shield,
       obstacles: s.obstacles.map((o) => ({ ref: o, x: o.x, y: o.y, z: o.z, rot: o.rot, rotSpeed: o.rotSpeed, scale: o.scale })),
       bullets: s.bullets.map((b) => ({ ref: b, x: b.x, y: b.y, z: b.z, life: b.life })),
+      debris: new Set(s.particles),
     };
 
     game.update(dt, keys, justPressed);
     report.frames++;
-    if (s.shield < was.shield) report.rams++;
 
     // A contact on the frame just painted had to resolve in the frame that
     // followed it, which is the one just stepped: the block goes, or the shot
@@ -1000,24 +1097,46 @@ export function freeFlight(build, grid, {
       }
     }
 
-    // What the frame resolved. A shot that ran out of life leaves the air on
-    // its own, so only a shot with life left in it was spent on something.
-    const air = new Set(s.bullets);
-    const spent = was.bullets.filter((b) => !air.has(b.ref) && b.life - dt > 0);
-    const gone = was.obstacles.filter((o) => o.ref.z < o.z - 100 && o.z <= 5);
-    if (!spent.length || !gone.length) continue;
-    report.kills += gone.length;
-
-    // The kill frame, rebuilt. `s.speed` is set once a frame and then used for
-    // the advance, so reading it back after the update gives what the frame ran
-    // on; the shot holds its screen ray, so x is carried forward by the ratio of
+    // The frame, rebuilt. `s.speed` is set once a frame and then used for the
+    // advance, so reading it back after the update gives what the frame ran on;
+    // the shot holds its screen ray, so x is carried forward by the ratio of
     // the two scales exactly as updateBullets carries it.
     const advance = s.speed * 60 * dt;
     const travel = 60 * dt;
-    const stepped = spent.map((b) => {
-      const z = b.z - travel;
-      return { x: (b.x * game.projScale(b.z)) / game.projScale(z), y: b.y, z, life: b.life };
-    });
+
+    // What the frame resolved, read off the debris it threw rather than off
+    // where the blocks ended up. A block that goes has been shot, rammed or
+    // wrapped round, and all three leave it in the same place; only a kill
+    // throws debris in the obstacle's own colour. The wrap is the one of the
+    // three that is arithmetic - a block past the ship at the end of its
+    // advance - so what is left over is the rams.
+    const kills = killBurstsSince(s.particles, was.debris);
+    const left = was.obstacles.filter((o) => o.ref.z < o.z - 100);
+    const wrapped = left.filter((o) => o.z + advance > 10);
+    report.kills += kills.length;
+    report.rams += left.length - wrapped.length - kills.length;
+    if (!kills.length) continue;
+
+    // The shots the frame spent, in the order updateBullets walked them: from
+    // the end of the list, so the kills line up with the bursts above one for
+    // one. A shot that ran out of life leaves the air on its own, so only a
+    // shot with life left in it was spent on something.
+    const air = new Set(s.bullets);
+    const spent = [];
+    for (let i = was.bullets.length - 1; i >= 0; i--) {
+      const b = was.bullets[i];
+      if (!air.has(b.ref) && b.life - dt > 0) spent.push(b);
+    }
+    // A shot spent on a mine lands no kill and throws a burst that is not the
+    // kill colour, so it shifts every pairing after it by one and there is
+    // nothing in the frame that says where it sat. Rare enough to sit out:
+    // these kills are counted and left unread rather than read against a shot
+    // that was never near them.
+    if (spent.length !== kills.length) {
+      report.unpaired += kills.length;
+      continue;
+    }
+
     const live = {
       obstacles: s.obstacles, mines: s.mines, orbs: s.orbs,
       bullets: s.bullets, particles: s.particles,
@@ -1025,42 +1144,50 @@ export function freeFlight(build, grid, {
     s.mines = [];
     s.orbs = [];
     s.particles = [];
-    for (const killed of gone) {
+    for (let k = 0; k < kills.length; k++) {
+      // The burst stands where the block did when it died, which is where
+      // updateObstacles left it: its own x and y, and its depth plus the
+      // frame's advance. That is what names the block among the ones that left
+      // the tunnel this frame. Exactly one, or the frame does not say.
+      const at = { x: kills[k].x, y: kills[k].y, z: kills[k].z };
+      const named = left.filter((o) => nearby(at, { x: o.x, y: o.y, z: o.z + advance }));
+      const block = named.length === 1 ? named[0] : null;
+      const shot = spent[k];
+      if (!block) { report.unpaired++; continue; }
+
+      const z = shot.z - travel;
+      const stepped = {
+        x: (shot.x * game.projScale(shot.z)) / game.projScale(z), y: shot.y, z, life: shot.life,
+      };
       s.obstacles = [{
-        x: killed.x, y: killed.y, z: killed.z + advance,
-        rot: killed.rot, rotSpeed: killed.rotSpeed, scale: killed.scale,
+        x: block.x, y: block.y, z: block.z + advance,
+        rot: block.rot, rotSpeed: block.rotSpeed, scale: block.scale,
       }];
       // The block is read with the tracer out of the way, for the reason
       // watchEngagement gives: drawBullets runs after drawEntitiesFar and
       // stands on the very cells this reading is about.
       s.bullets = [];
       build.renderGame(scratch, s);
-      const block = blockCells(build, scratch);
-      s.bullets = stepped;
+      const cells = blockCells(build, scratch);
+      s.bullets = [stepped];
       build.renderGame(scratch, s);
       const shown = new Set(tracerCellsBothHalves(build, scratch).map(cellKey));
       // The kill frame or the one before, as watchEngagement takes it: a shot
       // can meet a block part way through a frame, on a step the sweep tests
-      // and neither end of the frame draws. Both readings are the killing
-      // shots against the killed block and nothing else.
-      const at = (shot) => seen(shot, block);
-      const now = stepped.map((b) => tracerOf(b, shown)).reduce(
-        (best, shot) => closerContact(best, at(shot)), 'hidden'
-      );
-      const before = spent.map((b) => drawnShots.get(b.ref)).reduce(
-        (best, shot) => (shot
-          ? closerContact(best, seen(shot, drawnBlocks.get(killed.ref) ?? []))
-          : best),
-        'hidden'
-      );
+      // and neither end of the frame draws. Both readings are the killing shot
+      // against the killed block and nothing else.
+      const now = seen(tracerOf(stepped, shown), cells);
+      const started = drawnShots.get(shot.ref);
+      const before = started
+        ? seen(started, drawnBlocks.get(block.ref) ?? [])
+        : 'hidden';
       // A shot raised inside the frame that resolved it has no start-of-frame
       // reading, and the end-of-frame one alone cannot say a tracer was never
       // drawn: the contact can land on a sweep step the frame's far end has
       // already climbed past the corridor from. So the frame says it cannot
       // answer rather than saying nothing was drawn.
-      const raised = spent.some((b) => !drawnShots.has(b.ref));
       const settled = closerContact(now, before);
-      const verdict = settled === 'unlit' && raised ? 'hidden' : settled;
+      const verdict = settled === 'unlit' && !started ? 'hidden' : settled;
       report.killContacts.set(verdict, (report.killContacts.get(verdict) ?? 0) + 1);
     }
     Object.assign(s, live);
@@ -1152,9 +1279,9 @@ export function darkWalk(build, grid, { dt = 1 / 60 } = {}) {
       const bullet = { x: aim / probe.projScale(bz), y: by, z: bz, life: STAGED_LIFE };
       const bPos = probe.toScreen(bullet.x, bullet.y, bullet.z);
       const low = bPos.row >= gameTop && bPos.row < gameBottom
-        && tracerLit(build, bPos.col, bPos.row, gameTop, gameBottom, grid.w);
+        && build.tracerLit(bPos.col, bPos.row, gameTop, gameBottom, grid.w);
       const high = bPos.row - 1 >= gameTop && bPos.row < gameBottom
-        && tracerLit(build, bPos.col, bPos.row - 1, gameTop, gameBottom, grid.w);
+        && build.tracerLit(bPos.col, bPos.row - 1, gameTop, gameBottom, grid.w);
 
       for (const place of places) {
         out.walked++;

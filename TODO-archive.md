@@ -493,3 +493,47 @@ still be found by name.
   then 43/52, 16/57 and 45/57. `sweepByEye` was not replayed and has no
   figure at 205x50 yet.
   - From: Measurement
+
+## Archived 09-19-26
+
+- [x] **Frame-rate walk** - Fly each placement at `dt` 1/60, 1/30, 1/20, 1/12
+  and 1/6 and count the placements whose verdict changes, over 300 flights:
+  150 placements between 20 and 140 units at ship heights 0 and 2.5. The
+  existing check holds three placements; this is the walk the pulse cannon
+  item asks it to pass. The screen-space prototype changed on 1 of 300 at
+  80x24 and 7 of 300 at 205x50, against a target of none.
+  - Note: Reported two ways. The staged walk answers for the hit test alone,
+    since a slow frame steers the ship in longer strides and so flies a
+    different engagement; the flown walk at ship heights 0 and 2.5 is reported
+    beside it.
+  - From: Measurement
+- [x] **Column probe** - The measurement for "Long shots fall off on wide
+  screens": the side bullets' distance from the centre bullet in columns at
+  the muzzle (1.16 at 80 wide, 3.11 at 205), a target's column creep over a
+  flight at each range, and the 60 to 140 kill rate for a given column slack
+  and volley spread, with the seen-versus-kill contact shares beside it so a
+  wider slack cannot buy kills the tracer did not reach. The sandbox
+  prototype gave 98% at 80x24 and 83% at 205x50 with the volley as it is,
+  and 54% at 205x50 with the side bullets pinned one column out. Takes over
+  from `.tmp/hits/horizontal.mjs`.
+  - From: Measurement
+- [x] **Small windows draw more grid than the canvas can show**
+  - **Issue**: `handleResize` clamps `termWidth` and `termHeight` at the 60x20
+    floor and builds a 60x20 ScreenBuffer, but the canvas is only as large as
+    the window, so below that floor the extra cells are painted where nothing
+    can display them. Measured in a real chromium window against the furthest
+    painted cell: 600x360 shows the whole 60x20 grid; 500x320 loses 10 columns
+    and 3 rows; 380x240 loses 22 columns and 7 rows. What goes is the right of
+    the HUD, including the SHIELD readout, and the whole footer with the control
+    hints and the speed. Nothing tells the player anything is missing. Pre-dates
+    the screen-space hit rule - `MIN_WIDTH`, `MIN_HEIGHT` and `handleResize` are
+    untouched by it - and the terminal build has no equivalent, since a terminal
+    cannot be smaller than its own grid.
+  - **Goal**: Decide what a window under the floor should do and make the page
+    do it. Scaling the font down until 60x20 fits keeps the whole screen
+    readable and matches the terminal build's promise that 60x20 is the minimum;
+    drawing at the window's real size below the floor gives up the menu layouts
+    the floor exists to protect. Either way the HUD and footer stay on screen or
+    the player is told they cannot be. Pin it in `test/menu-layout.test.mjs` or
+    beside it, against the grid the buffer is built at rather than the window.
+  - From: UI/UX Override - the pulse cannon in a real browser window

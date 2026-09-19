@@ -1,5 +1,77 @@
 # Changelog
 
+## [0.5.1-alpha] - 2026-09-19
+
+### Fixed
+
+- The free-flight guard read a kill's contact against every shot the frame
+  spent. It reduced both readings - the kill frame and the one before - over
+  every bullet in the air, for each block the frame killed, with nothing pairing
+  a spent shot to the block it actually killed. On a crowded frame that lets one
+  shot's contact answer for another shot's kill: 11% of kills landed on a frame
+  that spent more than one shot, so the share the check reported was a ceiling
+  on what it could catch rather than a measurement, while its own comment said
+  the readings were taken against the killing shot alone. Each kill is now
+  paired to the shot that made it before either reading is taken, by the frame's
+  own resolution order - `updateBullets` walks the bullets from the end, and the
+  debris a kill throws is pushed where the kill resolved, so walking the spent
+  shots and the kill bursts from the same end pairs them. A frame that also
+  spends a shot on a mine cannot say which shot went where; those kills are
+  counted and left unread rather than read against a shot that was never near
+  them, and the check pins how few of them there are. On the honest reading the
+  share on or beside the block is 96% or better at every grid and in both
+  builds, against the 98% the pooled reading used to report.
+- A block the ship rammed was scored as a kill. A block leaves the tunnel three
+  ways - shot, rammed, or wrapped round after passing the ship - and all three
+  put it back at the same depth, so the reading that watched the depth alone
+  could not tell them apart. `updateObstacles` runs before `updateBullets`, so a
+  frame that rammed and fired counted the rammed block among its kills. Only a
+  kill throws debris in the obstacle's own colour, and that is what the kill
+  count now reads; the wrap is arithmetic, and the rams are what is left over.
+- Two blocks shot in the same frame could be read as one kill. The reading that
+  told one kill's debris from the next kill's grouped the pieces by where they
+  landed, within half a unit on each axis, on the grounds that blocks are spread
+  over nine units of x and four of y. The two blocks that have to be told apart
+  are not spread over that, though: they are the two a single frame shot, and
+  the pilot closes on the nearest drawn block's column before it fires, so a
+  frame that kills twice usually kills twice down the same column. Over 60
+  flights of the matrix, adjacent bursts came as close as 0.19 units on every
+  axis at once. Merging two of them dropped a kill, and - since the rams are
+  taken as what is left over once the kills and the wraps are accounted for -
+  handed the count a ram that never happened: one flight reported a ram against
+  a true count of none. The boundary is counted rather than measured now, since
+  a kill throws a fixed number of pieces in one push, so the frame's fresh kill
+  debris is its bursts laid end to end. Checked against the exact debris count
+  and the shield drops over 168 flights, the kills and the rams now agree
+  with both on every flight.
+- The corridor had one definition and the test kept a second.
+  `test/engagement.mjs` restated the boundary as `col > span.left && col <
+  span.right` while its own docstring said it read the corridor out of the build
+  that was flying, which was reachable only because `tracerLit` was exported
+  from neither build's test surface. It is on both now, beside `tunnelSpan`, and
+  the test calls it. The walk over the undrawn-tracer configurations comes back
+  on the counts it had: 594 at 80x24, 2241 at 60x20, 76 at 205x50, none
+  registering, in both builds.
+- The free flight's figures could not be rebuilt from the repository. It flies
+  the run `startGame` opens, which seeds sixty obstacles from an unseeded
+  `Math.random`, so every pass flies a different run - and the figures quoted in
+  the test comments, in `test/probes/free-flight.mjs` and in the `0.5.0-alpha`
+  entry above were taken from one draw, which the first rerun fell outside of.
+  They are stated as spreads over a named number of passes now, and each says
+  which number. The floors the suite asserts sit well under the low end of each
+  spread rather than against it, since the next pass is another draw: over ten
+  passes a flight fired 136 to 298 volleys and landed 27 to 129 kills, against
+  floors of 80 and 15. The walk beside the flight is arithmetic and reproduces
+  exactly, so only the flown half needed this.
+
+### Added
+
+- `--passes` on the probe rig, for the probes whose walk is not deterministic.
+  `free-flight` prints every flight figure as the spread over the passes it was
+  asked for, with the two ship heights summarised together underneath in the
+  shape the suite pins them, and reports the kills it could not pair to a shot
+  beside the ones it could.
+
 ## [0.5.0-alpha] - 2026-09-17
 
 ### Fixed
@@ -45,8 +117,9 @@
   clip fault was never known - "nothing is destroyed by a tracer that never
   reached it" allowed 5% there and attributed all of it to mid-sweep contacts.
   Split, the staged walk gives 8 `wide` in 860 kills and no `unlit` at all, and
-  a free flight 5 to 8 in 850. The staged walk pins `unlit` at nil rather than
-  allowing it a share, and `wide` keeps the 5% the sweep inside a frame earns.
+  a free flight 0 to 6% `wide` and no `unlit` either, over ten passes of the
+  whole matrix. The staged walk pins `unlit` at nil rather than allowing it a
+  share, and `wide` keeps the 5% the sweep inside a frame earns.
 
 ### Added
 
@@ -56,13 +129,16 @@
   0.12 seconds, for 1200 frames at each of the three grids in both builds. Both
   contact invariants are asked of it. No frame of any flight drew a tracer on a
   block that was still there the frame after with the shot still in the air, and
-  98% or better of kills had their tracer on the killed block or within the
-  grid's column slack of it - measured over three passes of the whole matrix,
-  847 to 870 kills a pass with 5 to 8 outside it, and none at all landing with
-  no tracer drawn. Replacing `contacts` with a flat refusal turns the first
-  figure into 662 to 29,594 ignored contacts a flight, which is the same
-  detector that counted 164 of them in a real browser window with the hit rule
-  switched off.
+  96% or better of kills had their tracer on the killed block or within the
+  grid's column slack of it - measured over ten passes of the whole matrix, 90
+  to 197 kills a grid a pass and none at all landing with no tracer drawn. The
+  flight is the run `startGame` opens and is seeded from nothing, so every
+  figure off it is the spread over a stated number of passes rather than a
+  number; `npm run probe -- free-flight --passes 10` prints them again.
+  Replacing `contacts` with a flat refusal turns the first figure into 406 to
+  27,514 ignored contacts a flight over five passes, which is the same detector
+  that counted 164 of them in a real browser window with the hit rule switched
+  off.
 - A walk over the hit test itself, for the shots no flown engagement can
   produce. Every engagement in the suite steers onto the target's column before
   firing and no target spawns outside four and a half units of the axis, so a
