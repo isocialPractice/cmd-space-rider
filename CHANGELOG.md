@@ -1,5 +1,86 @@
 # Changelog
 
+## [0.6.0-alpha] - 2026-09-20
+
+### Added
+
+- A seeded random source, shared by both builds. Every draw either of them
+  makes now goes through one function - the sixty obstacles a run opens with,
+  the orbs among them, the mine timers, the starfield, the debris a burst is
+  thrown in - and `seedRng` pins it. Unseeded it is `Math.random`, which is
+  what the game plays on; seeded, a run is the same run every time it is
+  flown. It is mulberry32, written out in `src/types.ts` and again in
+  `index.html`, and the parity suite pins the two copies to the same sequence,
+  the same world out of `startGame` at the same seed, and the release of the
+  seed afterwards.
+- A frame-rate check on the free flight. The flight takes a `dt` and every
+  reading it takes off a frame has to be derived from that frame, so it is now
+  flown at each of the rates the staged walk beside it uses - 1/60 down to 1/6
+  of a second a frame - at one grid and in both builds. Per build, both ship
+  heights together: 28 of 29 kills read at 1/60, 69 of 70 at 1/30, 124 of 125
+  at 1/20, 220 of 229 at 1/12 and 525 of 542 at 1/6, with 99% or better of each
+  on or beside the block and none landing with no tracer drawn.
+- A check on the pairing alone, over the kills whose frame spent more than one
+  shot. Those are the only kills a pairing can get wrong, and they are a tenth
+  of the kills, so a pairing fault barely moves the share taken over all of
+  them: flown with the spent shots walked from the wrong end, that share never
+  falls below 90.4% on any of the five seeded worlds, so it clears its floor at
+  all fifteen grids and catches the fault at none of them. Taken over the
+  crowded frames alone it is 44 of 44 on or beside against 20 of 44 walked the
+  wrong way.
+- The flight reports why a kill went unread rather than only how many did: a
+  frame that spent a shot elsewhere and cannot say which shot killed what, a
+  debris burst that named no block, and one that named more than one. The probe
+  prints the three separately.
+
+### Fixed
+
+- A slow frame left the free flight unable to pair its kills. The bound on how
+  far a kill's debris can have drifted from the block it came off was fixed at
+  half a unit, which is one frame of a particle's own velocity at a thirtieth
+  of a second and a fraction of one at a sixth: `spawnParticles` draws `vz`
+  from -1 to 2 and `updateParticles` carries z by `(vz + advance) * dt`, so
+  past about a seventh of a second the z term alone clears the bound. The burst
+  then names no block, the kill cannot be paired to the shot that made it, and
+  it goes unread - 83% of them at a sixth of a second a frame, against 2% to 4%
+  at the rates above it, which would take the three-quarters floor the flight
+  asserts straight through. Nothing reached it, since no caller passed a `dt`,
+  but the rate walk beside the flight goes to a sixth and the parameter read as
+  though those rates were supported. The bound is derived from the frame now -
+  `3 * dt` on x and y, and the frame's own advance on z, as a one-sided window
+  rather than a magnitude - and the rates it is flown at are pinned. A wider
+  bound can let a second block inside it, which the flight counts rather than
+  guesses at: 10 bursts naming nothing and 14 naming more than one, out of
+  8,266 kills over the whole matrix at 1/6.
+- The free flight's figures still could not be rebuilt from the repository.
+  Stating them as spreads over a named number of passes did not settle it: a
+  rerun fell outside the spreads, and two ten-pass runs of the whole matrix
+  disagreed with each other, so no pass count quoted that way ever would. The
+  flight is seeded now, at the five worlds in `FREE_SEEDS`, and every figure
+  the suite quotes is taken at the first of them while the probe prints all
+  five. Across the whole set - both builds, three grids, two heights each - a
+  1200-frame flight lands 84 to 191 kills a grid, reads 92% to 100% of them
+  against the shot that made them, puts 98% to 100% of those on or beside the
+  block and none of them unlit. Both builds return identical numbers at every
+  seed, which is itself the parity check. The flight figures quoted in the
+  0.5.0-alpha and 0.5.1-alpha entries below were taken from unseeded draws and
+  do not reproduce; each is marked where it stands rather than restated,
+  because the code that produced it is not the code running now.
+
+### Changed
+
+- The frame rates every rate walk flies are one list in `test/engagement.mjs`
+  rather than a copy in each of the three places that walked them, which is how
+  the free flight came to take a `dt` the suite never flew it at while the walk
+  beside it went to a sixth of a second. The flight lengths moved there with
+  them, for the same reason the floors already live there: a probe printing a
+  different flight from the one the suite pins prints a figure the suite cannot
+  be checked against.
+- `--passes` on the probe rig narrows a probe to the first N of its seeded
+  worlds instead of asking for N fresh samples. No probe here is a sample any
+  more, so a figure is rebuilt by running the probe again rather than by
+  averaging it.
+
 ## [0.5.1-alpha] - 2026-09-19
 
 ### Fixed
@@ -62,7 +143,9 @@
   spread rather than against it, since the next pass is another draw: over ten
   passes a flight fired 136 to 298 volleys and landed 27 to 129 kills, against
   floors of 80 and 15. The walk beside the flight is arithmetic and reproduces
-  exactly, so only the flown half needed this.
+  exactly, so only the flown half needed this. (Not reproducible: the spreads
+  in this entry are drawn from unseeded flights and a rerun falls outside them,
+  which is what 0.6.0-alpha seeds the flight to settle.)
 
 ### Added
 
@@ -118,7 +201,8 @@
   reached it" allowed 5% there and attributed all of it to mid-sweep contacts.
   Split, the staged walk gives 8 `wide` in 860 kills and no `unlit` at all, and
   a free flight 0 to 6% `wide` and no `unlit` either, over ten passes of the
-  whole matrix. The staged walk pins `unlit` at nil rather than allowing it a
+  whole matrix. (Not reproducible: the flight was unseeded when this was
+  measured. Seeded, it gives 0 to 2% `wide`.) The staged walk pins `unlit` at nil rather than allowing it a
   share, and `wide` keeps the 5% the sweep inside a frame earns.
 
 ### Added
@@ -138,7 +222,10 @@
   Replacing `contacts` with a flat refusal turns the first figure into 406 to
   27,514 ignored contacts a flight over five passes, which is the same detector
   that counted 164 of them in a real browser window with the hit rule switched
-  off.
+  off. (Not reproducible: every figure in this item is drawn from unseeded
+  flights, and the share it quotes was also taken before 0.5.1-alpha corrected
+  how a kill's contact is read. `npm run probe -- free-flight` prints what the
+  seeded flight gives today.)
 - A walk over the hit test itself, for the shots no flown engagement can
   produce. Every engagement in the suite steers onto the target's column before
   firing and no target spawns outside four and a half units of the axis, so a

@@ -30,7 +30,8 @@ import {
   HUD_ROWS, FOOTER_ROWS, WALL_CHARS,
   emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk,
   watchEngagement, tracerCells, tracerCellsBothHalves,
-  unitsPerCol, freeFlight, darkWalk,
+  unitsPerCol, freeFlight, darkWalk, FRAME_RATES, FREE_SEEDS,
+  FREE_FRAMES, FREE_RATE_FRAMES,
 } from './engagement.mjs';
 
 /**
@@ -257,7 +258,7 @@ for (const build of BUILDS) {
       // different engagement, which is a fair question about the game and the
       // wrong one about the hit test. The aim is taken once, at 1/60, and the
       // same shot is flown at each rate.
-      const RATES = [1 / 60, 1 / 30, 1 / 20, 1 / 12, 1 / 6];
+      const RATES = FRAME_RATES;
       const changed = [];
       for (const place of walk(40, { near: 20, far: 140 })) {
         for (const aimedAt of ['target', 'clear']) {
@@ -689,20 +690,27 @@ test('both builds draw the tracer on the same cells, frame for frame', () => {
 /** Held on the floor, and held at the ceiling the tunnel clamps the ship to. */
 const FREE_HEIGHTS = [0, 6.5];
 
-/** Frames per flight, matching the length the browser verification flew. */
-const FREE_FRAMES = 1200;
-
-// Every figure quoted in the three checks below is a spread over ten passes of
-// the whole matrix rather than a number, and each says so where it is quoted.
+// Every figure quoted in the checks below is a number rather than a spread,
+// and rebuilding one is a matter of running the probe again.
 //
-// The flight is the run `startGame` opens, which seeds sixty obstacles from an
-// unseeded `Math.random`, so each pass flies a different run and no figure off
-// it is repeatable the way the staged walks beside it are. Quoting one pass as
-// though it were the measurement is what put figures in these comments that the
-// first rerun fell outside of. `npm run probe -- free-flight --passes 10`
-// prints them all again; a rerun can still sit a little outside a ten-pass
-// spread, which is why the floors asserted below are set well under the low end
-// rather than against it.
+// It was not. The flight used to fly whatever `startGame` drew from an
+// unseeded `Math.random`, so each pass flew a different run and no figure off
+// it was repeatable the way the staged walks beside it are: the numbers in
+// these comments were each one draw, and the first rerun fell outside them.
+// Restating them as spreads over ten passes did not settle it either - two
+// ten-pass runs of the whole matrix disagreed with each other, so no pass
+// count quoted that way ever would.
+//
+// The flight is seeded now, at `FREE_SEEDS[0]`, so it is the same sixty
+// obstacles and the same orbs among them every time it is flown - and the same
+// in both builds, which is why every figure below is one number for the pair
+// rather than one each. `npm run probe -- free-flight` prints them all again,
+// at this seed and at the four beside it.
+//
+// The floors are still set well under what the flight delivers. A seeded world
+// is reproducible, not representative: the probe's other four seeds are the
+// check on that, and a floor pinned against what one world happens to give
+// would fail the day the engine changed for a reason nobody minded.
 
 /** One flight per height, kept for every check below that reads it. */
 const freeFlights = new Map();
@@ -710,7 +718,7 @@ function freeRun(build, grid) {
   const key = `${build.name}:${grid.name}`;
   if (!freeFlights.has(key)) {
     freeFlights.set(key, FREE_HEIGHTS.map((holdY) => ({
-      holdY, ...freeFlight(build, grid, { frames: FREE_FRAMES, holdY }),
+      holdY, ...freeFlight(build, grid, { frames: FREE_FRAMES, holdY, seed: FREE_SEEDS[0] }),
     })));
   }
   return freeFlights.get(key);
@@ -725,11 +733,12 @@ for (const build of BUILDS) {
       // pass on a flight that never fires, never meets anything, or dies in its
       // first seconds, so what the flight actually contained is pinned here:
       // volleys pulled, kills landed, blocks on the screen at once, and shots
-      // in the air at once. Over ten passes of the whole matrix, a
-      // 1200-frame flight fired 136 to 298 volleys, landed 27 to 129 kills,
-      // drew 12 to 34 blocks at once and held 42 to 45 shots in the air. The
-      // floors sit well under the low end of each, because the next pass is
-      // another draw and not the same one.
+      // in the air at once. Across the twelve seeded flights - both builds,
+      // three grids, two heights - a 1200-frame flight fires 141 to 298
+      // volleys, lands 40 to 126 kills, draws 15 to 34 blocks at once and
+      // holds 45 shots in the air. The floors sit well under the low end of
+      // each: a seeded world is reproducible rather than representative, and a
+      // floor set against what this one gives would be pinning the seed.
       for (const flight of freeRun(build, grid)) {
         const held = `held at ${flight.holdY}`;
         assert.equal(flight.frames, FREE_FRAMES, `${held}: the flight should run its length`);
@@ -755,10 +764,10 @@ for (const build of BUILDS) {
       // It comes back nil, and so does the count of frames that drew a tracer
       // on a block at all - the contact resolves on the frame it would first be
       // drawn, so the player never sees a bolt standing on a live block. Both
-      // were nil on every flight of ten passes of the matrix. Flown in a real
-      // chromium window the same detector counted 164 such frames with the hit
-      // rule switched off; forcing `contacts` to return false here gives 406 to
-      // 27,514 a flight over five passes, so the check has plenty of grip.
+      // are nil on all twelve seeded flights. Flown in a real chromium window
+      // the same detector counted 164 such frames with the hit rule switched
+      // off; forcing `contacts` to return false here gives 921 to 24,673 a
+      // flight, so the check has plenty of grip.
       for (const flight of freeRun(build, grid)) {
         assert.equal(
           flight.ignored, 0,
@@ -784,25 +793,30 @@ for (const build of BUILDS) {
       //
       // `unlit` is a kill with no bolt drawn anywhere, which is the corridor
       // clip fault, and it is nil now that `contacts` reads the same clip
-      // `drawBullets` draws by. Over ten passes of the whole matrix it stayed
-      // nil in every one, at 90 to 197 kills a grid a pass.
+      // `drawBullets` draws by. It is nil at every grid, in both builds, at 97
+      // to 191 kills a grid.
       //
-      // The rest is 96% or better on or beside at every grid and in both
-      // builds, taken over the kills the frame could pair. That remainder is
-      // the sweep inside the frame doing its job rather than a kill nobody
-      // earned: a frame carries a shot a row or more up the screen, so two
-      // cells can meet on a step the sweep tests and neither end of the frame
-      // draws.
+      // The rest is 99% or better on or beside, taken over the kills the frame
+      // could pair. That remainder is the sweep inside the frame doing its job
+      // rather than a kill nobody earned: a frame carries a shot a row or more
+      // up the screen, so two cells can meet on a step the sweep tests and
+      // neither end of the frame draws.
       //
-      // The pairing is what the last assertion guards. A frame that also spends
-      // a shot on a mine cannot say which shot went where, so its kills are
-      // counted and left unread - 0 to 16 a grid a pass, which is 90% of them
-      // read at the worst pass of the ten.
+      // The pairing is what the last assertion guards. A frame that also
+      // spends a shot on a mine cannot say which shot went where, so its kills
+      // are counted and left unread - 2, 4 and 3 a grid here, which is 97% of
+      // them read at the worst grid of the three.
       //
-      // The share above is the grip on the pairing itself. Flown with the spent
-      // shots walked from the wrong end, so that each kill is read against a
-      // shot that did not make it, it falls to 87% and 89% at two of the six
-      // build-and-grid pairs and the 90% floor catches them.
+      // What guards the pairing being the *right* one is the check below this
+      // one rather than the share above. The share was quoted as catching it,
+      // on a run flown with the spent shots walked from the wrong end falling
+      // to 87% and 89% at two of the six build-and-grid pairs; that figure was
+      // one unseeded draw and does not hold. Walked from the wrong end on the
+      // five seeded worlds the probe flies, the share falls no lower than
+      // 90.4%, so it clears this floor at all fifteen of the grids and catches
+      // the fault at none of them. It cannot separate them: a pairing fault can
+      // only move the kills whose frame spent more than one shot, and those are
+      // a tenth of the kills.
       const flights = freeRun(build, grid);
       const count = (verdict) => flights.reduce(
         (n, f) => n + (f.killContacts.get(verdict) ?? 0), 0
@@ -828,6 +842,126 @@ for (const build of BUILDS) {
       );
     });
   }
+
+  test(`${build.name}: a crowded frame's kills are read against the shot that made them`, () => {
+    // The pairing, on its own. Every other reading above is diluted by the
+    // kills a pairing cannot get wrong: a frame that spent one shot pairs that
+    // shot to that kill whichever end the spent shots are walked from, and
+    // those are nine kills in ten. So this takes the same verdicts over the
+    // kills whose frame spent more than one shot, which is the whole of what
+    // the pairing decides.
+    //
+    // Read over the three grids together, because a crowded frame is not
+    // evenly spread across them: lining up on a column is a finer movement on
+    // a wide grid, so the pilot fires less often and 205x50 contributes none
+    // of these at this seed while 60x20 contributes 28.
+    //
+    // It comes back 44 of 44 on or beside. Flown with the spent shots walked
+    // from the wrong end it is 20 of 44 - 45% - so the floor has grip here
+    // where the undiluted share did not: that same fault leaves the share over
+    // every kill at 90% or better on all five of the probe's seeds.
+    const flights = GRIDS.flatMap((grid) => freeRun(build, grid));
+    const count = (verdict) => flights.reduce(
+      (n, f) => n + (f.crowdedContacts.get(verdict) ?? 0), 0
+    );
+    const read = ['on', 'beside', 'wide', 'unlit', 'hidden'].reduce(
+      (n, verdict) => n + count(verdict), 0
+    );
+    const reached = count('on') + count('beside');
+
+    assert.ok(
+      read >= 20,
+      `only ${read} kills landed on a frame that spent more than one shot, ` +
+      `so the flight says nothing about the pairing`
+    );
+    assert.ok(
+      reached / read >= 0.9,
+      `${reached}/${read} kills on a crowded frame had their tracer on or ` +
+      `within ${flights[0].slack} columns of the block they killed, wanted 90%`
+    );
+  });
+}
+
+// ----- The same flight, at every rate the suite walks -----
+//
+// `freeFlight` takes a `dt` like everything else in this module, so what it
+// reads off a frame has to be derived from that frame rather than fixed at the
+// rate it usually flies at. One reading was not. The bound on how far a kill's
+// debris can have drifted from the block it came off was a flat half a unit,
+// which is one frame of a particle's own velocity at a thirtieth of a second
+// with room over and less than one frame of it at a sixth: `spawnParticles`
+// draws `vz` from -1 to 2 and `updateParticles` carries z by
+// `(vz + advance) * dt`, so past about a seventh of a second the z term alone
+// clears half a unit. The burst then names no block, the kill cannot be paired
+// to the shot that made it, and it goes unread. Flown over the whole matrix
+// that left 4%, 4%, 3% and 2% of kills unpaired at 1/60, 1/30, 1/20 and 1/12 -
+// and 83% at 1/6, which would take the three-quarters floor above straight
+// through.
+//
+// Nothing reached it, because no caller passed a `dt` and the default is
+// `FRAME`. That is the reason to fly the rates rather than the reason not to:
+// the walk above this one goes to a sixth of a second a frame, so the
+// parameter reads as though the flight were flown there too, and a reading
+// that only holds at one rate should say so or be made to hold at all of them.
+// It is made to hold.
+//
+// One grid, both builds, and half the frames the matrix checks fly. Whether a
+// reading tracks the frame is not a property of the grid, so a second grid
+// would buy repetition rather than coverage; the two builds are worth flying
+// because a seeded flight is identical in both, so a rate that pairs in one
+// and not the other is the port drifting.
+//
+// The bound is derived now - `3 * dt` on x and y, and the frame's own advance
+// on z - and the pairing holds all the way down. Per build, both heights
+// together: 28 of 29 kills read at 1/60, 69 of 70 at 1/30, 124 of 125 at 1/20,
+// 220 of 229 at 1/12 and 525 of 542 at 1/6, with 99% or better of each on or
+// beside the block and no kill landing unlit at any rate. Every kill left
+// unread here is the mine case the pairing sits out by design. The wider bound
+// a slow frame needs does let a second block inside it elsewhere in the matrix
+// - 10 bursts naming nothing and 14 naming more than one, out of 8,266 kills
+// at 1/6 - and those are counted as unpaired rather than guessed at, which is
+// what `unnamed` and `ambiguous` are for.
+//
+// Flown with the bound put back to a flat half a unit, this walk reads 127 of
+// 542 kills at 1/6 against the same floor, so it has grip where it needs it.
+
+for (const build of BUILDS) {
+  const grid = GRIDS[0];
+
+  test(`${build.name} at ${grid.name}: the free flight pairs its kills at every frame rate`, () => {
+    for (const dt of FRAME_RATES) {
+      const rate = `1/${Math.round(1 / dt)}`;
+      const flights = FREE_HEIGHTS.map(
+        (holdY) => freeFlight(build, grid, { frames: FREE_RATE_FRAMES, holdY, dt })
+      );
+      const count = (verdict) => flights.reduce(
+        (n, f) => n + (f.killContacts.get(verdict) ?? 0), 0
+      );
+      const kills = flights.reduce((n, f) => n + f.kills, 0);
+      const read = count('on') + count('beside') + count('wide')
+        + count('unlit') + count('hidden');
+      const reached = count('on') + count('beside');
+
+      assert.ok(
+        kills >= 10,
+        `at ${rate}: only ${kills} kills landed, so the flight says nothing either way`
+      );
+      assert.equal(
+        count('unlit'), 0,
+        `at ${rate}: ${count('unlit')} of ${read} read kills landed with no tracer drawn at all`
+      );
+      assert.ok(
+        read / kills >= 0.75,
+        `at ${rate}: only ${read} of ${kills} kills could be paired to the shot that ` +
+        `made them, wanted three quarters`
+      );
+      assert.ok(
+        reached / read >= 0.9,
+        `at ${rate}: ${reached}/${read} kills had their tracer on or within ` +
+        `${flights[0].slack} columns of the block, wanted 90%`
+      );
+    }
+  });
 }
 
 // ----- The corridor clip, walked rather than flown -----
