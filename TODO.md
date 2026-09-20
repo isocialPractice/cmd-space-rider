@@ -20,62 +20,44 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### Code Review Override - the flight's spreads and its frame rate
+### Code Review Override - the drift bound and the flight's heights
 
-#### Resolve Issues
-
-- [ ] Flight Figures 1
-  - **Issue**: The item restated the flight's figures as spreads over a named
-    number of passes, but did not widen them far enough for a rerun to land
-    inside, which is what its **Goal** asked for. Every one of these was quoted
-    this run and missed on the first rerun: `test/pulse-cannon.test.mjs` says a
-    flight "fired 136 to 298 volleys" and "drew 12 to 34 blocks at once", and
-    reruns gave 118 volleys and 36 blocks; the `0.5.0-alpha` CHANGELOG entry
-    says "90 to 197 kills a grid a pass", and reruns gave 80 and 87; the same
-    test comment says the share on or beside is "96% or better at every grid and
-    in both builds", and a rerun gave 95% at browser 205x50. Two ten-pass runs
-    of the whole matrix do not even agree with each other - 80 to 191 kills a
-    grid a pass against 87 to 194 - so ten passes is not enough to bound an
-    unseeded distribution, and no number of passes quoted this way will settle.
-    The assertions themselves are unaffected and hold with room to spare: the
-    floors sit well under the spreads, as that comment says they deliberately
-    do. This is the quoted measurement, not the check.
-  - **Goal**: Take the other branch the archived item offered and seed the
-    flight, so a figure is arithmetic rather than a sample: a seeded RNG the two
-    builds share, which nothing in the engine has today and which
-    `test/parity.test.mjs` would have to cover. Failing that, stop quoting
-    spreads that a rerun falls outside - quote the floor and the ceiling the
-    checks actually assert, and leave the sampled figures to the probe, which
-    prints them with their pass count and is rebuilt by running it. Whichever
-    way, the numbers in the test comments, in `test/probes/free-flight.mjs` and
-    in the CHANGELOG entries come from one source and say the same thing.
-  - From: Measurement
-
-#### Found Issues
-
-- [ ] **A slow frame rate leaves the flight unable to pair any of its kills**
-  - **Issue**: `freeFlight` takes `dt` as a parameter, and `DEBRIS_DRIFT` in
-    `test/engagement.mjs` bounds a burst against its own block at a flat half a
-    unit. That bound is one frame of a particle's own velocity, so it grows with
-    the frame: `spawnParticles` draws `vx` and `vy` from -3 to 3 and `vz` from
-    -1 to 2, and `updateParticles` carries z by `(vz + advance) * dt`, so at
-    `dt` of 1/6 the z term alone clears half a unit on its own. The burst then
-    names no block, and the kill goes unread. Flown over the whole matrix, the
-    share of kills left unpaired is 4%, 3%, 2% and 3% at `dt` of 1/60, 1/30,
-    1/20 and 1/12, and 83% at 1/6 - which would take the `read / kills >= 0.75`
-    floor the same run added straight through the floor. Nothing reaches it
-    today, since no caller passes `dt` and the default is `FRAME`, but the frame
-    rates the suite's own frame-rate walk uses go to 1/6, so the parameter reads
-    as though those rates were supported.
-  - **Goal**: Decide whether the flight supports a slow frame at all. If it
-    does, the drift bound has to be derived from the frame rather than fixed -
-    `3 * dt` on x and y and `(2 + advance) * dt` on z, with `advance` already in
-    hand at the call site - and the naming re-checked at each rate, since a
-    wider bound can also let a second block inside it and name nothing. If it
-    does not, say so where `dt` is taken and pin the rates the flight is flown
-    at. Widening the bound blind is the one thing not to do: it trades a kill
-    left unread for a kill read against the wrong block.
-  - From: Code Review Override - the flight's spreads and its frame rate
+- [ ] **The derived drift bound restates the engine with nothing holding it there**
+  - **Issue**: `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and `DEBRIS_VZ_MAX` in
+    `test/engagement.mjs` restate the ranges `spawnParticles` draws `vx`, `vy`
+    and `vz` from, and nothing in the suite compares the two. The comment over
+    them argues the restatement is safe because "a restatement that drifts from
+    the engine makes the pairing fail loudly, at every rate at once", and that
+    holds in one direction only. A bound gone too tight does fail loudly. A
+    bound gone too loose - which is what a narrowing in `spawnParticles` leaves
+    behind - is silent: flown with all three widened tenfold, to 30 on x and y
+    and -10 to 20 on z, the seeded matrix still clears every floor the flight
+    pins, at 97.7%, 97.9% and 96.9% of kills read against the 75% floor, 99% to
+    100% on or beside against the 90% floor, and no `unlit` at any grid.
+  - **Goal**: Pin the three constants to the engine rather than to a comment.
+    Draw a burst out of each build and assert every particle's `vx`, `vy` and
+    `vz` sits inside what `debrisDrift` assumes, in both builds as
+    `test/parity.test.mjs` expects, so a change to `spawnParticles` fails on a
+    check rather than on nothing. Correct the claim over the constants either
+    way: as it stands it credits the pairing with a guard half of it does not
+    have.
+  - From: Code Review Override - the drift bound and the flight's heights
+- [ ] **The free flight's ship heights are still a copy in each file**
+  - **Issue**: This run moved the frame rates and the flight lengths into
+    `test/engagement.mjs` and wrote the reason beside them - "One list rather
+    than three", because "a rate added to one of them said nothing about the
+    other two" - and left the heights where they were. `FREE_HEIGHTS` in
+    `test/pulse-cannon.test.mjs` and `HEIGHTS` in `test/probes/free-flight.mjs`
+    are both `[0, 6.5]`, written out twice, and every figure the probe prints
+    for the suite to be checked against is summed over them. Change one and the
+    probe prints a flight the suite does not fly, which is the drift
+    `FRAME_RATES`, `FREE_FRAMES` and `FREE_RATE_FRAMES` were centralised to
+    prevent.
+  - **Goal**: Export the pair from `test/engagement.mjs` beside `FREE_SEEDS`
+    and the flight lengths, and read it in both files. Leave `HEIGHTS` in
+    `test/probes/frame-rate.mjs` alone - it is `[0, 2.5]` and belongs to the
+    staged walk rather than to the flight.
+  - From: Code Review Override - the drift bound and the flight's heights
 
 ## Quick Wins
 
@@ -148,63 +130,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 38 earlier items in `TODO-archive.md`, newest last.
+> 40 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **The screen-space hit rule has no free-flight guard**
-  - **Issue**: `test/pulse-cannon.test.mjs` pins both contact invariants at
-    three grids in both builds, but every one of them flies a staged engagement:
-    one target parked in an emptied run. The fault this work answers was found
-    in free flight, with sixty obstacles in the air and volleys overlapping, and
-    that is the shape no check in the suite has. Verified in a real browser
-    instead - 1200 frames a flight at 192x60, 205x50 and 60x20, held on the
-    floor and at the roof, with 0 frames showing a tracer drawn on a live block
-    against 164 for the same detector with the hit rule switched off - which
-    means the only guard against this regressing runs when the UI/UX agent runs,
-    and not on a change.
-  - **Goal**: Add a free-flight check to `test/pulse-cannon.test.mjs` on a pilot
-    in `test/engagement.mjs` that flies a real run rather than staging one: hold
-    the ship at a fixed height, line up on a target's drawn column off the
-    rendered buffer, fire, and render every frame with `renderGame`. Assert over
-    the run that no rendered frame leaves a tracer drawn on a block that is
-    still there the frame after with the shot still in the air, and that every
-    kill's contact sits inside `shotSlackCols` of the block's drawn edge. Fly it
-    at all three grids in `GRIDS` and in both builds, as
-    `test/parity.test.mjs` expects. Check it against the fault before trusting
-    it, by forcing `contacts` to false and confirming it fails.
-  - From: UI/UX Override - the pulse cannon in a real browser window
-- [x] Unlit Tracer Kill 1
-  - **Issue**: `contacts` decides a kill on the cells `drawBullets` would put
-    down, but does not apply the clip `drawBullets` applies. A tracer whose
-    column has left the corridor is not drawn at all (`src/render.ts:276`), and
-    `contacts` never asks (`src/game.ts:679`). `drawEntitiesFar` draws a
-    target's block whether or not the corridor reaches it, so on one of those
-    frames the player sees the block, sees no bolt, and the block dies anyway.
-    Walked as geometry at dt 1/60 over every firing column the ship can hold,
-    every depth in a shot's life and every legal target placement: at 80x24,
-    2796 of 28320 undrawn-tracer frames can still register a kill - a shot at
-    screen column 17 of row 14 (aim x -4.91, y 0, z -59) registers against a
-    target at x -4.50, y 4.06, z -2. It is not introduced here: at 80x24 and
-    60x20 the scaled slack is still one column and the figure is the same
-    either way. It is widened here - at 205x50 the scaling took it from 74
-    configurations to 296.
-  - **Goal**: Decide whether the corridor clip belongs in the hit test, then
-    make the code, both docstrings and the check say the same thing. It is not
-    free: `drawBullets` records that the drawn span "runs a little narrower than
-    the tunnel radius projects to, so culling the bullet on it would cost real
-    hits at the far end", so testing `contacts` against that span moves every
-    kill rate the `0.4.0-alpha` entry pins. Measure it with
-    `npm run probe -- suite-replay` and the column probe before choosing, and
-    move the floors in `AIMED_BANDS`, `VOLLEY_BAND` and `EYE_BANDS` in
-    `test/engagement.mjs` with it. If the clip is deliberately left out of the
-    hit test, say so where the rule is stated - `updateBullets`'s "one that is
-    not drawn on it does not", in both builds - rather than stating a rule the
-    code does not hold. Either way, split `contactOf`'s `clear` verdict into a
-    tracer drawn wide of the block and a tracer not drawn at all: the two share
-    one bucket today, so "nothing is destroyed by a tracer that never reached
-    it" allows 5% of kills there and attributes them in its comment to
-    mid-sweep contacts, and the share that is this fault is not known. Both
-    builds together, as `test/parity.test.mjs` expects.
-  - From: User Overrides
 - [x] **A kill's contact is read against every shot the frame spent**
   - **Issue**: `freeFlight` reduces both readings - `now` over `stepped` and
     `before` over `drawnShots` - across every bullet the frame spent, for each
@@ -283,3 +210,52 @@ the roadmap section each one came from.
     The walk's counts must not move: 594 candidates at 80x24, 2241 at 60x20 and
     76 at 205x50, with 0 registered, and the same in both builds.
   - From: Code Review Override - the free flight guard reads looser than it states
+- [x] Flight Figures 1
+  - **Issue**: The item restated the flight's figures as spreads over a named
+    number of passes, but did not widen them far enough for a rerun to land
+    inside, which is what its **Goal** asked for. Every one of these was quoted
+    this run and missed on the first rerun: `test/pulse-cannon.test.mjs` says a
+    flight "fired 136 to 298 volleys" and "drew 12 to 34 blocks at once", and
+    reruns gave 118 volleys and 36 blocks; the `0.5.0-alpha` CHANGELOG entry
+    says "90 to 197 kills a grid a pass", and reruns gave 80 and 87; the same
+    test comment says the share on or beside is "96% or better at every grid and
+    in both builds", and a rerun gave 95% at browser 205x50. Two ten-pass runs
+    of the whole matrix do not even agree with each other - 80 to 191 kills a
+    grid a pass against 87 to 194 - so ten passes is not enough to bound an
+    unseeded distribution, and no number of passes quoted this way will settle.
+    The assertions themselves are unaffected and hold with room to spare: the
+    floors sit well under the spreads, as that comment says they deliberately
+    do. This is the quoted measurement, not the check.
+  - **Goal**: Take the other branch the archived item offered and seed the
+    flight, so a figure is arithmetic rather than a sample: a seeded RNG the two
+    builds share, which nothing in the engine has today and which
+    `test/parity.test.mjs` would have to cover. Failing that, stop quoting
+    spreads that a rerun falls outside - quote the floor and the ceiling the
+    checks actually assert, and leave the sampled figures to the probe, which
+    prints them with their pass count and is rebuilt by running it. Whichever
+    way, the numbers in the test comments, in `test/probes/free-flight.mjs` and
+    in the CHANGELOG entries come from one source and say the same thing.
+  - From: Measurement
+- [x] **A slow frame rate leaves the flight unable to pair any of its kills**
+  - **Issue**: `freeFlight` takes `dt` as a parameter, and `DEBRIS_DRIFT` in
+    `test/engagement.mjs` bounds a burst against its own block at a flat half a
+    unit. That bound is one frame of a particle's own velocity, so it grows with
+    the frame: `spawnParticles` draws `vx` and `vy` from -3 to 3 and `vz` from
+    -1 to 2, and `updateParticles` carries z by `(vz + advance) * dt`, so at
+    `dt` of 1/6 the z term alone clears half a unit on its own. The burst then
+    names no block, and the kill goes unread. Flown over the whole matrix, the
+    share of kills left unpaired is 4%, 3%, 2% and 3% at `dt` of 1/60, 1/30,
+    1/20 and 1/12, and 83% at 1/6 - which would take the `read / kills >= 0.75`
+    floor the same run added straight through the floor. Nothing reaches it
+    today, since no caller passes `dt` and the default is `FRAME`, but the frame
+    rates the suite's own frame-rate walk uses go to 1/6, so the parameter reads
+    as though those rates were supported.
+  - **Goal**: Decide whether the flight supports a slow frame at all. If it
+    does, the drift bound has to be derived from the frame rather than fixed -
+    `3 * dt` on x and y and `(2 + advance) * dt` on z, with `advance` already in
+    hand at the call site - and the naming re-checked at each rate, since a
+    wider bound can also let a second block inside it and name nothing. If it
+    does not, say so where `dt` is taken and pin the rates the flight is flown
+    at. Widening the bound blind is the one thing not to do: it trades a kill
+    left unread for a kill read against the wrong block.
+  - From: Code Review Override - the flight's spreads and its frame rate
