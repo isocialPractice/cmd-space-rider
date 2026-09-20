@@ -96,6 +96,89 @@ test('both builds pause, mute, and shake identically', () => {
   }
 });
 
+test('both builds draw the same sequence from the same seed', () => {
+  // The engine's randomness is one function in each build, and every draw
+  // either of them makes comes through it: the sixty obstacles a run opens
+  // with, the orbs among them, the mine timers, the starfield, the debris a
+  // burst is thrown in. Seeding it is what makes a figure taken off a flown
+  // run reproducible, and that only holds if the two builds step the same
+  // arithmetic - mulberry32 is written out twice, once in src/types.ts and
+  // once in index.html, so this is the check that the copies have not drifted.
+  for (const seed of [0, 1, 7, 20260919, -3, 2 ** 31]) {
+    const mine = terminalTypes.seededRandom(seed);
+    const theirs = browser.seededRandom(seed);
+    const drawn = [];
+    for (let i = 0; i < 200; i++) drawn.push(mine());
+    assert.deepEqual(
+      Array.from({ length: 200 }, () => theirs()), drawn,
+      `the two builds diverge on seed ${seed}`
+    );
+    assert.ok(
+      drawn.every((v) => v >= 0 && v < 1),
+      `seed ${seed} drew outside [0, 1)`
+    );
+  }
+});
+
+test('seeding is repeatable and releasing it hands the draw back', () => {
+  for (const [name, build] of [['terminal', terminalTypes], ['browser', browser]]) {
+    build.seedRng(4242);
+    const first = [0, 0, 0, 0].map(() => build.RNG.next());
+    build.seedRng(4242);
+    assert.deepEqual([0, 0, 0, 0].map(() => build.RNG.next()), first, `${name} did not repeat`);
+
+    build.seedRng(null);
+    assert.equal(build.RNG.next, Math.random, `${name} did not release the seed`);
+  }
+});
+
+test('a seeded run opens the same world in both builds', () => {
+  // The sequence agreeing is not the same thing as the two builds spending it
+  // the same way. `startGame` draws in a fixed order - one obstacle, then an
+  // orb four times in ten - and the port has to make the same draws in the
+  // same order or a seeded flight is two different flights.
+  const opened = [['terminal', TerminalGame, terminalTypes], ['browser', browser.Game, browser]]
+    .map(([name, Game, api]) => {
+      api.seedRng(20260919);
+      try {
+        const game = new Game();
+        game.startGame();
+        game.initStars(80, 24);
+        return { name, state: game.state };
+      } finally {
+        api.seedRng(null);
+      }
+    });
+
+  const [mine, theirs] = opened;
+  for (const field of ['obstacles', 'orbs', 'mines', 'stars']) {
+    assert.deepEqual(theirs.state[field], mine.state[field], `${field} differ`);
+  }
+  assert.equal(mine.state.obstacles.length, 60, 'a normal run opens with sixty obstacles');
+  assert.ok(mine.state.orbs.length > 0, 'and some orbs among them');
+});
+
+test('an unseeded run is still a different run each time', () => {
+  // The seed is for the checks and the probes. The game itself has to stay
+  // unpredictable, so a build nobody seeded draws from Math.random and two
+  // runs of it open on different worlds.
+  const open = (Game) => {
+    const game = new Game();
+    game.startGame();
+    return game.state.obstacles.map((o) => o.x).join(',');
+  };
+  assert.notEqual(open(TerminalGame), open(TerminalGame));
+
+  // The browser build gets the same reading off a copy nothing has seeded yet,
+  // rather than off the shared one the tests above have been handing seeds to.
+  // That is the build a player loads, and it carries seedRng in the same file
+  // as the draw it replaces, so the default landing anywhere but Math.random
+  // would put a fixed world in front of every player who opened the page.
+  const fresh = loadBrowserEngine(fakeStorage());
+  assert.equal(fresh.RNG.next, Math.random, 'a freshly loaded browser engine is already seeded');
+  assert.notEqual(open(fresh.Game), open(fresh.Game));
+});
+
 test('both builds refuse to record a debug run as the best score', () => {
   for (const game of [new TerminalGame(), new browser.Game()]) {
     game.startGame('mines');
