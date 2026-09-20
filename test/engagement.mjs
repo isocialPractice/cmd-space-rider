@@ -40,14 +40,34 @@ export const BUILDS = [
     ScreenBuffer: TerminalScreen, renderGame: terminalRender, C: terminalTypes.C,
     tunnelSpan: terminalTunnelSpan, tracerLit: terminalTypes.tracerLit,
     shotSlackCols: terminalTypes.shotSlackCols,
+    seedRng: terminalTypes.seedRng,
   },
   {
     name: 'browser', Game: browser.Game,
     ScreenBuffer: browser.ScreenBuffer, renderGame: browser.renderGame, C: browser.C,
     tunnelSpan: browser.tunnelSpan, tracerLit: browser.tracerLit,
     shotSlackCols: browser.shotSlackCols,
+    seedRng: browser.seedRng,
   },
 ];
+
+/**
+ * The frame rates every rate walk in this repository flies.
+ *
+ * A sixtieth is a fast machine, a thirtieth is what the game targets, and the
+ * three below that are what a loaded machine or a background tab actually
+ * hands the loop. A sixth of a second a frame is slower than anything the game
+ * has been seen to run at and is the point of the list: it is where a reading
+ * taken per frame stops agreeing with a reading taken per second, so anything
+ * that has to hold at every rate fails here first.
+ *
+ * One list rather than three. The staged-shot walk, the free flight and the
+ * frame-rate probe each used to carry their own copy, and a rate added to one
+ * of them said nothing about the other two - which is how `freeFlight` came to
+ * take a `dt` the suite never flew it at while the walk beside it went to a
+ * sixth.
+ */
+export const FRAME_RATES = [1 / 60, 1 / 30, 1 / 20, 1 / 12, 1 / 6];
 
 /**
  * The grids an engagement is flown at.
@@ -824,10 +844,12 @@ const KILL_DEBRIS = 208;
  * closest together of any pair on the screen: the pilot closes on the nearest
  * drawn block's column before it fires, so a frame that kills twice usually
  * kills twice down the same column. Measured over 60 flights of the matrix,
- * adjacent bursts came as close as 0.19 units on every axis at once - well
- * inside `DEBRIS_DRIFT` below - so grouping the debris by where it landed
- * merged those two kills into one, dropped a kill, and handed the remainder
- * that `rams` is taken as a ram that never happened.
+ * adjacent bursts came as close as 0.19 units on every axis at once - the
+ * whole of a slow frame's drift budget and about two frames of a fast one, per
+ * `debrisDrift` below - so grouping the debris by where it landed merged those
+ * two kills into one, dropped a kill, and handed the remainder that `rams` is
+ * taken as a ram that never happened. Counting the boundary instead is what
+ * makes it a rate the reading does not have to know.
  */
 const KILL_DEBRIS_COUNT = 12;
 
@@ -837,24 +859,57 @@ const KILL_DEBRIS_COUNT = 12;
  * `spawnParticles` puts a whole burst on the block's own position, and the
  * frame then moves every particle once before anything can read it, so the
  * piece this module reads a burst's position off has drifted from the block by
- * one frame of its own velocity - under a tenth of a unit on each axis at the
- * frame rates this module flies, against blocks spread over nine units of x and
- * four of y.
+ * one frame of its own velocity. That is a function of the frame, not a
+ * constant: at a thirtieth of a second the drift is under a tenth of a unit on
+ * each axis, and at a sixth it is half a unit across and better than three
+ * quarters deep.
+ *
+ * So the bound is derived from the frame rather than fixed. It was fixed at
+ * half a unit, which is one frame of drift at a thirtieth with room over and
+ * less than one frame of it at a sixth: the z term alone clears half a unit on
+ * its own once `dt` passes about a seventh, the burst then names no block, and
+ * the kill goes unread. Flown over the whole matrix that left 83% of kills
+ * unpaired at a sixth of a second a frame against 2% to 4% at the rates above
+ * it.
+ *
+ * Deriving it means restating what `spawnParticles` draws and what
+ * `updateParticles` does with it, which the fixed bound was written to avoid.
+ * That trade is the right way round: a restatement that drifts from the engine
+ * makes the pairing fail loudly, at every rate at once, while a bound that
+ * does not track the frame fails silently and only at the slow end.
+ *
+ * The z window is one-sided because the drift is. A burst is spawned at the
+ * depth `updateObstacles` left the block at and then carried forward by the
+ * frame's own advance on top of its own `vz`, so it can only sit deeper than
+ * the block by between `(vzMin + advance) * dt` and `(vzMax + advance) * dt`.
+ * Bounding that window rather than its magnitude keeps the bound tight as the
+ * frame grows, which is what leaves room for a second block beside the first.
  *
  * This bounds a burst against its own block and nothing else. It is not what
  * separates one burst from the next, which is counted: see
- * `KILL_DEBRIS_COUNT`.
- *
- * Nothing here restates how a particle moves: the bound is loose on purpose,
- * and a burst that fails to name exactly one block is counted as unpaired
- * rather than guessed at.
+ * `KILL_DEBRIS_COUNT`. A burst that fails to name exactly one block is still
+ * counted as unpaired rather than guessed at - `unnamed` where the window
+ * reached nothing and `ambiguous` where it reached more than one.
  */
-const DEBRIS_DRIFT = 0.5;
+const DEBRIS_VXY = 3;
+const DEBRIS_VZ_MIN = -1;
+const DEBRIS_VZ_MAX = 2;
+
+/** Room for the float error in carrying a position through a frame. */
+const DRIFT_SLACK = 1e-9;
+
+/** The window one frame of drift can put between a burst and its own block. */
+const debrisDrift = (dt, advance) => ({
+  xy: DEBRIS_VXY * dt + DRIFT_SLACK,
+  zMin: (DEBRIS_VZ_MIN + advance) * dt - DRIFT_SLACK,
+  zMax: (DEBRIS_VZ_MAX + advance) * dt + DRIFT_SLACK,
+});
 
 /** Whether a burst and a block are close enough to be the same block. */
-const nearby = (a, b) => Math.abs(a.x - b.x) <= DEBRIS_DRIFT
-  && Math.abs(a.y - b.y) <= DEBRIS_DRIFT
-  && Math.abs(a.z - b.z) <= DEBRIS_DRIFT;
+const nearby = (burst, block, drift) => Math.abs(burst.x - block.x) <= drift.xy
+  && Math.abs(burst.y - block.y) <= drift.xy
+  && burst.z - block.z >= drift.zMin
+  && burst.z - block.z <= drift.zMax;
 
 /**
  * The kill bursts one frame added to `state.particles`, in resolution order.
@@ -885,6 +940,47 @@ function killBurstsSince(particles, before) {
  * which is the condition a staged engagement never produces.
  */
 export const FREE_FIRE_INTERVAL = 0.12;
+
+/**
+ * The worlds the flight is flown in.
+ *
+ * The flight used to fly whatever `startGame` drew from an unseeded
+ * `Math.random`, so every pass flew a different run and no figure taken off
+ * it was reproducible: the numbers quoted in the checks below, in
+ * `test/probes/free-flight.mjs` and in the changelog were each one draw, and
+ * the first rerun fell outside them. Widening them into spreads over a stated
+ * number of passes did not settle it either - two ten-pass runs of the whole
+ * matrix disagreed with each other, so no number of passes quoted that way
+ * ever would.
+ *
+ * Seeding settles it. Each of these is a fixed world: the same sixty
+ * obstacles, the same orbs among them, the same mine timers, drawn in the
+ * same order by both builds. A figure off one of them is arithmetic, and a
+ * spread over all of them is arithmetic too - the same spread every time,
+ * rebuilt by running the probe rather than remembered from the day it was
+ * taken.
+ *
+ * The values are arbitrary and their only property is being written down.
+ * The suite flies the first of them, which is one world per check and the
+ * same coverage an unseeded pass gave; the probe flies all of them, which is
+ * where the breadth the old pass count was reaching for now lives.
+ */
+export const FREE_SEEDS = [20260919, 7, 4242, 31337, 900001];
+
+/**
+ * Frames a flight runs, matching the length the browser verification flew.
+ *
+ * `FREE_RATE_FRAMES` is what the rate walk flies instead, at five rates rather
+ * than one. Half the length keeps that walk inside a couple of seconds, and it
+ * costs nothing it was measuring: the slow rates cover more ground per frame,
+ * so the short flight still lands hundreds of kills where it matters.
+ *
+ * Both live here rather than in the test and the probe separately, for the
+ * reason at the top of this file - a probe printing a different flight from
+ * the one the suite pins prints a figure the suite cannot be checked against.
+ */
+export const FREE_FRAMES = 1200;
+export const FREE_RATE_FRAMES = 600;
 
 /**
  * A real run, flown for a stretch, with every frame rendered and read.
@@ -932,6 +1028,19 @@ export const FREE_FIRE_INTERVAL = 0.12;
  * landed kills cannot say which shot went where. Those kills are counted in
  * `unpaired` and left unread rather than read against the wrong shot.
  *
+ * `crowdedContacts` is the pairing's own guard: the same verdicts again, over
+ * the kills whose frame spent more than one shot. Those are the only kills a
+ * pairing can get wrong - a frame that spent one shot pairs the same way
+ * however the spent shots are walked - and they are a tenth of the kills, so
+ * a pairing fault barely moves `killContacts` while it halves this.
+ *
+ * The world is seeded, so the flight is the same flight every time it is
+ * flown: `seed` pins every draw the engine makes for the length of the run
+ * and hands the engine back to `Math.random` on the way out, so nothing
+ * flown after it inherits the seed. Passing `null` flies an unseeded run,
+ * which is a sample rather than a measurement and is not what any figure in
+ * this repository is quoted from.
+ *
  * Three things are held steady, and each is presentation or bookkeeping rather
  * than anything the hit test reads. The starfield is emptied, because it is
  * seeded from Math.random in each build independently. The shake is held at
@@ -944,7 +1053,18 @@ export const FREE_FIRE_INTERVAL = 0.12;
  */
 export function freeFlight(build, grid, {
   frames = 600, holdY = 0, dt = FRAME, fireInterval = FREE_FIRE_INTERVAL,
+  seed = FREE_SEEDS[0],
 } = {}) {
+  build.seedRng(seed);
+  try {
+    return flyFreely(build, grid, { frames, holdY, dt, fireInterval, seed });
+  } finally {
+    build.seedRng(null);
+  }
+}
+
+/** The flight itself, with the seed already in force. */
+function flyFreely(build, grid, { frames, holdY, dt, fireInterval, seed }) {
   const game = new build.Game();
   game.startGame();
   const s = game.state;
@@ -960,9 +1080,12 @@ export function freeFlight(build, grid, {
   const gameBottom = grid.h - FOOTER_ROWS;
 
   const report = {
-    frames: 0, volleys: 0, kills: 0, rams: 0, unpaired: 0,
+    frames: 0, volleys: 0, kills: 0, rams: 0,
+    unpaired: 0, unpairedMine: 0, unnamed: 0, ambiguous: 0,
     drawnThrough: 0, ignored: 0, ignoredAt: [],
-    killContacts: new Map(), mostBlocksDrawn: 0, mostShotsInAir: 0, slack,
+    killContacts: new Map(), crowdedContacts: new Map(),
+    mostBlocksDrawn: 0, mostShotsInAir: 0, slack,
+    seed, dt, holdY,
   };
 
   /** What the player is looking at: the blocks drawn, and the tracers over them. */
@@ -1103,6 +1226,7 @@ export function freeFlight(build, grid, {
     // the two scales exactly as updateBullets carries it.
     const advance = s.speed * 60 * dt;
     const travel = 60 * dt;
+    const drift = debrisDrift(dt, advance);
 
     // What the frame resolved, read off the debris it threw rather than off
     // where the blocks ended up. A block that goes has been shot, rammed or
@@ -1134,6 +1258,7 @@ export function freeFlight(build, grid, {
     // that was never near them.
     if (spent.length !== kills.length) {
       report.unpaired += kills.length;
+      report.unpairedMine += kills.length;
       continue;
     }
 
@@ -1150,10 +1275,14 @@ export function freeFlight(build, grid, {
       // frame's advance. That is what names the block among the ones that left
       // the tunnel this frame. Exactly one, or the frame does not say.
       const at = { x: kills[k].x, y: kills[k].y, z: kills[k].z };
-      const named = left.filter((o) => nearby(at, { x: o.x, y: o.y, z: o.z + advance }));
+      const named = left.filter((o) => nearby(at, { x: o.x, y: o.y, z: o.z + advance }, drift));
       const block = named.length === 1 ? named[0] : null;
       const shot = spent[k];
-      if (!block) { report.unpaired++; continue; }
+      if (!block) {
+        report.unpaired++;
+        if (named.length) report.ambiguous++; else report.unnamed++;
+        continue;
+      }
 
       const z = shot.z - travel;
       const stepped = {
@@ -1189,6 +1318,13 @@ export function freeFlight(build, grid, {
       const settled = closerContact(now, before);
       const verdict = settled === 'unlit' && !started ? 'hidden' : settled;
       report.killContacts.set(verdict, (report.killContacts.get(verdict) ?? 0) + 1);
+      // The same verdict again, kept apart for the kills the pairing is the
+      // whole of. A frame that spent one shot pairs the same way whichever
+      // end the spent shots are walked from, so those kills say nothing
+      // about the pairing and dilute the share that does.
+      if (spent.length > 1) {
+        report.crowdedContacts.set(verdict, (report.crowdedContacts.get(verdict) ?? 0) + 1);
+      }
     }
     Object.assign(s, live);
   }

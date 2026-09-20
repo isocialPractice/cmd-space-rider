@@ -537,3 +537,61 @@ still be found by name.
     the player is told they cannot be. Pin it in `test/menu-layout.test.mjs` or
     beside it, against the grid the buffer is built at rather than the window.
   - From: UI/UX Override - the pulse cannon in a real browser window
+
+## Archived 09-20-26
+
+- [x] **The screen-space hit rule has no free-flight guard**
+  - **Issue**: `test/pulse-cannon.test.mjs` pins both contact invariants at
+    three grids in both builds, but every one of them flies a staged engagement:
+    one target parked in an emptied run. The fault this work answers was found
+    in free flight, with sixty obstacles in the air and volleys overlapping, and
+    that is the shape no check in the suite has. Verified in a real browser
+    instead - 1200 frames a flight at 192x60, 205x50 and 60x20, held on the
+    floor and at the roof, with 0 frames showing a tracer drawn on a live block
+    against 164 for the same detector with the hit rule switched off - which
+    means the only guard against this regressing runs when the UI/UX agent runs,
+    and not on a change.
+  - **Goal**: Add a free-flight check to `test/pulse-cannon.test.mjs` on a pilot
+    in `test/engagement.mjs` that flies a real run rather than staging one: hold
+    the ship at a fixed height, line up on a target's drawn column off the
+    rendered buffer, fire, and render every frame with `renderGame`. Assert over
+    the run that no rendered frame leaves a tracer drawn on a block that is
+    still there the frame after with the shot still in the air, and that every
+    kill's contact sits inside `shotSlackCols` of the block's drawn edge. Fly it
+    at all three grids in `GRIDS` and in both builds, as
+    `test/parity.test.mjs` expects. Check it against the fault before trusting
+    it, by forcing `contacts` to false and confirming it fails.
+  - From: UI/UX Override - the pulse cannon in a real browser window
+- [x] Unlit Tracer Kill 1
+  - **Issue**: `contacts` decides a kill on the cells `drawBullets` would put
+    down, but does not apply the clip `drawBullets` applies. A tracer whose
+    column has left the corridor is not drawn at all (`src/render.ts:276`), and
+    `contacts` never asks (`src/game.ts:679`). `drawEntitiesFar` draws a
+    target's block whether or not the corridor reaches it, so on one of those
+    frames the player sees the block, sees no bolt, and the block dies anyway.
+    Walked as geometry at dt 1/60 over every firing column the ship can hold,
+    every depth in a shot's life and every legal target placement: at 80x24,
+    2796 of 28320 undrawn-tracer frames can still register a kill - a shot at
+    screen column 17 of row 14 (aim x -4.91, y 0, z -59) registers against a
+    target at x -4.50, y 4.06, z -2. It is not introduced here: at 80x24 and
+    60x20 the scaled slack is still one column and the figure is the same
+    either way. It is widened here - at 205x50 the scaling took it from 74
+    configurations to 296.
+  - **Goal**: Decide whether the corridor clip belongs in the hit test, then
+    make the code, both docstrings and the check say the same thing. It is not
+    free: `drawBullets` records that the drawn span "runs a little narrower than
+    the tunnel radius projects to, so culling the bullet on it would cost real
+    hits at the far end", so testing `contacts` against that span moves every
+    kill rate the `0.4.0-alpha` entry pins. Measure it with
+    `npm run probe -- suite-replay` and the column probe before choosing, and
+    move the floors in `AIMED_BANDS`, `VOLLEY_BAND` and `EYE_BANDS` in
+    `test/engagement.mjs` with it. If the clip is deliberately left out of the
+    hit test, say so where the rule is stated - `updateBullets`'s "one that is
+    not drawn on it does not", in both builds - rather than stating a rule the
+    code does not hold. Either way, split `contactOf`'s `clear` verdict into a
+    tracer drawn wide of the block and a tracer not drawn at all: the two share
+    one bucket today, so "nothing is destroyed by a tracer that never reached
+    it" allows 5% of kills there and attributes them in its comment to
+    mid-sweep contacts, and the share that is this fault is not known. Both
+    builds together, as `test/parity.test.mjs` expects.
+  - From: User Overrides

@@ -5,10 +5,13 @@ import {
   Obstacle, Orb, Mine, Bullet, Particle, Star,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
   ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols, tracerLit,
+  RNG,
 } from './types';
 
-const { PI, sin, cos, sqrt, abs, max, min, floor, ceil, random, atan2 } = Math;
+const { PI, sin, cos, sqrt, abs, max, min, floor, ceil, atan2 } = Math;
 const TAU = PI * 2;
+/** Every draw the engine makes, routed through the one source `seedRng` pins. */
+const random = (): number => RNG.next();
 const rand = (a = 0, b = 1): number => a + random() * (b - a);
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 

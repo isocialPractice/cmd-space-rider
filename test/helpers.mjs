@@ -20,6 +20,7 @@ const EXPORTS = [
   'Game', 'ScreenBuffer', 'C',
   'renderGame', 'renderTitleScreen', 'renderDebugMenu', 'renderGameOver', 'drawPauseOverlay',
   'tunnelSpan', 'tracerLit',
+  'RNG', 'seedRng', 'seededRandom',
   'shakeOffset', 'rollWings', 'loadBestScore', 'saveBestScore', 'loadCrt', 'saveCrt',
   'RetroAudio', 'SOUND_CUES', 'ENGINE_BASE_HZ', 'ENGINE_GAIN',
   'HUD_ROWS', 'FOOTER_ROWS', 'SHAKE_TIME', 'NEW_BEST_FLASH_TIME',

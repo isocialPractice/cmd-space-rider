@@ -169,7 +169,7 @@ cmd-space-rider/
     render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
     menu.ts         # Menu screens: title, debug menu, game over
     screen.ts       # Double-buffered ANSI screen buffer
-    types.ts        # Type definitions, shared constants, color constants
+    types.ts        # Types, shared constants, colors, and the seeded RNG
   test/
     helpers.mjs                 # Shared test rigging
     engagement.mjs              # One pulse cannon engagement, at any grid
@@ -210,7 +210,7 @@ takes a grid and a build:
 ```bash
 npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
-npm run probe -- free-flight --passes 10
+npm run probe -- free-flight --passes 2
 ```
 
 ### Line Endings
@@ -266,13 +266,17 @@ sixty obstacles in the tunnel and volleys overlapping, watched frame by frame,
 with the walk over the firing columns no flown engagement ever reaches printed
 underneath it.
 
-A staged walk places what it flies, so it gives the same numbers every time and
-one pass of it is the figure. The run the engine opens for itself is seeded from
-an unseeded `Math.random`, so every pass of `free-flight` flies a different run
-and one pass of it is a sample. That probe therefore takes `--passes` and prints
-each figure as the spread over them, and a figure quoted from it anywhere in the
-repository carries the pass count it was taken over. The walk printed beneath it
-is arithmetic and needs no passes at all.
+Every walk here gives the same numbers every time. A staged walk always did,
+because it places what it flies; the run the engine opens for itself did not,
+because it drew its sixty obstacles from an unseeded `Math.random`. Quoting one
+of those passes put figures in this repository that the next run fell outside
+of, and restating them as spreads did not help - two ten-pass runs of the same
+walk disagreed with each other. So the engine takes a seed: `seedRng` pins every
+draw either build makes, both builds draw the same sequence from it, and
+`free-flight` flies a fixed set of seeded worlds. `--passes N` narrows it to the
+first N while you iterate; a figure quoted anywhere here is taken over the whole
+set, or at the first seed alone where the suite pins it, and each table says
+which. The game itself stays unseeded - a run nobody can predict is the point.
 
 ## Terminal Requirements
 

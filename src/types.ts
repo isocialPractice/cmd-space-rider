@@ -151,6 +151,45 @@ export function tracerLit(
   return col > span.left && col < span.right;
 }
 
+/**
+ * The engine's source of randomness, and the one place it can be pinned.
+ *
+ * Every draw either build makes comes through `RNG.next` - the obstacle and
+ * orb field a run opens with, the mine timers, the starfield, the debris a
+ * burst is thrown in - so seeding this seeds the whole run. Unseeded it is
+ * `Math.random`, which is what the game plays on: a run nobody can predict is
+ * the point of the game.
+ *
+ * Seeding exists for the checks and the probes. A figure taken off an unseeded
+ * run is a sample rather than a measurement, and this repository quotes those
+ * figures in test comments, in probe tables and in the changelog, where a
+ * sample stops being reproducible the moment it is written down. A seeded run
+ * flies the same sixty obstacles every time, so the figure off it is
+ * arithmetic and a reader can rebuild it.
+ *
+ * It is `mulberry32`, chosen because it is short enough to restate exactly in
+ * the browser build's single file and uses only `imul` and shifts, so both
+ * builds step through the same 32-bit arithmetic and draw the same sequence
+ * from the same seed. `test/parity.test.mjs` pins that.
+ */
+export function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return (): number => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The draw the engine reads. Swapped by `seedRng`, and nothing else. */
+export const RNG: { next: () => number } = { next: Math.random };
+
+/** Pin the engine's draws to a seed, or hand them back to `Math.random`. */
+export function seedRng(seed: number | null): void {
+  RNG.next = seed === null ? Math.random : seededRandom(seed);
+}
+
 /** Seconds a combo chain survives without a kill before it drops to nothing. */
 export const COMBO_TIME = 2;
 

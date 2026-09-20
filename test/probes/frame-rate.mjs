@@ -21,9 +21,9 @@
 // The suite's own check holds three placements. This holds the walk the pulse
 // cannon work asked it to pass.
 
-import { BUILDS, GRIDS, emptyRun, engage, stagedShot, walk } from '../engagement.mjs';
+import { BUILDS, GRIDS, emptyRun, engage, stagedShot, walk, FRAME_RATES } from '../engagement.mjs';
 
-const RATES = [1 / 60, 1 / 30, 1 / 20, 1 / 12, 1 / 6];
+const RATES = FRAME_RATES;
 const HEIGHTS = [0, 2.5];
 
 export async function run({ grids = GRIDS, builds = BUILDS, count = 150 } = {}) {

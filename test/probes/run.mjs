@@ -22,13 +22,14 @@
 // the frame rate - above its table, so a reader can rebuild the number without
 // this file.
 //
-// `--passes` is for the probes whose walk is not deterministic. A staged
-// engagement places its target and flies the same flight every time, so one
-// pass is the figure; a probe that flies the run the game opens for itself is
-// drawing a fresh sixty obstacles each time, and one pass of it is a sample
-// rather than a measurement. Those probes take the spread over the passes they
-// were asked for and print the number of passes beside it, so a figure quoted
-// from one can be rebuilt by asking for the same number again.
+// `--passes` narrows the probes that fly more than one world. A staged
+// engagement places its target and flies the same flight every time, so it has
+// one world and takes no passes; a probe that flies the run the game opens for
+// itself has a set of seeded worlds and walks all of them by default, taking
+// the spread across them. Passing a number flies the first N of the set, which
+// is for iterating - a figure quoted anywhere in this repository is the whole
+// set. No probe here is a sample any more: every walk is seeded, so a figure
+// is rebuilt by running the probe again rather than by averaging it.
 
 import { GRIDS, BUILDS, parseGrid } from '../engagement.mjs';
 
