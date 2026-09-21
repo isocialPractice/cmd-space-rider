@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.6.1-alpha] - 2026-09-21
+
+### Fixed
+
+- The debris window the kill pairing matches in restated the engine, and
+  nothing held it there. `test/engagement.mjs` pairs each kill to the block it
+  killed by matching a fresh burst against where the blocks are, and the window
+  it matches in is built out of the velocities `spawnParticles` draws, written
+  out a second time as three constants. The comment over them argued the
+  restatement held itself honest, because a bound that drifted from the engine
+  would make the pairing fail loudly at every frame rate at once. That is true
+  of half of it. A window gone too tight does fail loudly - it reaches nothing,
+  the bursts name no block, and the kills go unread. A window gone too loose,
+  which is what a narrowing in `spawnParticles` leaves behind, passes in
+  silence: with all three numbers widened tenfold, to 30 on x and y and -10 to
+  20 on z, every floor the seeded flight pins still cleared, at both ship
+  heights, both builds and all three grids, with no unread burst anywhere. The
+  window is now pinned to the draw instead of to the comment. A hundred kills'
+  worth of debris is drawn out of each build from a fixed seed, and every
+  piece of it has to sit inside the window and come within a twentieth of a
+  unit of each end, so `spawnParticles` moving either way fails on an
+  assertion rather than on nothing. Checked both ways round: narrowing the
+  draw to 2 on x and y and -0.5 to 1 on z fails the new check alone and
+  nothing else in the suite, and widening it to 5 and -1 to 4 fails the new
+  check along with ten of the flight's own.
+- The free flight's ship heights were a copy in each file. The frame rates and
+  the flight lengths were centralised into `test/engagement.mjs` last run,
+  because a rate added to one file said nothing about the other two, and the
+  heights were left behind: `FREE_HEIGHTS` in `test/pulse-cannon.test.mjs` and
+  `HEIGHTS` in `test/probes/free-flight.mjs` were both `[0, 6.5]`, written out
+  twice, with every figure the probe prints for the flight summed over them and
+  every floor the suite pins read against them. Changing one meant the probe
+  printing a flight the suite does not fly, with nothing saying so. The pair is
+  now exported from `test/engagement.mjs` beside the seeds and the flight
+  lengths, and both files read it. `HEIGHTS` in `test/probes/frame-rate.mjs` is
+  unchanged: it is `[0, 2.5]` and belongs to the staged walk rather than to the
+  flight.
+
 ## [0.6.0-alpha] - 2026-09-20
 
 ### Added

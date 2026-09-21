@@ -874,9 +874,18 @@ const KILL_DEBRIS_COUNT = 12;
  *
  * Deriving it means restating what `spawnParticles` draws and what
  * `updateParticles` does with it, which the fixed bound was written to avoid.
- * That trade is the right way round: a restatement that drifts from the engine
- * makes the pairing fail loudly, at every rate at once, while a bound that
- * does not track the frame fails silently and only at the slow end.
+ * That trade is the right way round, and the pairing is not what makes it
+ * safe. It catches a restatement gone too tight, loudly and at every rate at
+ * once: the window then reaches nothing and the kills go unread. It is blind
+ * to one gone too loose, which is what a narrowing in `spawnParticles` leaves
+ * behind - flown with all three numbers widened tenfold, to 30 on x and y and
+ * -10 to 20 on z, the seeded matrix still cleared every floor the flight pins,
+ * with no `unlit` at any grid.
+ *
+ * So the numbers are pinned to the engine by a check rather than by this
+ * comment. `killBurst` below draws a burst out of a build, and the suite
+ * asserts every piece of it sits inside this window and that the pieces reach
+ * both ends - so `spawnParticles` moving either way fails on an assertion.
  *
  * The z window is one-sided because the drift is. A burst is spawned at the
  * depth `updateObstacles` left the block at and then carried forward by the
@@ -891,9 +900,9 @@ const KILL_DEBRIS_COUNT = 12;
  * counted as unpaired rather than guessed at - `unnamed` where the window
  * reached nothing and `ambiguous` where it reached more than one.
  */
-const DEBRIS_VXY = 3;
-const DEBRIS_VZ_MIN = -1;
-const DEBRIS_VZ_MAX = 2;
+export const DEBRIS_VXY = 3;
+export const DEBRIS_VZ_MIN = -1;
+export const DEBRIS_VZ_MAX = 2;
 
 /** Room for the float error in carrying a position through a frame. */
 const DRIFT_SLACK = 1e-9;
@@ -910,6 +919,68 @@ const nearby = (burst, block, drift) => Math.abs(burst.x - block.x) <= drift.xy
   && Math.abs(burst.y - block.y) <= drift.xy
   && burst.z - block.z >= drift.zMin
   && burst.z - block.z <= drift.zMax;
+
+/**
+ * How close a drawn burst has to come to each end of the window above.
+ *
+ * The inside half of the check is the easy half: a piece of debris outside the
+ * window is one the engine draws and `debrisDrift` does not allow, and one
+ * burst is enough to see it. The outside half is what the pairing could never
+ * see - a `spawnParticles` narrowed to draw inside a window this module still
+ * believes is wide - and seeing that takes the draw coming near enough to each
+ * end that a narrowing would pull it away.
+ *
+ * `BURST_DRAWS` uniform draws leave the extreme about a `BURST_DRAWS`th of the
+ * span short of the end, which is under five thousandths of a unit on x and y
+ * and half that on z. Measured at the seed below, the worst of the six ends
+ * came 0.0077 short. The tolerance is six times that, so the check has room
+ * against the arithmetic and still fails on any narrowing worth the name: the
+ * draw narrowed to 2 on x and y and -0.5 to 1 on z misses by two units.
+ */
+export const BURST_REACH = 0.05;
+
+/**
+ * Pieces drawn for the check, which is a hundred kills' worth of debris.
+ *
+ * Seeded, so the figure above is arithmetic rather than a sample: the same
+ * hundred bursts every time, and the same ones in both builds, which is the
+ * draw parity `test/parity.test.mjs` pins separately.
+ *
+ * The seed is this check's own rather than one of `FREE_SEEDS`. Those name
+ * worlds a flight is flown in, and this flies nothing - it draws velocities
+ * with no run around them, so the two have nothing to hold in common and a
+ * shared number would only read as though they did.
+ */
+const BURST_DRAWS = 100 * KILL_DEBRIS_COUNT;
+const BURST_SEED = 424242;
+
+/**
+ * A kill's debris, drawn out of a build with nothing else running.
+ *
+ * `updateBullets` is not asked for one, because a kill needs a block, a shot
+ * and a frame, and a frame moves the debris before anything can read it - the
+ * velocities are what this reads, and they are gone by then. `spawnParticles`
+ * is called directly instead, on the run's own state, which is the same call a
+ * kill makes and the one the numbers above restate.
+ */
+export function killBurst(build, { count = BURST_DRAWS, seed = BURST_SEED } = {}) {
+  build.seedRng(seed);
+  try {
+    const game = new build.Game();
+    game.state.particles = [];
+    game.spawnParticles(0, 0, 0, KILL_DEBRIS, count);
+    return game.state.particles;
+  } finally {
+    build.seedRng(null);
+  }
+}
+
+/** What each of a burst's velocities has to sit inside, and reach the ends of. */
+export const DEBRIS_DRAWN = [
+  { axis: 'vx', min: -DEBRIS_VXY, max: DEBRIS_VXY },
+  { axis: 'vy', min: -DEBRIS_VXY, max: DEBRIS_VXY },
+  { axis: 'vz', min: DEBRIS_VZ_MIN, max: DEBRIS_VZ_MAX },
+];
 
 /**
  * The kill bursts one frame added to `state.particles`, in resolution order.
@@ -981,6 +1052,22 @@ export const FREE_SEEDS = [20260919, 7, 4242, 31337, 900001];
  */
 export const FREE_FRAMES = 1200;
 export const FREE_RATE_FRAMES = 600;
+
+/**
+ * The ship heights a flight is flown at: the floor, and the ceiling the tunnel
+ * clamps the ship to.
+ *
+ * Here for the same reason `FREE_FRAMES` is, and it is the same drift. Every
+ * figure the probe prints for the flight is summed over these two heights and
+ * every floor the suite pins is read against them, so a copy in each file
+ * means a height changed in one of them prints a flight the other does not
+ * fly - and nothing says so, because both still run.
+ *
+ * `HEIGHTS` in `test/probes/frame-rate.mjs` is a different pair and stays
+ * where it is: that walk is a staged shot rather than a flight, and its
+ * heights belong to it.
+ */
+export const FREE_HEIGHTS = [0, 6.5];
 
 /**
  * A real run, flown for a stretch, with every frame rendered and read.

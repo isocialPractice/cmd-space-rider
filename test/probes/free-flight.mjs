@@ -32,10 +32,8 @@
 import {
   BUILDS, GRIDS, freeFlight, darkWalk,
   FREE_FIRE_INTERVAL, FREE_SEEDS, FREE_FRAMES, FREE_RATE_FRAMES, FRAME_RATES,
+  FREE_HEIGHTS as HEIGHTS,
 } from '../engagement.mjs';
-
-/** Held on the floor, and held at the ceiling the tunnel clamps the ship to. */
-const HEIGHTS = [0, 6.5];
 
 /** The verdicts contactOf can return for a kill, nearest contact first. */
 const VERDICTS = ['on', 'beside', 'wide', 'unlit', 'hidden'];

@@ -31,7 +31,8 @@ import {
   emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk,
   watchEngagement, tracerCells, tracerCellsBothHalves,
   unitsPerCol, freeFlight, darkWalk, FRAME_RATES, FREE_SEEDS,
-  FREE_FRAMES, FREE_RATE_FRAMES,
+  FREE_FRAMES, FREE_RATE_FRAMES, FREE_HEIGHTS,
+  killBurst, DEBRIS_DRAWN, BURST_REACH,
 } from './engagement.mjs';
 
 /**
@@ -687,8 +688,48 @@ test('both builds draw the tracer on the same cells, frame for frame', () => {
 // So the same pair is asked of a run the engine starts for itself. The pilot is
 // in engagement.mjs; these read what it brings back.
 
-/** Held on the floor, and held at the ceiling the tunnel clamps the ship to. */
-const FREE_HEIGHTS = [0, 6.5];
+// What the flight reports rests on `debrisDrift`, which is the one place in
+// engagement.mjs that restates the engine instead of reading it: the module
+// pairs each kill to a block by matching a fresh burst against where the blocks
+// are, and the window it matches in is built out of the velocities
+// `spawnParticles` draws. The comment over those numbers used to argue the
+// restatement held itself honest, because a bound that drifted would make the
+// pairing fail loudly. Half of that is true. A bound gone too tight does fail
+// loudly - the window reaches nothing and the kills go unread. A bound gone too
+// loose passes in silence: widened tenfold, to 30 on x and y and -10 to 20 on
+// z, the whole seeded matrix still cleared every floor pinned below.
+//
+// So the window is pinned to the draw here, at both ends, before anything reads
+// a figure off it.
+for (const build of BUILDS) {
+  test(`${build.name}: the debris window is the velocities the engine draws`, () => {
+    const burst = killBurst(build);
+    assert.ok(burst.length > 0, 'the burst should have been drawn');
+
+    for (const { axis, min, max } of DEBRIS_DRAWN) {
+      const drawn = burst.map((p) => p[axis]);
+      const low = Math.min(...drawn);
+      const high = Math.max(...drawn);
+
+      // Inside the window: a piece the engine throws and `debrisDrift` does not
+      // allow for is a burst that names no block and a kill that goes unread.
+      assert.ok(low >= min, `${axis} drew ${low}, under the ${min} the window allows`);
+      assert.ok(high <= max, `${axis} drew ${high}, over the ${max} the window allows`);
+
+      // And reaching both ends of it: a window wider than the draw is the half
+      // the pairing cannot see, so the draw has to come near enough to each end
+      // that narrowing `spawnParticles` pulls it away and fails here.
+      assert.ok(
+        low <= min + BURST_REACH,
+        `${axis} never came within ${BURST_REACH} of ${min}, closest was ${low}`
+      );
+      assert.ok(
+        high >= max - BURST_REACH,
+        `${axis} never came within ${BURST_REACH} of ${max}, closest was ${high}`
+      );
+    }
+  });
+}
 
 // Every figure quoted in the checks below is a number rather than a spread,
 // and rebuilding one is a matter of running the probe again.
