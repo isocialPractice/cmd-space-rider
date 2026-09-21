@@ -20,44 +20,39 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### Code Review Override - the drift bound and the flight's heights
+### Code Review Override - the burst check's exports and the changelog heading
 
-- [ ] **The derived drift bound restates the engine with nothing holding it there**
-  - **Issue**: `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and `DEBRIS_VZ_MAX` in
-    `test/engagement.mjs` restate the ranges `spawnParticles` draws `vx`, `vy`
-    and `vz` from, and nothing in the suite compares the two. The comment over
-    them argues the restatement is safe because "a restatement that drifts from
-    the engine makes the pairing fail loudly, at every rate at once", and that
-    holds in one direction only. A bound gone too tight does fail loudly. A
-    bound gone too loose - which is what a narrowing in `spawnParticles` leaves
-    behind - is silent: flown with all three widened tenfold, to 30 on x and y
-    and -10 to 20 on z, the seeded matrix still clears every floor the flight
-    pins, at 97.7%, 97.9% and 96.9% of kills read against the 75% floor, 99% to
-    100% on or beside against the 90% floor, and no `unlit` at any grid.
-  - **Goal**: Pin the three constants to the engine rather than to a comment.
-    Draw a burst out of each build and assert every particle's `vx`, `vy` and
-    `vz` sits inside what `debrisDrift` assumes, in both builds as
-    `test/parity.test.mjs` expects, so a change to `spawnParticles` fails on a
-    check rather than on nothing. Correct the claim over the constants either
-    way: as it stands it credits the pairing with a guard half of it does not
-    have.
-  - From: Code Review Override - the drift bound and the flight's heights
-- [ ] **The free flight's ship heights are still a copy in each file**
-  - **Issue**: This run moved the frame rates and the flight lengths into
-    `test/engagement.mjs` and wrote the reason beside them - "One list rather
-    than three", because "a rate added to one of them said nothing about the
-    other two" - and left the heights where they were. `FREE_HEIGHTS` in
-    `test/pulse-cannon.test.mjs` and `HEIGHTS` in `test/probes/free-flight.mjs`
-    are both `[0, 6.5]`, written out twice, and every figure the probe prints
-    for the suite to be checked against is summed over them. Change one and the
-    probe prints a flight the suite does not fly, which is the drift
-    `FRAME_RATES`, `FREE_FRAMES` and `FREE_RATE_FRAMES` were centralised to
-    prevent.
-  - **Goal**: Export the pair from `test/engagement.mjs` beside `FREE_SEEDS`
-    and the flight lengths, and read it in both files. Leave `HEIGHTS` in
-    `test/probes/frame-rate.mjs` alone - it is `[0, 2.5]` and belongs to the
-    staged walk rather than to the flight.
-  - From: Code Review Override - the drift bound and the flight's heights
+- [ ] **The three window constants are exported with nothing importing them**
+  - **Issue**: This run promoted `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
+    `DEBRIS_VZ_MAX` in `test/engagement.mjs` from `const` to `export const`,
+    and nothing outside that file reads them - a grep over `test/`,
+    `test/probes/` and the rest of the repository returns no importer. The
+    check that needed them reads `DEBRIS_DRAWN`, which the same run added a few
+    lines below and which already carries all three values, and
+    `test/pulse-cannon.test.mjs` imports `killBurst`, `DEBRIS_DRAWN` and
+    `BURST_REACH` and none of the three. `DRIFT_SLACK` sits in the same block
+    doing the same job for `debrisDrift` and stays module-private, which is
+    this file's convention for a number the checks never name, so the three are
+    now in the module's public surface on their own.
+  - **Goal**: Drop the `export` from the three and leave `DEBRIS_DRAWN` as the
+    surface the checks read. If they are meant to be public instead, say beside
+    them what is expected to read them. `npm test` stays at 325 passing either
+    way.
+  - From: Code Review Override - the burst check's exports and the changelog heading
+- [ ] **The heights centralisation is filed as a fix where its precedent is a change**
+  - **Issue**: The `0.6.1-alpha` CHANGELOG entry puts both of its bullets under
+    `### Fixed`. The second centralises the free flight's ship heights into
+    `test/engagement.mjs` so two files stop keeping their own copy, which is
+    the same kind of change, to the same file, for the same stated reason, that
+    `0.6.0-alpha` recorded one version earlier under `### Changed` - "The frame
+    rates every rate walk flies are one list in `test/engagement.mjs`". One
+    refactor is described in two sections of the same changelog, so a reader
+    scanning `### Fixed` for repaired defects meets a deduplication instead.
+  - **Goal**: Move the heights bullet to a `### Changed` section under
+    `0.6.1-alpha`, matching the `0.6.0-alpha` precedent, and leave the debris
+    window bullet under `### Fixed` - that one repaired a guard that did not
+    hold. Do not restate the version or re-cut the release.
+  - From: Code Review Override - the burst check's exports and the changelog heading
 
 ## Quick Wins
 
@@ -130,65 +125,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 40 earlier items in `TODO-archive.md`, newest last.
+> 42 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **A kill's contact is read against every shot the frame spent**
-  - **Issue**: `freeFlight` reduces both readings - `now` over `stepped` and
-    `before` over `drawnShots` - across every bullet the frame spent, for each
-    block the frame killed (`test/engagement.mjs`, the `for (const killed of
-    gone)` loop). Nothing pairs a spent shot to the block it actually killed, so
-    the verdict recorded for one kill can be another shot's contact. Measured
-    over the same matrix the test flies, 1200 frames at both heights, all three
-    grids, both builds: 95 of 884 kills - 11% - landed on a frame that spent
-    more than one shot. The check's own comment says the opposite, "with both
-    readings taken against the killing shot alone", as does the docstring in
-    `engagement.mjs`, "the killing shots against the killed block and nothing
-    else". A shot drawn wide of the block it killed is recorded as `on` whenever
-    a sibling shot spent in the same frame was standing on that block, so the
-    98% the test reports is a ceiling on what it can catch, not a measurement.
-    Second leniency in the same reading: `gone` filters on `o.ref.z < o.z - 100
-    && o.z <= 5`, which `updateObstacles` satisfies for a ram as well as
-    `updateBullets` does for a kill, so a frame that rams and spends a shot
-    scores the rammed obstacle as a kill. It does not bite today - a flight rams
-    0 or 1 times in 1200 frames and never on a frame that also spent a shot -
-    but nothing in the reading keeps it that way.
-  - **Goal**: Pair each killed block to the shot that killed it before reading
-    the contact, or say in the comment and the docstring what the reduction
-    actually does. Pairing is the stronger answer and needs the frame's own
-    resolution order: `updateBullets` walks the bullets from the end and breaks
-    on the first obstacle it registers against, so the pairing is derivable
-    rather than guessable. Exclude a rammed obstacle from `gone` either way -
-    the shield drop already names the frame, and `updateObstacles` runs before
-    `updateBullets`, so the two are separable. Re-measure the kill-contact
-    shares after the change and move the figures in the test comment,
-    `test/probes/free-flight.mjs` and the `0.5.0-alpha` CHANGELOG entry with
-    them. Both builds together, as `test/parity.test.mjs` expects.
-  - From: Code Review Override - the free flight guard reads looser than it states
-- [x] **Flight Figures**: **The free flight's figures cannot be rebuilt from the repository**
-  - **Issue**: `freeFlight` flies the run `startGame` opens, which seeds sixty
-    obstacles from `Math.random` with nothing seeding it, so every pass flies a
-    different run. The figures the repository quotes for it were taken from one
-    draw and the first rerun falls outside them. `npm run probe -- free-flight`
-    on a clean tree gives 824 kills over the whole matrix against the
-    `0.5.0-alpha` CHANGELOG's "847 to 870 kills a pass", and terminal at 205x50
-    held at 0 gives 140 volleys and 44 kills against the test comment's "a
-    flight fires 145 to 297 volleys, lands 45 to 117 kills" - while browser at
-    60x20 held at 6.5 gives 121 kills, over the same comment's ceiling. The
-    assertions themselves hold with room to spare (`>= 100` volleys, `>= 25`
-    kills, and 98% on-or-beside against a 90% floor, stable over 8 consecutive
-    runs of the file), so this is the quoted measurement drifting rather than
-    the check being flaky. `## Measurement` exists so a figure can be rebuilt
-    from the repository alone, and these cannot be.
-  - **Goal**: Either seed the flight so a figure is reproducible - a seeded RNG
-    the two builds share, which nothing in the engine has today and which the
-    parity check would have to cover - or state the figures as what they are,
-    the spread over a named number of passes, and widen them until a rerun lands
-    inside. Whichever way, the numbers in the test comments, in
-    `test/probes/free-flight.mjs` and in the `0.5.0-alpha` CHANGELOG entry come
-    from the same source and say the same thing. The dark walk beside it is
-    already deterministic and its 9,477,000 / 594 / 2241 / 76 figures reproduce
-    exactly, so only the flown half needs this.
-  - From: Code Review Override - the free flight guard reads looser than it states
 - [x] **The corridor has one definition and the test keeps a second**
   - **Issue**: `tracerLit` was added to `src/types.ts` and to `index.html` this
     run so that drawTunnel, drawBullets and the hit test read one corridor.
@@ -259,3 +197,39 @@ the roadmap section each one came from.
     at. Widening the bound blind is the one thing not to do: it trades a kill
     left unread for a kill read against the wrong block.
   - From: Code Review Override - the flight's spreads and its frame rate
+- [x] **The derived drift bound restates the engine with nothing holding it there**
+  - **Issue**: `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and `DEBRIS_VZ_MAX` in
+    `test/engagement.mjs` restate the ranges `spawnParticles` draws `vx`, `vy`
+    and `vz` from, and nothing in the suite compares the two. The comment over
+    them argues the restatement is safe because "a restatement that drifts from
+    the engine makes the pairing fail loudly, at every rate at once", and that
+    holds in one direction only. A bound gone too tight does fail loudly. A
+    bound gone too loose - which is what a narrowing in `spawnParticles` leaves
+    behind - is silent: flown with all three widened tenfold, to 30 on x and y
+    and -10 to 20 on z, the seeded matrix still clears every floor the flight
+    pins, at 97.7%, 97.9% and 96.9% of kills read against the 75% floor, 99% to
+    100% on or beside against the 90% floor, and no `unlit` at any grid.
+  - **Goal**: Pin the three constants to the engine rather than to a comment.
+    Draw a burst out of each build and assert every particle's `vx`, `vy` and
+    `vz` sits inside what `debrisDrift` assumes, in both builds as
+    `test/parity.test.mjs` expects, so a change to `spawnParticles` fails on a
+    check rather than on nothing. Correct the claim over the constants either
+    way: as it stands it credits the pairing with a guard half of it does not
+    have.
+  - From: Code Review Override - the drift bound and the flight's heights
+- [x] **The free flight's ship heights are still a copy in each file**
+  - **Issue**: This run moved the frame rates and the flight lengths into
+    `test/engagement.mjs` and wrote the reason beside them - "One list rather
+    than three", because "a rate added to one of them said nothing about the
+    other two" - and left the heights where they were. `FREE_HEIGHTS` in
+    `test/pulse-cannon.test.mjs` and `HEIGHTS` in `test/probes/free-flight.mjs`
+    are both `[0, 6.5]`, written out twice, and every figure the probe prints
+    for the suite to be checked against is summed over them. Change one and the
+    probe prints a flight the suite does not fly, which is the drift
+    `FRAME_RATES`, `FREE_FRAMES` and `FREE_RATE_FRAMES` were centralised to
+    prevent.
+  - **Goal**: Export the pair from `test/engagement.mjs` beside `FREE_SEEDS`
+    and the flight lengths, and read it in both files. Leave `HEIGHTS` in
+    `test/probes/frame-rate.mjs` alone - it is `[0, 2.5]` and belongs to the
+    staged walk rather than to the flight.
+  - From: Code Review Override - the drift bound and the flight's heights
