@@ -900,9 +900,9 @@ const KILL_DEBRIS_COUNT = 12;
  * counted as unpaired rather than guessed at - `unnamed` where the window
  * reached nothing and `ambiguous` where it reached more than one.
  */
-export const DEBRIS_VXY = 3;
-export const DEBRIS_VZ_MIN = -1;
-export const DEBRIS_VZ_MAX = 2;
+const DEBRIS_VXY = 3;
+const DEBRIS_VZ_MIN = -1;
+const DEBRIS_VZ_MAX = 2;
 
 /** Room for the float error in carrying a position through a frame. */
 const DRIFT_SLACK = 1e-9;

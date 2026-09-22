@@ -655,3 +655,53 @@ still be found by name.
     already deterministic and its 9,477,000 / 594 / 2241 / 76 figures reproduce
     exactly, so only the flown half needs this.
   - From: Code Review Override - the free flight guard reads looser than it states
+
+## Archived 09-22-26
+
+- [x] **The corridor has one definition and the test keeps a second**
+  - **Issue**: `tracerLit` was added to `src/types.ts` and to `index.html` this
+    run so that drawTunnel, drawBullets and the hit test read one corridor.
+    `test/engagement.mjs` then defines its own `tracerLit(build, col, row, ...)`
+    that reads `build.tunnelSpan` and restates the boundary as `col > span.left
+    && col < span.right`, and its docstring says it does not: "read out of the
+    build that is flying rather than restated here ... a test carrying its own
+    copy would be pinning the copy". `darkWalk` decides which configurations are
+    dark from that copy and then asserts the engine registers nothing on them,
+    so widening the engine's corridor to include its walls would leave the walk
+    calling those configurations dark and the assertion failing against code
+    that is right, while narrowing it would let the walk stop reaching the
+    frames the check exists for. The copy is reachable only because
+    `tracerLit` is exported from neither build's test surface: it is absent from
+    `EXPORTS` in `test/helpers.mjs` and from `BUILDS` in `test/engagement.mjs`.
+  - **Goal**: Add `tracerLit` to `EXPORTS` and to both entries of `BUILDS`
+    beside `tunnelSpan`, and have the test's helper call `build.tracerLit`
+    rather than restate the boundary - or drop the helper and call it directly.
+    The walk's counts must not move: 594 candidates at 80x24, 2241 at 60x20 and
+    76 at 205x50, with 0 registered, and the same in both builds.
+  - From: Code Review Override - the free flight guard reads looser than it states
+- [x] Flight Figures 1
+  - **Issue**: The item restated the flight's figures as spreads over a named
+    number of passes, but did not widen them far enough for a rerun to land
+    inside, which is what its **Goal** asked for. Every one of these was quoted
+    this run and missed on the first rerun: `test/pulse-cannon.test.mjs` says a
+    flight "fired 136 to 298 volleys" and "drew 12 to 34 blocks at once", and
+    reruns gave 118 volleys and 36 blocks; the `0.5.0-alpha` CHANGELOG entry
+    says "90 to 197 kills a grid a pass", and reruns gave 80 and 87; the same
+    test comment says the share on or beside is "96% or better at every grid and
+    in both builds", and a rerun gave 95% at browser 205x50. Two ten-pass runs
+    of the whole matrix do not even agree with each other - 80 to 191 kills a
+    grid a pass against 87 to 194 - so ten passes is not enough to bound an
+    unseeded distribution, and no number of passes quoted this way will settle.
+    The assertions themselves are unaffected and hold with room to spare: the
+    floors sit well under the spreads, as that comment says they deliberately
+    do. This is the quoted measurement, not the check.
+  - **Goal**: Take the other branch the archived item offered and seed the
+    flight, so a figure is arithmetic rather than a sample: a seeded RNG the two
+    builds share, which nothing in the engine has today and which
+    `test/parity.test.mjs` would have to cover. Failing that, stop quoting
+    spreads that a rerun falls outside - quote the floor and the ceiling the
+    checks actually assert, and leave the sampled figures to the probe, which
+    prints them with their pass count and is rebuilt by running it. Whichever
+    way, the numbers in the test comments, in `test/probes/free-flight.mjs` and
+    in the CHANGELOG entries come from one source and say the same thing.
+  - From: Measurement

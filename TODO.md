@@ -20,40 +20,6 @@ its origin survives archiving into `## Complete`.
 - [ ] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
   - From: Polish
 
-### Code Review Override - the burst check's exports and the changelog heading
-
-- [ ] **The three window constants are exported with nothing importing them**
-  - **Issue**: This run promoted `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
-    `DEBRIS_VZ_MAX` in `test/engagement.mjs` from `const` to `export const`,
-    and nothing outside that file reads them - a grep over `test/`,
-    `test/probes/` and the rest of the repository returns no importer. The
-    check that needed them reads `DEBRIS_DRAWN`, which the same run added a few
-    lines below and which already carries all three values, and
-    `test/pulse-cannon.test.mjs` imports `killBurst`, `DEBRIS_DRAWN` and
-    `BURST_REACH` and none of the three. `DRIFT_SLACK` sits in the same block
-    doing the same job for `debrisDrift` and stays module-private, which is
-    this file's convention for a number the checks never name, so the three are
-    now in the module's public surface on their own.
-  - **Goal**: Drop the `export` from the three and leave `DEBRIS_DRAWN` as the
-    surface the checks read. If they are meant to be public instead, say beside
-    them what is expected to read them. `npm test` stays at 325 passing either
-    way.
-  - From: Code Review Override - the burst check's exports and the changelog heading
-- [ ] **The heights centralisation is filed as a fix where its precedent is a change**
-  - **Issue**: The `0.6.1-alpha` CHANGELOG entry puts both of its bullets under
-    `### Fixed`. The second centralises the free flight's ship heights into
-    `test/engagement.mjs` so two files stop keeping their own copy, which is
-    the same kind of change, to the same file, for the same stated reason, that
-    `0.6.0-alpha` recorded one version earlier under `### Changed` - "The frame
-    rates every rate walk flies are one list in `test/engagement.mjs`". One
-    refactor is described in two sections of the same changelog, so a reader
-    scanning `### Fixed` for repaired defects meets a deduplication instead.
-  - **Goal**: Move the heights bullet to a `### Changed` section under
-    `0.6.1-alpha`, matching the `0.6.0-alpha` precedent, and leave the debris
-    window bullet under `### Fixed` - that one repaired a guard that did not
-    hold. Do not restate the version or re-cut the release.
-  - From: Code Review Override - the burst check's exports and the changelog heading
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -125,55 +91,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 42 earlier items in `TODO-archive.md`, newest last.
+> 44 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **The corridor has one definition and the test keeps a second**
-  - **Issue**: `tracerLit` was added to `src/types.ts` and to `index.html` this
-    run so that drawTunnel, drawBullets and the hit test read one corridor.
-    `test/engagement.mjs` then defines its own `tracerLit(build, col, row, ...)`
-    that reads `build.tunnelSpan` and restates the boundary as `col > span.left
-    && col < span.right`, and its docstring says it does not: "read out of the
-    build that is flying rather than restated here ... a test carrying its own
-    copy would be pinning the copy". `darkWalk` decides which configurations are
-    dark from that copy and then asserts the engine registers nothing on them,
-    so widening the engine's corridor to include its walls would leave the walk
-    calling those configurations dark and the assertion failing against code
-    that is right, while narrowing it would let the walk stop reaching the
-    frames the check exists for. The copy is reachable only because
-    `tracerLit` is exported from neither build's test surface: it is absent from
-    `EXPORTS` in `test/helpers.mjs` and from `BUILDS` in `test/engagement.mjs`.
-  - **Goal**: Add `tracerLit` to `EXPORTS` and to both entries of `BUILDS`
-    beside `tunnelSpan`, and have the test's helper call `build.tracerLit`
-    rather than restate the boundary - or drop the helper and call it directly.
-    The walk's counts must not move: 594 candidates at 80x24, 2241 at 60x20 and
-    76 at 205x50, with 0 registered, and the same in both builds.
-  - From: Code Review Override - the free flight guard reads looser than it states
-- [x] Flight Figures 1
-  - **Issue**: The item restated the flight's figures as spreads over a named
-    number of passes, but did not widen them far enough for a rerun to land
-    inside, which is what its **Goal** asked for. Every one of these was quoted
-    this run and missed on the first rerun: `test/pulse-cannon.test.mjs` says a
-    flight "fired 136 to 298 volleys" and "drew 12 to 34 blocks at once", and
-    reruns gave 118 volleys and 36 blocks; the `0.5.0-alpha` CHANGELOG entry
-    says "90 to 197 kills a grid a pass", and reruns gave 80 and 87; the same
-    test comment says the share on or beside is "96% or better at every grid and
-    in both builds", and a rerun gave 95% at browser 205x50. Two ten-pass runs
-    of the whole matrix do not even agree with each other - 80 to 191 kills a
-    grid a pass against 87 to 194 - so ten passes is not enough to bound an
-    unseeded distribution, and no number of passes quoted this way will settle.
-    The assertions themselves are unaffected and hold with room to spare: the
-    floors sit well under the spreads, as that comment says they deliberately
-    do. This is the quoted measurement, not the check.
-  - **Goal**: Take the other branch the archived item offered and seed the
-    flight, so a figure is arithmetic rather than a sample: a seeded RNG the two
-    builds share, which nothing in the engine has today and which
-    `test/parity.test.mjs` would have to cover. Failing that, stop quoting
-    spreads that a rerun falls outside - quote the floor and the ceiling the
-    checks actually assert, and leave the sampled figures to the probe, which
-    prints them with their pass count and is rebuilt by running it. Whichever
-    way, the numbers in the test comments, in `test/probes/free-flight.mjs` and
-    in the CHANGELOG entries come from one source and say the same thing.
-  - From: Measurement
 - [x] **A slow frame rate leaves the flight unable to pair any of its kills**
   - **Issue**: `freeFlight` takes `dt` as a parameter, and `DEBRIS_DRIFT` in
     `test/engagement.mjs` bounds a burst against its own block at a flat half a
@@ -233,3 +152,34 @@ the roadmap section each one came from.
     `test/probes/frame-rate.mjs` alone - it is `[0, 2.5]` and belongs to the
     staged walk rather than to the flight.
   - From: Code Review Override - the drift bound and the flight's heights
+- [x] **The three window constants are exported with nothing importing them**
+  - **Issue**: This run promoted `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
+    `DEBRIS_VZ_MAX` in `test/engagement.mjs` from `const` to `export const`,
+    and nothing outside that file reads them - a grep over `test/`,
+    `test/probes/` and the rest of the repository returns no importer. The
+    check that needed them reads `DEBRIS_DRAWN`, which the same run added a few
+    lines below and which already carries all three values, and
+    `test/pulse-cannon.test.mjs` imports `killBurst`, `DEBRIS_DRAWN` and
+    `BURST_REACH` and none of the three. `DRIFT_SLACK` sits in the same block
+    doing the same job for `debrisDrift` and stays module-private, which is
+    this file's convention for a number the checks never name, so the three are
+    now in the module's public surface on their own.
+  - **Goal**: Drop the `export` from the three and leave `DEBRIS_DRAWN` as the
+    surface the checks read. If they are meant to be public instead, say beside
+    them what is expected to read them. `npm test` stays at 325 passing either
+    way.
+  - From: Code Review Override - the burst check's exports and the changelog heading
+- [x] **The heights centralisation is filed as a fix where its precedent is a change**
+  - **Issue**: The `0.6.1-alpha` CHANGELOG entry puts both of its bullets under
+    `### Fixed`. The second centralises the free flight's ship heights into
+    `test/engagement.mjs` so two files stop keeping their own copy, which is
+    the same kind of change, to the same file, for the same stated reason, that
+    `0.6.0-alpha` recorded one version earlier under `### Changed` - "The frame
+    rates every rate walk flies are one list in `test/engagement.mjs`". One
+    refactor is described in two sections of the same changelog, so a reader
+    scanning `### Fixed` for repaired defects meets a deduplication instead.
+  - **Goal**: Move the heights bullet to a `### Changed` section under
+    `0.6.1-alpha`, matching the `0.6.0-alpha` precedent, and leave the debris
+    window bullet under `### Fixed` - that one repaired a guard that did not
+    hold. Do not restate the version or re-cut the release.
+  - From: Code Review Override - the burst check's exports and the changelog heading

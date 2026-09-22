@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.2-alpha] - 2026-09-22
+
+### Changed
+
+- The debris window's three numbers are module-private again. Pinning the
+  window to the draw last run exported `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
+  `DEBRIS_VZ_MAX` out of `test/engagement.mjs`, and nothing outside that file
+  ever read them: the check that needed them reads `DEBRIS_DRAWN` a few lines
+  below, which carries all three values already, and
+  `test/pulse-cannon.test.mjs` imports that rather than the numbers behind it.
+  They are `const` again, which is what `DRIFT_SLACK` does in the same block
+  for the same reason - a number the checks never name stays inside the module.
+  `DEBRIS_DRAWN` is the surface the checks read, and the suite is unchanged at
+  325 passing.
+- The heights bullet in the `0.6.1-alpha` entry below is filed under
+  `### Changed` rather than `### Fixed`. It centralises the free flight's ship
+  heights so two files stop keeping their own copy, which is the same kind of
+  work, on the same file, for the same stated reason as the frame rates one
+  version earlier - and that one was recorded under `### Changed`. One refactor
+  was described in two sections of the same changelog, so a reader scanning
+  `### Fixed` for repaired defects met a deduplication. The debris window
+  bullet stays where it is: that one repaired a guard that did not hold. The
+  version is not re-cut.
+
 ## [0.6.1-alpha] - 2026-09-21
 
 ### Fixed
@@ -25,6 +49,9 @@
   draw to 2 on x and y and -0.5 to 1 on z fails the new check alone and
   nothing else in the suite, and widening it to 5 and -1 to 4 fails the new
   check along with ten of the flight's own.
+
+### Changed
+
 - The free flight's ship heights were a copy in each file. The frame rates and
   the flight lengths were centralised into `test/engagement.mjs` last run,
   because a rate added to one file said nothing about the other two, and the
