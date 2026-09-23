@@ -2,9 +2,12 @@
 
 import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
-  Obstacle, Orb, Mine, Bullet, Particle, Star,
+  Obstacle, Orb, Mine, Bullet, Particle, Star, Powerup, POWERUP_KINDS,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
   ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols, tracerLit,
+  WARP_INTERVAL, WARP_FLASH_TIME,
+  POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
+  RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
   RNG,
 } from './types';
 
@@ -38,6 +41,9 @@ const SHIP_HALF_H = 1; // ship drawn rows cy-1 .. cy+1
  */
 const SWEEP_STEP = 0.75;
 
+/** Seconds between the chaos scenario's own volleys, which nobody triggers. */
+const CHAOS_FIRE_INTERVAL = 0.12;
+
 export class Game {
   state: GameState;
 
@@ -69,6 +75,7 @@ export class Game {
       mines: [],
       bullets: [],
       particles: [],
+      powerups: [],
       stars: [],
       tunnelRadius: 8,
       maxViewZ: 200,
@@ -85,6 +92,11 @@ export class Game {
       boosting: false,
       combo: 0,
       comboTimer: 0,
+      warpLevel: 1,
+      warpFlash: 0,
+      rapidFire: 0,
+      slowMotion: 0,
+      fireTimer: 0,
       sounds: [],
       paused: false,
       muted: false,
@@ -163,10 +175,16 @@ export class Game {
     s.rollCooldown = 0;
     s.combo = 0;
     s.comboTimer = 0;
+    s.warpLevel = 1;
+    s.warpFlash = 0;
+    s.rapidFire = 0;
+    s.slowMotion = 0;
+    s.fireTimer = 0;
     s.obstacles = [];
     s.orbs = [];
     s.bullets = [];
     s.particles = [];
+    s.powerups = [];
     s.mines = [];
     s.gameTime = 0;
     s.lastObstacleIncreaseMinute = 0;
@@ -241,6 +259,27 @@ export class Game {
     });
   }
 
+  /**
+   * The powerup a destroyed mine may leave behind, where it was destroyed.
+   *
+   * It costs one draw per kill and a second one on the kills that do drop, so
+   * a seeded run's sequence now depends on how many mines it shot. That is
+   * what `test/engagement.mjs` seeds for and it stays reproducible, but a
+   * figure quoted off a flight taken before this existed will not reproduce
+   * against a flight taken after it.
+   *
+   * The collision-tracking scenarios get nothing. They are diagnostics rather
+   * than scored runs - neither pays a combo either - and a pickup drifting
+   * through one is a moving part in a screen that exists to count collisions.
+   */
+  private dropPowerup(x: number, y: number, z: number): void {
+    const s = this.state;
+    if (s.debugMode === 'obstacleCollision' || s.debugMode === 'mineCollision') return;
+    if (random() >= POWERUP_DROP_CHANCE) return;
+    const kind = POWERUP_KINDS[floor(random() * POWERUP_KINDS.length)];
+    s.powerups.push({ x, y, z, kind });
+  }
+
   private spawnParticles(x: number, y: number, z: number, color: number, count: number): void {
     for (let i = 0; i < count; i++) {
       this.state.particles.push({
@@ -298,6 +337,24 @@ export class Game {
     return s.combo;
   }
 
+  /**
+   * One volley: the centre bolt from the muzzle and a wing bolt either side,
+   * half a unit apart and half a unit further forward.
+   *
+   * Every shot in the game comes out of here - the trigger, the held trigger
+   * under Rapid Fire, and the chaos scenario's auto-fire - so the three cannot
+   * come to fire different spreads. The spread itself is what
+   * `test/engagement.mjs` calls VOLLEY_SIZE and measures the volley band
+   * against.
+   */
+  private fireVolley(): void {
+    const s = this.state;
+    s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
+    s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
+    s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
+    this.cue('shot');
+  }
+
   update(dt: number, keys: Record<string, boolean>, justPressed: Record<string, boolean>): void {
     const s = this.state;
 
@@ -322,10 +379,19 @@ export class Game {
     s.damageFlash = max(0, s.damageFlash - dt * 8);
     s.collectFlash = max(0, s.collectFlash - dt * 8);
     s.newBestFlash = max(0, s.newBestFlash - dt);
+    s.warpFlash = max(0, s.warpFlash - dt);
     s.shake = max(0, s.shake - dt);
 
     if (s.mode === 'playing' && !s.paused) {
-      this.updatePlaying(dt, keys, justPressed);
+      // Powerup durations are counted in real seconds rather than in the
+      // world's, and counted here rather than inside updatePlaying, for two
+      // reasons that pull the same way. A pause stops them, because a pickup
+      // held across a paused screen is ten free seconds; and Slow Motion does
+      // not stretch itself, because the clock it slows is the one that would
+      // otherwise be counting it down.
+      s.rapidFire = max(0, s.rapidFire - dt);
+      s.slowMotion = max(0, s.slowMotion - dt);
+      this.updatePlaying(s.slowMotion > 0 ? dt * SLOW_MOTION_SCALE : dt, keys, justPressed);
     }
   }
 
@@ -359,23 +425,35 @@ export class Game {
     s.shipX = max(-maxR, min(maxR, s.shipX));
     s.shipY = max(0, min(maxR, s.shipY));
 
-    // Fire bullets
+    // Fire bullets. A press always fires on the frame it arrives, with or
+    // without Rapid Fire: the trigger answering the key is the whole feel of
+    // the cannon, and gating it behind a cadence would swallow keypresses to
+    // buy a pickup something to improve. What Rapid Fire adds is the held
+    // trigger - keep SPACE down and the volleys repeat at RAPID_FIRE_INTERVAL
+    // until it runs out, which is RAPID_FIRE_MULT times the cadence
+    // FIRE_INTERVAL names.
     if (justPressed['SPACE']) {
-      s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
-      s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
-      s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
-      this.cue('shot');
+      this.fireVolley();
+      s.fireTimer = 0;
+    } else if (s.rapidFire > 0 && keys['SPACE']) {
+      s.fireTimer += dt;
+      if (s.fireTimer >= RAPID_FIRE_INTERVAL) {
+        s.fireTimer -= RAPID_FIRE_INTERVAL;
+        this.fireVolley();
+      }
+    } else {
+      s.fireTimer = 0;
     }
 
-    // Chaos auto-fire
+    // Chaos auto-fire. It keeps its own cadence rather than reading Rapid
+    // Fire's, which happens to be the same number: the scenario is a stress
+    // test and the pickup is a reward, and tuning one should not move the
+    // other.
     if (s.debugMode === 'chaos') {
       s.chaosFireTimer += dt;
-      if (s.chaosFireTimer >= 0.12) {
+      if (s.chaosFireTimer >= CHAOS_FIRE_INTERVAL) {
         s.chaosFireTimer = 0;
-        s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
-        s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
-        s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
-        this.cue('shot');
+        this.fireVolley();
       }
     }
 
@@ -400,14 +478,101 @@ export class Game {
     s.boostSpeed = s.baseSpeed * 1.8;
     s.gameTime += dt;
 
+    this.updateWarpLevel();
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance, dt);
     this.updateOrbs(advance);
     this.updateMines(advance, dt);
+    this.updatePowerups(advance, dt);
     this.updateBullets(dt, advance);
     this.updateParticles(dt, advance);
     this.updateStars(dt);
+  }
+
+  /**
+   * The difficulty step the run has reached, and the transition when it moves.
+   *
+   * It reads `gameTime` on the same WARP_INTERVAL boundary `updateObstacleScaling`
+   * thickens the field on, but keeps its own counter rather than sharing
+   * `lastObstacleIncreaseMinute`: that one is held still in the scenarios that
+   * do not scale their field, and a run whose obstacles are fixed still gets
+   * faster and still crosses the boundary the banner names.
+   *
+   * Level 1 is the opening minute, so the first transition a run ever sees is
+   * the one that raises WARP LEVEL 2.
+   */
+  private updateWarpLevel(): void {
+    const s = this.state;
+    const level = floor(s.gameTime / WARP_INTERVAL) + 1;
+    if (level <= s.warpLevel) return;
+    s.warpLevel = level;
+    s.warpFlash = WARP_FLASH_TIME;
+  }
+
+  /**
+   * Dropped powerups: carried in by the tunnel and pulled toward the ship.
+   *
+   * The drift is what makes a drop worth chasing rather than a coin flip about
+   * where the mine happened to die. It closes on the ship in x and y at
+   * POWERUP_DRIFT a second while the tunnel carries it forward at the run's own
+   * speed, so a drop from a mine killed dead ahead falls into the ship and one
+   * killed out by a wall is a decision about whether to go and get it.
+   *
+   * Collection uses the same bounding-box overlap the orbs use, against the
+   * ship's drawn sprite, so a pickup registers where the player sees the two
+   * meet. Nothing here is gated on the barrel roll: rolling through a powerup
+   * collects it, because the roll is invincibility to damage and not a state
+   * of not being there.
+   */
+  private updatePowerups(advance: number, dt: number): void {
+    const s = this.state;
+    const shipScr = this.toScreen(s.shipX, s.shipY, 0);
+
+    for (let i = s.powerups.length - 1; i >= 0; i--) {
+      const p = s.powerups[i];
+      p.z += advance;
+      // Past the ship it is gone for good. Unlike an obstacle or an orb there
+      // is nothing to recycle: a drop is the record of one mine, and putting
+      // it back at the far end would be a second reward for the same kill.
+      if (p.z > 10) { s.powerups.splice(i, 1); continue; }
+
+      const dx = s.shipX - p.x;
+      const dy = s.shipY - p.y;
+      const dist = sqrt(dx * dx + dy * dy);
+      if (dist > 0.0001) {
+        const step = min(dist, POWERUP_DRIFT * dt);
+        p.x += (dx / dist) * step;
+        p.y += (dy / dist) * step;
+      }
+
+      if (p.z > -20 && p.z < 5) {
+        const pScr = this.toScreen(p.x, p.y, p.z);
+        const size = max(1, floor(pScr.scale * 2));
+        const half = floor(size / 2);
+        const drow = shipScr.row - pScr.row;
+        if (abs(shipScr.col - pScr.col) <= SHIP_HALF_W + half &&
+            drow <= 2 + half && drow >= -(1 + half)) {
+          this.collectPowerup(p);
+          s.powerups.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  /** What a pickup does, and the flash and burst that say it happened. */
+  private collectPowerup(p: Powerup): void {
+    const s = this.state;
+    if (p.kind === 'shield') {
+      s.shield = min(100, s.shield + POWERUP_SHIELD_GAIN);
+    } else if (p.kind === 'rapid') {
+      s.rapidFire = RAPID_FIRE_TIME;
+    } else {
+      s.slowMotion = SLOW_MOTION_TIME;
+    }
+    s.collectFlash = 0.6;
+    this.cue('powerup');
+    this.spawnParticles(p.x, p.y, p.z, POWERUP_GLYPHS[p.kind].bright, 12);
   }
 
   /**
@@ -851,6 +1016,7 @@ export class Game {
           if (m.hp <= 0) {
             this.spawnParticles(m.x, m.y, m.z, 9, 20);
             this.cue('mine');
+            this.dropPowerup(m.x, m.y, m.z);
             if (s.debugMode === 'chaos') s.trackerCount++;
             const dm2 = s.debugMode as string | null;
             if (dm2 !== 'obstacleCollision' && dm2 !== 'mineCollision') {

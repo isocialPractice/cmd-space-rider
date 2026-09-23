@@ -29,6 +29,13 @@ const EXPORTS = [
   'SHOT_SLACK_COLS', 'SLACK_REF_WIDTH', 'shotSlackCols',
   'fitGrid', 'renderTooSmall',
   'MIN_WIDTH', 'MIN_HEIGHT', 'FONT_SIZE', 'MIN_FONT_SIZE', 'CELL_LEADING',
+  'WARP_INTERVAL', 'WARP_FLASH_TIME', 'warpWallColor',
+  'POWERUP_DROP_CHANCE', 'POWERUP_DRIFT', 'POWERUP_SHIELD_GAIN',
+  'POWERUP_KINDS', 'POWERUP_GLYPHS', 'powerupBadges',
+  'FIRE_INTERVAL', 'RAPID_FIRE_MULT', 'RAPID_FIRE_INTERVAL', 'RAPID_FIRE_TIME',
+  'SLOW_MOTION_TIME', 'SLOW_MOTION_SCALE',
+  'ANSI256', 'LIGHT_INK', 'THEME_BG', 'themePalette',
+  'stickKeys', 'touchFireKey', 'STICK_RADIUS', 'STICK_DEADZONE', 'STICK_AXIS_SHARE',
 ];
 
 /** In-memory stand-in for window.localStorage. */

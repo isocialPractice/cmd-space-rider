@@ -1,5 +1,140 @@
 # Changelog
 
+## [0.7.0-alpha] - 2026-09-23
+
+### Added
+
+- Every minute the run steps up a difficulty level, and the step now announces
+  itself. `updateObstacleScaling` has thickened the field on the whole-minute
+  boundary since it was written, and nothing on screen said so: the obstacles
+  simply arrived. The crossing raises `warpLevel` and a two-second `warpFlash`,
+  and three things read it. The tunnel's whole colour ramp shifts across -
+  `warpWallColor` carries the five wall colours from blue and cyan to magenta
+  and white, picked after the depth band and the pulse rather than instead of
+  them, so the walls keep reading as depth while they are shifted. The floor
+  dots strung between the walls on a near ring row go with them, since they are
+  drawn in a wall colour rather than one of their own and a row of blue dots
+  between two magenta walls is the one thing on the tunnel left unshifted. The
+  speed lines down both margins go from every third row to every second, at
+  twice the scroll rate, in white, with a second line one column further in; a
+  boost taken through a warp draws the warp's pattern rather than laying both
+  over each other, which lights so many rows that neither reads as motion. And a
+  `>> WARP LEVEL 2 <<` banner blinks on the HUD row the combo counter, the debug
+  label and the NEW BEST banner already share. It loses to both of the others: a
+  debug run keeps its label, since that label is up for the whole run and says
+  which scenario is being flown, and NEW BEST is drawn after the warp banner and
+  covers it on the rare frame the two coincide. The counter is the run's own
+  rather than `lastObstacleIncreaseMinute`, which is held still in the scenarios
+  that do not scale their field - a run whose obstacles are fixed still gets
+  faster and still crosses the boundary.
+- A mine shot down now has about a one in three chance of leaving a powerup
+  behind, and the drop drifts toward the ship while the tunnel carries it in.
+  Three kinds: a green `+` restores 25 shield, a cyan `!` gives ten seconds of
+  rapid fire, and a magenta `~` halves the world's speed for five. The drift is
+  what makes a drop worth chasing rather than a coin flip about where the mine
+  happened to die - it closes on the ship at 2.5 units a second, so a mine killed
+  dead ahead falls into the ship and one killed out by a wall is a decision about
+  whether to go and get it. Collection is the bounding-box overlap the orbs
+  already use, against the ship's drawn sprite, and is not gated on the barrel
+  roll: the roll is invincibility to damage, not a state of not being there. A
+  drop that gets past the ship is gone rather than recycled to the back of the
+  tunnel, because a drop is the record of one mine and putting it back would pay
+  the same kill twice. Ramming a mine destroys it and drops nothing - that one
+  already cost 35 shield, and paying a reward out for it would undercut the one
+  move the mine is there to punish - and the two collision-tracking scenarios
+  drop nothing at all, being diagnostics rather than scored runs. Measured over
+  the two hundred seeded kills `test/powerups.test.mjs` walks: 64 drops, a rate
+  of 0.320 against the 0.35 `POWERUP_DROP_CHANCE` names, with all three kinds
+  turning up.
+- Rapid Fire holds the trigger down. The press itself is untouched and still
+  fires on the frame it arrives, with or without the pickup, because a cannon
+  that swallows a keypress to buy a powerup something to improve reads as a
+  broken cannon. What the pickup adds is the held trigger: keep SPACE down and
+  the volleys repeat every 0.12 seconds, which is `FIRE_INTERVAL` over
+  `RAPID_FIRE_MULT` and the 3x the pickup promises. That interval comes out at
+  the cadence the chaos scenario has auto-fired at since it was written, which is
+  the useful coincidence - it has been played against the densest field in the
+  game. Chaos keeps its own constant rather than reading this one: a stress test
+  and a reward should not be tuned by the same number. Every shot in the game now
+  comes out of one `fireVolley`, so the trigger, the held trigger and the
+  auto-fire cannot come to fire different spreads.
+- Slow Motion runs the whole world at half speed for five seconds, the ship
+  included. It is one multiplication at one place - the `dt` handed to
+  `updatePlaying` - so everything in the world slows together and the geometry of
+  a dodge is exactly what it was, with twice the real time to read it. Both
+  pickup clocks are counted in real seconds and outside that scaling, for two
+  reasons that pull the same way: a pause stops them, so a pickup held across a
+  paused screen is not ten free seconds, and Slow Motion does not stretch itself,
+  since the clock it slows is the one that would otherwise count it down. The
+  world's own `gameTime` does slow with it, so difficulty progresses at the speed
+  the world is actually running at.
+- The footer's status strip counts the two timed pickups down beside the speed
+  readout, as ` RAPID 7.3s ` and ` SLOW 3.5s `. A badge is drawn only where there
+  is room for it before the mute slot, on the same rule the hint list above it
+  already follows. Both fit at the 60-column floor with the mute indicator up;
+  the guard is there for the grid below that, where a badge written past the slot
+  would take the border corner with it.
+- The browser build grows touch controls: a thumbstick bottom left, and FIRE and
+  BOOST bottom right. They are hidden until an actual `touchstart` arrives rather
+  than shown on a capability check, because a laptop with a touchscreen reports
+  touch support and is nearly always being driven by its keyboard, and a
+  thumbstick parked over the tunnel there is worse than none at all. The stick
+  reading is arithmetic and sits above the DOM marker where the suite can walk
+  it: a dead zone measured as a share of the stick's own drawn radius, so it
+  scales with a control sized in viewport units, and an axis share of 0.38 - a
+  little under sin(22.5 degrees) - that cuts the circle into eight even sectors.
+  Walked a degree at a time, each of the eight holds 45 degrees give or take two,
+  and no push ever holds two opposite keys. FIRE sends SPACE during a run and
+  ENTER everywhere else, since the title screen, the debug menu and the game over
+  screen all wait on a key a phone has no way to press. Pointers are tracked by
+  id, so a thumb on the stick and a thumb on FIRE do not take each other's
+  events.
+- The browser build follows the system colour scheme. Dark is the game's natural
+  state and stays the default, including when the system says nothing:
+  `themePalette` hands the dark scheme the base palette itself rather than a copy
+  that happens to agree. Light re-inks the 26 indices the game actually draws
+  with - BLACK becomes the paper, BRIGHT_WHITE becomes the ink, and the tunnel's
+  blues and cyans come down to dark blues and teals that read against white - and
+  leaves the 216-colour cube and the grey ramp behind them as xterm defines them,
+  since nothing reaches for one of those by number. It is a palette swap and not
+  a second renderer: every glyph already carries an ANSI index, so changing what
+  those indices resolve to changes the whole screen at once and no drawing code
+  knows which scheme is up. The page colour behind the grid moves with it,
+  because the renderer leaves a BLACK cell unpainted and lets the page show
+  through. A run in progress is untouched by the switch.
+- The browser tab shows the ship. `icon.svg` is new - the item asked for a
+  favicon from it and the file did not exist - and it is inlined into
+  `index.html` as a data URI so the page stays one file with nothing to fetch.
+  Every `#` is percent-encoded, which is not cosmetic: an unencoded one starts
+  the URI's fragment and truncates the icon at the first colour.
+- A `powerup` sound cue, swept up on a triangle from 520 to 1760 over 0.28
+  seconds. It is told from the orb chime by ear on every axis a single swept tone
+  has - the wave, both ends and the length - because the two are both pickups and
+  both sweep upward, and that is the pair that has to stay apart.
+
+### Changed
+
+- `README.md` documents the warp transition, the powerups, the touch controls
+  and light mode, and its file tree now lists `icon.svg` in place of an
+  `icon.png` the repository does not contain. It has crossed the 300-line mark
+  the over-long README check reads, at 309 lines and 23,059 characters.
+
+### Notes
+
+- A drop costs the seeded RNG one draw per mine kill and a second on the kills
+  that do drop, so a seeded run's sequence now depends on how many mines it shot.
+  Nothing the suite pins moved: of the six seeded flights `test/engagement.mjs`
+  flies, five never run long enough for a mine to spawn at all - 1200 frames at
+  1/30 is 40 seconds of game time and the first mine arrives at 60 - and the
+  sixth, 600 frames at a sixth of a second, sees one mine in the whole flight.
+  The dark walk is geometry rather than a flight and is unaffected: still 594
+  configurations at 80x24 and 2241 at 60x20 that drew no tracer and would
+  otherwise have met, none of them registering.
+- The suite is 442 passing, up from 325. `test/warp.test.mjs` and
+  `test/powerups.test.mjs` fly both builds; `test/browser-shell.test.mjs` is
+  browser-only, because a terminal has neither a colour scheme to follow nor a
+  touchscreen to be played on.
+
 ## [0.6.2-alpha] - 2026-09-22
 
 ### Changed

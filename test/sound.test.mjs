@@ -247,8 +247,22 @@ test('every cue is one tone, swept and faded', () => {
   }
 });
 
-test('the four cues the engine can raise all have a tone behind them', () => {
-  assert.deepEqual(Object.keys(browser.SOUND_CUES).sort(), ['damage', 'mine', 'orb', 'shot']);
+test('every cue the engine can raise has a tone behind them', () => {
+  assert.deepEqual(
+    Object.keys(browser.SOUND_CUES).sort(),
+    ['damage', 'mine', 'orb', 'powerup', 'shot']
+  );
+});
+
+test('a powerup is told from an orb by ear', () => {
+  // Both are pickups and both sweep upward, so the pair that has to stay apart
+  // is this one rather than either against the shot or the bang. They differ on
+  // every axis a single swept tone has: the wave, where it starts, where it
+  // ends and how long it takes.
+  const { orb, powerup } = browser.SOUND_CUES;
+  assert.notEqual(powerup.wave, orb.wave);
+  assert.ok(powerup.to > orb.to, 'the powerup climbs higher');
+  assert.ok(powerup.dur > orb.dur, 'and takes longer over it');
 });
 
 test('a name with no tone behind it plays nothing', () => {

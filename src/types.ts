@@ -54,6 +54,17 @@ export interface Star {
   x: number; y: number; speed: number; char: string; color: number;
 }
 
+/** What a dropped powerup gives the ship that picks it up. */
+export type PowerupKind = 'shield' | 'rapid' | 'slow';
+
+/** The three kinds, in the order a drop draws from. */
+export const POWERUP_KINDS: PowerupKind[] = ['shield', 'rapid', 'slow'];
+
+export interface Powerup {
+  x: number; y: number; z: number;
+  kind: PowerupKind;
+}
+
 /** Speed a run starts at. The HUD speed readout is a multiple of this. */
 export const BASE_SPEED_START = 0.3;
 
@@ -208,11 +219,80 @@ export const COMBO_TIME = 2;
 export const COMBO_MAX = 8;
 
 /**
+ * Seconds of game time between one difficulty step and the next.
+ *
+ * `updateObstacleScaling` has counted in whole minutes since it was written -
+ * it thickens the field every time `floor(gameTime / 60)` moves on - and the
+ * warp transition is that same crossing made visible. Naming the number once
+ * is what keeps the effect on the step it announces: a warp flash a few
+ * seconds out from the obstacles arriving would read as a second event.
+ */
+export const WARP_INTERVAL = 60;
+
+/**
+ * Seconds the warp transition runs for: the banner in the HUD, the shifted
+ * tunnel walls, and the denser speed lines down both margins.
+ *
+ * Two seconds is the NEW_BEST_FLASH_TIME the other HUD banner already uses,
+ * which is long enough to read a three-word line and short enough that the
+ * walls are back to their own colours well before the thickened field reaches
+ * the ship.
+ */
+export const WARP_FLASH_TIME = 2;
+
+/**
+ * The chance a mine shot to pieces leaves a powerup behind.
+ *
+ * Only a kill drops one. Ramming a mine destroys it too, but that is the
+ * player taking 35 shield for it, and paying a reward out for the collision
+ * would undercut the one move the mine is there to punish.
+ */
+export const POWERUP_DROP_CHANCE = 0.35;
+
+/** Units a second a dropped powerup closes on the ship while it drifts in. */
+export const POWERUP_DRIFT = 2.5;
+
+/** Shield a Shield Regen pickup restores, capped at the usual 100. */
+export const POWERUP_SHIELD_GAIN = 25;
+
+/** Seconds a Rapid Fire pickup holds the cannon at its faster cadence. */
+export const RAPID_FIRE_TIME = 10;
+
+/** Seconds a Slow Motion pickup holds the world at half speed. */
+export const SLOW_MOTION_TIME = 5;
+
+/** What Slow Motion multiplies the world's clock by while it runs. */
+export const SLOW_MOTION_SCALE = 0.5;
+
+/**
+ * The cannon's nominal cadence, in seconds between volleys.
+ *
+ * Tapping the trigger is not gated by it - a press has always fired at once
+ * and still does, because a cannon that swallows a keypress reads as a broken
+ * one. It is the rate Rapid Fire holds the trigger down at, and the figure the
+ * "3x" on the pickup is three times of.
+ */
+export const FIRE_INTERVAL = 0.36;
+
+/** How much faster Rapid Fire makes that cadence. */
+export const RAPID_FIRE_MULT = 3;
+
+/**
+ * Seconds between two volleys with Rapid Fire running and SPACE held.
+ *
+ * It comes out at the 0.12 the chaos scenario has auto-fired at since it was
+ * written, which is the useful coincidence: that cadence has been played
+ * against the densest field in the game and is known to be fast without
+ * filling the tunnel with tracers.
+ */
+export const RAPID_FIRE_INTERVAL = FIRE_INTERVAL / RAPID_FIRE_MULT;
+
+/**
  * One-shot sounds the engine queues for the frame it has just simulated. The
  * engine names the event; what it sounds like is the browser build's business,
  * and the terminal build has no audio and simply lets the queue clear.
  */
-export type SoundCue = 'shot' | 'orb' | 'damage' | 'mine';
+export type SoundCue = 'shot' | 'orb' | 'damage' | 'mine' | 'powerup';
 
 export interface GameState {
   mode: GameMode;
@@ -243,6 +323,7 @@ export interface GameState {
   mines: Mine[];
   bullets: Bullet[];
   particles: Particle[];
+  powerups: Powerup[];
   stars: Star[];
 
   tunnelRadius: number;
@@ -266,6 +347,18 @@ export interface GameState {
   combo: number;
   /** Seconds left on the combo window. Re-armed by every kill. */
   comboTimer: number;
+
+  /** Difficulty step the run is on: 1 for the first minute, 2 for the next. */
+  warpLevel: number;
+  /** Seconds left on the warp transition raised by the last step up. */
+  warpFlash: number;
+
+  /** Seconds left of Rapid Fire, 0 when the cannon is at its own cadence. */
+  rapidFire: number;
+  /** Seconds left of Slow Motion, 0 when the world runs at full speed. */
+  slowMotion: number;
+  /** Seconds since the last Rapid Fire volley. Reset by every press. */
+  fireTimer: number;
 
   /** Sounds raised by the frame just simulated. Cleared at the top of each. */
   sounds: SoundCue[];
@@ -307,3 +400,20 @@ export const C = {
   NEON_RED: 196,
   ORANGE: 208,
 } as const;
+
+/**
+ * How each powerup is drawn and what the HUD calls it.
+ *
+ * The renderer reads the glyph and the two colours it pulses between; the
+ * footer reads the label for the badge that counts the pickup down. Both sit
+ * in one table rather than one each, so a kind added to `PowerupKind` with no
+ * entry here fails to compile instead of dropping an invisible pickup into
+ * the tunnel.
+ */
+export const POWERUP_GLYPHS: Record<
+  PowerupKind, { char: string; bright: number; dim: number; label: string }
+> = {
+  shield: { char: '+', bright: C.BRIGHT_GREEN, dim: C.GREEN, label: 'SHIELD' },
+  rapid: { char: '!', bright: C.BRIGHT_CYAN, dim: C.CYAN, label: 'RAPID' },
+  slow: { char: '~', bright: C.BRIGHT_MAGENTA, dim: C.MAGENTA, label: 'SLOW' },
+};

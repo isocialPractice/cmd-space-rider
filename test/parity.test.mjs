@@ -39,6 +39,33 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.SLACK_REF_WIDTH, terminalTypes.SLACK_REF_WIDTH);
 });
 
+test('both builds step the difficulty on the same clock', () => {
+  assert.equal(browser.WARP_INTERVAL, terminalTypes.WARP_INTERVAL);
+  assert.equal(browser.WARP_FLASH_TIME, terminalTypes.WARP_FLASH_TIME);
+});
+
+test('both builds agree on what a powerup is worth', () => {
+  assert.equal(browser.POWERUP_DROP_CHANCE, terminalTypes.POWERUP_DROP_CHANCE);
+  assert.equal(browser.POWERUP_DRIFT, terminalTypes.POWERUP_DRIFT);
+  assert.equal(browser.POWERUP_SHIELD_GAIN, terminalTypes.POWERUP_SHIELD_GAIN);
+  assert.equal(browser.RAPID_FIRE_TIME, terminalTypes.RAPID_FIRE_TIME);
+  assert.equal(browser.SLOW_MOTION_TIME, terminalTypes.SLOW_MOTION_TIME);
+  assert.equal(browser.SLOW_MOTION_SCALE, terminalTypes.SLOW_MOTION_SCALE);
+  assert.equal(browser.FIRE_INTERVAL, terminalTypes.FIRE_INTERVAL);
+  assert.equal(browser.RAPID_FIRE_MULT, terminalTypes.RAPID_FIRE_MULT);
+  assert.equal(browser.RAPID_FIRE_INTERVAL, terminalTypes.RAPID_FIRE_INTERVAL);
+});
+
+test('both builds draw a powerup the same way', () => {
+  // The glyph table is read by the engine for the burst colour, by the renderer
+  // for the drop, and by the footer for the badge, so a build that drifted here
+  // would show a different pickup doing the same thing.
+  assert.deepEqual(browser.POWERUP_KINDS, terminalTypes.POWERUP_KINDS);
+  for (const kind of terminalTypes.POWERUP_KINDS) {
+    assert.deepEqual(browser.POWERUP_GLYPHS[kind], terminalTypes.POWERUP_GLYPHS[kind], kind);
+  }
+});
+
 test('both builds scale the column slack the same way', () => {
   // The slack the hit test reads is a function of the grid rather than a
   // constant, so the two builds have to agree on the function and not only on

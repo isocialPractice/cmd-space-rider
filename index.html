@@ -4,9 +4,22 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Space Rider</title>
+<!-- The ship icon from icon.svg, inlined as a data URI so the tab shows it
+     without a second request and the page stays one file. Rebuild it from that
+     file rather than editing the URI by hand: strip its comment and title,
+     collapse the whitespace, single-quote the attributes, and percent-encode
+     the angle brackets and every #. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' role='img' aria-label='Space Rider'%3E %3Crect width='32' height='32' fill='%23000000'/%3E %3Cpath d='M16 3 21 14 11 14Z' fill='%2355ffff'/%3E %3Crect x='13' y='14' width='6' height='9' fill='%2355ffff'/%3E %3Cpath d='M11 15 3 21 11 21Z' fill='%235555ff'/%3E %3Cpath d='M21 15 29 21 21 21Z' fill='%235555ff'/%3E %3Crect x='8' y='23' width='4' height='6' fill='%2300aaaa'/%3E %3Crect x='20' y='23' width='4' height='6' fill='%2300aaaa'/%3E %3C/svg%3E"/>
+<meta name="color-scheme" content="dark light"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000}
+/* Light mode. The game is a neon tunnel on black and that is its natural
+   state, so dark is the default and stays the default when the system says
+   nothing. A system set to a light appearance gets the page re-lit rather than
+   a black rectangle in the middle of a white desktop: this repaints the page
+   under the canvas, and themePalette re-inks the characters drawn on it. */
+body.light{background:#f2f2f4}
 canvas{display:block}
 /* CRT overlay: scanlines and a vignette laid over the canvas rather than drawn
    into the character grid, because it is a property of the screen the game is
@@ -23,11 +36,56 @@ canvas{display:block}
     radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);
 }
 body.crt #crt{opacity:1}
+/* On-screen controls for a touch device. Hidden until a touch actually
+   happens - a laptop with a touchscreen is nearly always being driven by its
+   keyboard, and a thumbstick parked over the tunnel on every desktop is worse
+   than no thumbstick at all. The page reveals them on the first touchstart and
+   then leaves them up.
+
+   touch-action:none on the whole overlay is what stops a drag on the stick
+   scrolling or zooming the page out from under the run. */
+#touch{
+  position:fixed;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;touch-action:none;
+  font:600 13px/1 'Courier New','Consolas',monospace;
+  -webkit-user-select:none;user-select:none;
+}
+#touch[hidden]{display:none}
+#stick,#fire,#boost{
+  position:absolute;pointer-events:auto;touch-action:none;
+  border:2px solid rgba(85,255,255,.55);background:rgba(0,32,40,.35);
+  color:#55ffff;display:flex;align-items:center;justify-content:center;
+}
+#stick{left:5vw;bottom:6vh;width:34vw;max-width:170px;aspect-ratio:1;border-radius:50%}
+#nub{
+  width:38%;height:38%;border-radius:50%;
+  background:rgba(85,255,255,.45);
+  /* Centred by the flex parent, then offset by the live reading. */
+  transform:translate(0,0);
+}
+#fire,#boost{right:5vw;width:24vw;max-width:118px;aspect-ratio:1;border-radius:50%}
+#fire{bottom:6vh}
+#boost{bottom:calc(6vh + 26vw);max-height:118px;
+  border-color:rgba(255,85,255,.55);color:#ff55ff;background:rgba(40,0,40,.35)}
+#stick.on,#fire.on,#boost.on{background:rgba(85,255,255,.3);border-color:#55ffff}
+#boost.on{background:rgba(255,85,255,.3);border-color:#ff55ff}
+/* The same controls re-inked for a light page, on the palette's own darker
+   cyan and magenta so they read against white rather than glowing on it. */
+body.light #stick,body.light #fire{
+  border-color:rgba(0,90,100,.6);background:rgba(0,90,100,.12);color:#005a64}
+body.light #nub{background:rgba(0,90,100,.5)}
+body.light #boost{
+  border-color:rgba(140,20,130,.6);background:rgba(140,20,130,.12);color:#8c1482}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="crt"></div>
+<div id="touch" hidden>
+  <div id="stick"><div id="nub"></div></div>
+  <div id="fire">FIRE</div>
+  <div id="boost">BOOST</div>
+</div>
 <script>
 // CMD Space Rider — Browser terminal preview
 // Faithful port of the CLI game rendered as a canvas-based character grid
@@ -96,6 +154,60 @@ const C={
   NEON_CYAN:51,NEON_GREEN:46,NEON_MAGENTA:201,NEON_RED:196,ORANGE:208,
 };
 
+// ===== Theme (prefers-color-scheme) =====
+// The game is a neon tunnel on black. That is what a terminal looks like, and
+// it is what every colour above was picked against, so dark is the default and
+// stays the default when the system says nothing at all.
+//
+// Light mode is the same drawing re-inked rather than a second renderer. Every
+// glyph the game lays down carries an ANSI index, so swapping what those
+// indices resolve to changes the whole screen at once and no drawing code has
+// to know which scheme is up. Nothing here touches the game: a run looks
+// different and plays identically.
+//
+// Only the indices the game actually draws with are re-inked. The 216-colour
+// cube and the grey ramp behind them are left as xterm defines them, since
+// nothing reaches for one by number.
+const LIGHT_INK={
+  // BLACK is the page under everything, so in light mode it is the paper.
+  0:'#f2f2f4',
+  // The greys and whites invert: what was the brightest ink is now the darkest.
+  7:'#4a4a52',8:'#8a8a94',15:'#101014',
+  // The tunnel: blue at the far end, cyan at the mouth, both taken down far
+  // enough to read as walls against paper rather than as glare on it.
+  4:'#1b2478',12:'#2f3fc8',17:'#0d1240',6:'#00565f',14:'#00757f',23:'#0a444c',
+  // Orbs and the shield bar.
+  2:'#0a6a22',10:'#0a8a2c',22:'#064a16',
+  // Obstacles, mines and the damage flash.
+  1:'#8f1212',9:'#c11a1a',
+  // The distance readout, the roll wings and the boost lines.
+  5:'#6b0f63',13:'#a81a9a',
+  // The pause label and the mute indicator.
+  3:'#6e5600',11:'#8f7300',
+  // The named neons, each to the same value as the base colour it echoes.
+  51:'#00707a',46:'#0a7a24',201:'#a3129a',196:'#c01414',208:'#a35a00',
+};
+
+// The page colour each scheme paints behind the character grid. The renderer
+// leaves a cell whose background is BLACK unpainted, so this is what shows
+// through the whole tunnel.
+const THEME_BG={dark:'#000000',light:'#f2f2f4'};
+
+// The 256 colours a scheme resolves to. Dark is the base palette itself, which
+// is what makes dark mode exactly what it always was rather than a theme that
+// happens to match.
+function themePalette(scheme){
+  if(scheme!=='light')return ANSI256;
+  const out=ANSI256.slice();
+  for(const index of Object.keys(LIGHT_INK))out[index]=LIGHT_INK[index];
+  return out;
+}
+
+// The palette ScreenBuffer.render draws through, swapped by applyTheme down in
+// the page wiring. It is a binding rather than a lookup at each cell because
+// render is the innermost loop in the program.
+let PALETTE=ANSI256;
+
 // ===== ScreenBuffer (canvas-backed) =====
 class ScreenBuffer{
   constructor(w,h){this.resize(w,h)}
@@ -138,7 +250,7 @@ class ScreenBuffer{
         const px=x*cellW;
         const py=y*cellH;
         // Background
-        const bgHex=ANSI256[this.bg[i]]||'#000000';
+        const bgHex=PALETTE[this.bg[i]]||'#000000';
         if(this.bg[i]!==0){
           ctx.fillStyle=bgHex;
           ctx.fillRect(px,py,cellW+1,cellH+1);
@@ -146,7 +258,7 @@ class ScreenBuffer{
         // Character
         const ch=this.chars[i];
         if(ch!==' '){
-          ctx.fillStyle=ANSI256[this.fg[i]]||'#aaaaaa';
+          ctx.fillStyle=PALETTE[this.fg[i]]||'#aaaaaa';
           ctx.fillText(ch,px,py);
         }
       }
@@ -262,6 +374,69 @@ const COMBO_TIME=2;
 // 4000 rather than the 68,600 the 343rd kill of an uncapped chain was worth.
 const COMBO_MAX=8;
 
+// Seconds of game time between one difficulty step and the next.
+//
+// updateObstacleScaling has counted in whole minutes since it was written - it
+// thickens the field every time floor(gameTime / 60) moves on - and the warp
+// transition is that same crossing made visible. Naming the number once is what
+// keeps the effect on the step it announces: a warp flash a few seconds out from
+// the obstacles arriving would read as a second event.
+const WARP_INTERVAL=60;
+// Seconds the warp transition runs for: the banner in the HUD, the shifted
+// tunnel walls, and the denser speed lines down both margins. Two seconds is the
+// NEW_BEST_FLASH_TIME the other HUD banner already uses, which is long enough to
+// read a three-word line and short enough that the walls are back to their own
+// colours well before the thickened field reaches the ship.
+const WARP_FLASH_TIME=2;
+
+// The chance a mine shot to pieces leaves a powerup behind.
+//
+// Only a kill drops one. Ramming a mine destroys it too, but that is the player
+// taking 35 shield for it, and paying a reward out for the collision would
+// undercut the one move the mine is there to punish.
+const POWERUP_DROP_CHANCE=0.35;
+// Units a second a dropped powerup closes on the ship while it drifts in.
+const POWERUP_DRIFT=2.5;
+// Shield a Shield Regen pickup restores, capped at the usual 100.
+const POWERUP_SHIELD_GAIN=25;
+// Seconds a Rapid Fire pickup holds the cannon at its faster cadence.
+const RAPID_FIRE_TIME=10;
+// Seconds a Slow Motion pickup holds the world at half speed.
+const SLOW_MOTION_TIME=5;
+// What Slow Motion multiplies the world's clock by while it runs.
+const SLOW_MOTION_SCALE=0.5;
+// The cannon's nominal cadence, in seconds between volleys.
+//
+// Tapping the trigger is not gated by it - a press has always fired at once and
+// still does, because a cannon that swallows a keypress reads as a broken one.
+// It is the rate Rapid Fire holds the trigger down at, and the figure the "3x"
+// on the pickup is three times of.
+const FIRE_INTERVAL=0.36;
+// How much faster Rapid Fire makes that cadence.
+const RAPID_FIRE_MULT=3;
+// Seconds between two volleys with Rapid Fire running and SPACE held. It comes
+// out at the 0.12 the chaos scenario has auto-fired at since it was written,
+// which is the useful coincidence: that cadence has been played against the
+// densest field in the game and is known to be fast without filling the tunnel
+// with tracers.
+const RAPID_FIRE_INTERVAL=FIRE_INTERVAL/RAPID_FIRE_MULT;
+// Seconds between the chaos scenario's own volleys, which nobody triggers. It
+// keeps its own number rather than reading Rapid Fire's, which happens to be the
+// same: the scenario is a stress test and the pickup is a reward, and tuning one
+// should not move the other.
+const CHAOS_FIRE_INTERVAL=0.12;
+
+// The three kinds of powerup, in the order a drop draws from.
+const POWERUP_KINDS=['shield','rapid','slow'];
+// How each powerup is drawn and what the HUD calls it. The renderer reads the
+// glyph and the two colours it pulses between; the footer reads the label for
+// the badge that counts the pickup down.
+const POWERUP_GLYPHS={
+  shield:{char:'+',bright:C.BRIGHT_GREEN,dim:C.GREEN,label:'SHIELD'},
+  rapid:{char:'!',bright:C.BRIGHT_CYAN,dim:C.CYAN,label:'RAPID'},
+  slow:{char:'~',bright:C.BRIGHT_MAGENTA,dim:C.MAGENTA,label:'SLOW'},
+};
+
 // ===== Best score persistence =====
 // localStorage throws rather than returning null in some privacy modes and
 // file:// sandboxes, so every access is guarded and falls back to no history.
@@ -329,13 +504,16 @@ class Game{
       speed:BASE_SPEED_START,baseSpeed:BASE_SPEED_START,boostSpeed:0.55,
       shipX:0,shipY:0,shipRoll:0,rollDir:0,rollCooldown:0,
       time:0,uiTime:0,gameTime:0,
-      obstacles:[],orbs:[],mines:[],bullets:[],particles:[],stars:[],
+      obstacles:[],orbs:[],mines:[],bullets:[],particles:[],powerups:[],stars:[],
       tunnelRadius:8,maxViewZ:200,
       lastObstacleIncreaseMinute:0,mineTrackTime:0,minesToPresent:0,
       mineSpawnTimers:[],firstMinuteElapsed:false,
       trackerCount:0,debugMenuSelected:0,chaosFireTimer:0,
       damageFlash:0,collectFlash:0,boosting:false,
-      combo:0,comboTimer:0,sounds:[],
+      combo:0,comboTimer:0,
+      warpLevel:1,warpFlash:0,
+      rapidFire:0,slowMotion:0,fireTimer:0,
+      sounds:[],
       paused:false,muted:false,shake:0,newBestFlash:0,newBestShown:false,
       screenWidth:80,screenHeight:24,
     };
@@ -385,7 +563,9 @@ class Game{
     s.baseSpeed=BASE_SPEED_START;s.boostSpeed=0.55;s.speed=s.baseSpeed;
     s.shipX=0;s.shipY=1;s.shipRoll=0;s.rollDir=0;s.rollCooldown=0;
     s.combo=0;s.comboTimer=0;
-    s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.mines=[];
+    s.warpLevel=1;s.warpFlash=0;
+    s.rapidFire=0;s.slowMotion=0;s.fireTimer=0;
+    s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.powerups=[];s.mines=[];
     s.gameTime=0;s.lastObstacleIncreaseMinute=0;
     s.mineTrackTime=0;s.minesToPresent=0;s.mineSpawnTimers=[];
     s.firstMinuteElapsed=false;s.trackerCount=0;s.chaosFireTimer=0;
@@ -436,6 +616,24 @@ class Game{
       rot:rand(0,TAU),rotSpeed:rand(-2,2),scale:rand(0.66,1.65),hp:5,
     });
   }
+  // The powerup a destroyed mine may leave behind, where it was destroyed.
+  //
+  // It costs one draw per kill and a second one on the kills that do drop, so a
+  // seeded run's sequence now depends on how many mines it shot. That is what
+  // test/engagement.mjs seeds for and it stays reproducible, but a figure quoted
+  // off a flight taken before this existed will not reproduce against one taken
+  // after it.
+  //
+  // The collision-tracking scenarios get nothing. They are diagnostics rather
+  // than scored runs - neither pays a combo either - and a pickup drifting
+  // through one is a moving part in a screen that exists to count collisions.
+  dropPowerup(x,y,z){
+    const s=this.state;
+    if(s.debugMode==='obstacleCollision'||s.debugMode==='mineCollision')return;
+    if(random()>=POWERUP_DROP_CHANCE)return;
+    const kind=POWERUP_KINDS[floor(random()*POWERUP_KINDS.length)];
+    s.powerups.push({x,y,z,kind});
+  }
   spawnParticles(x,y,z,color,count){
     for(let i=0;i<count;i++){
       this.state.particles.push({
@@ -472,6 +670,19 @@ class Game{
     s.comboTimer=COMBO_TIME;
     return s.combo;
   }
+  // One volley: the centre bolt from the muzzle and a wing bolt either side,
+  // half a unit apart and half a unit further forward.
+  //
+  // Every shot in the game comes out of here - the trigger, the held trigger
+  // under Rapid Fire, and the chaos scenario's auto-fire - so the three cannot
+  // come to fire different spreads.
+  fireVolley(){
+    const s=this.state;
+    s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
+    s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
+    s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+    this.cue('shot');
+  }
   update(dt,keys,justPressed){
     const s=this.state;
 
@@ -496,9 +707,20 @@ class Game{
     s.damageFlash=max(0,s.damageFlash-dt*8);
     s.collectFlash=max(0,s.collectFlash-dt*8);
     s.newBestFlash=max(0,s.newBestFlash-dt);
+    s.warpFlash=max(0,s.warpFlash-dt);
     s.shake=max(0,s.shake-dt);
 
-    if(s.mode==='playing'&&!s.paused)this.updatePlaying(dt,keys,justPressed);
+    if(s.mode==='playing'&&!s.paused){
+      // Powerup durations are counted in real seconds rather than in the world's,
+      // and counted here rather than inside updatePlaying, for two reasons that
+      // pull the same way. A pause stops them, because a pickup held across a
+      // paused screen is ten free seconds; and Slow Motion does not stretch
+      // itself, because the clock it slows is the one that would otherwise be
+      // counting it down.
+      s.rapidFire=max(0,s.rapidFire-dt);
+      s.slowMotion=max(0,s.slowMotion-dt);
+      this.updatePlaying(s.slowMotion>0?dt*SLOW_MOTION_SCALE:dt,keys,justPressed);
+    }
   }
   updatePlaying(dt,keys,justPressed){
     const s=this.state;
@@ -524,21 +746,29 @@ class Game{
     s.shipX=max(-maxR,min(maxR,s.shipX));
     s.shipY=max(0,min(maxR,s.shipY));
 
+    // Fire bullets. A press always fires on the frame it arrives, with or without
+    // Rapid Fire: the trigger answering the key is the whole feel of the cannon,
+    // and gating it behind a cadence would swallow keypresses to buy a pickup
+    // something to improve. What Rapid Fire adds is the held trigger - keep SPACE
+    // down and the volleys repeat at RAPID_FIRE_INTERVAL until it runs out.
     if(justPressed.SPACE){
-      s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
-      s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
-      s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
-      this.cue('shot');
+      this.fireVolley();
+      s.fireTimer=0;
+    }else if(s.rapidFire>0&&keys.SPACE){
+      s.fireTimer+=dt;
+      if(s.fireTimer>=RAPID_FIRE_INTERVAL){
+        s.fireTimer-=RAPID_FIRE_INTERVAL;
+        this.fireVolley();
+      }
+    }else{
+      s.fireTimer=0;
     }
 
     if(s.debugMode==='chaos'){
       s.chaosFireTimer+=dt;
-      if(s.chaosFireTimer>=0.12){
+      if(s.chaosFireTimer>=CHAOS_FIRE_INTERVAL){
         s.chaosFireTimer=0;
-        s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
-        s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
-        s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
-        this.cue('shot');
+        this.fireVolley();
       }
     }
 
@@ -560,14 +790,87 @@ class Game{
     s.boostSpeed=s.baseSpeed*1.8;
     s.gameTime+=dt;
 
+    this.updateWarpLevel();
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance,dt);
     this.updateOrbs(advance);
     this.updateMines(advance,dt);
+    this.updatePowerups(advance,dt);
     this.updateBullets(dt,advance);
     this.updateParticles(dt,advance);
     this.updateStars(dt);
+  }
+  // The difficulty step the run has reached, and the transition when it moves.
+  //
+  // It reads gameTime on the same WARP_INTERVAL boundary updateObstacleScaling
+  // thickens the field on, but keeps its own counter rather than sharing
+  // lastObstacleIncreaseMinute: that one is held still in the scenarios that do
+  // not scale their field, and a run whose obstacles are fixed still gets faster
+  // and still crosses the boundary the banner names.
+  //
+  // Level 1 is the opening minute, so the first transition a run ever sees is the
+  // one that raises WARP LEVEL 2.
+  updateWarpLevel(){
+    const s=this.state;
+    const level=floor(s.gameTime/WARP_INTERVAL)+1;
+    if(level<=s.warpLevel)return;
+    s.warpLevel=level;
+    s.warpFlash=WARP_FLASH_TIME;
+  }
+  // Dropped powerups: carried in by the tunnel and pulled toward the ship.
+  //
+  // The drift is what makes a drop worth chasing rather than a coin flip about
+  // where the mine happened to die. It closes on the ship in x and y at
+  // POWERUP_DRIFT a second while the tunnel carries it forward at the run's own
+  // speed, so a drop from a mine killed dead ahead falls into the ship and one
+  // killed out by a wall is a decision about whether to go and get it.
+  //
+  // Collection uses the same bounding-box overlap the orbs use, against the
+  // ship's drawn sprite, so a pickup registers where the player sees the two
+  // meet. Nothing here is gated on the barrel roll: rolling through a powerup
+  // collects it, because the roll is invincibility to damage and not a state of
+  // not being there.
+  updatePowerups(advance,dt){
+    const s=this.state;
+    const shipScr=this.toScreen(s.shipX,s.shipY,0);
+    for(let i=s.powerups.length-1;i>=0;i--){
+      const p=s.powerups[i];
+      p.z+=advance;
+      // Past the ship it is gone for good. Unlike an obstacle or an orb there is
+      // nothing to recycle: a drop is the record of one mine, and putting it back
+      // at the far end would be a second reward for the same kill.
+      if(p.z>10){s.powerups.splice(i,1);continue}
+      const dx=s.shipX-p.x;
+      const dy=s.shipY-p.y;
+      const dist=sqrt(dx*dx+dy*dy);
+      if(dist>0.0001){
+        const step=min(dist,POWERUP_DRIFT*dt);
+        p.x+=(dx/dist)*step;
+        p.y+=(dy/dist)*step;
+      }
+      if(p.z>-20&&p.z<5){
+        const pScr=this.toScreen(p.x,p.y,p.z);
+        const size=max(1,floor(pScr.scale*2));
+        const half=floor(size/2);
+        const drow=shipScr.row-pScr.row;
+        if(abs(shipScr.col-pScr.col)<=SHIP_HALF_W+half&&
+           drow<=2+half&&drow>=-(1+half)){
+          this.collectPowerup(p);
+          s.powerups.splice(i,1);
+        }
+      }
+    }
+  }
+  // What a pickup does, and the flash and burst that say it happened.
+  collectPowerup(p){
+    const s=this.state;
+    if(p.kind==='shield')s.shield=min(100,s.shield+POWERUP_SHIELD_GAIN);
+    else if(p.kind==='rapid')s.rapidFire=RAPID_FIRE_TIME;
+    else s.slowMotion=SLOW_MOTION_TIME;
+    s.collectFlash=0.6;
+    this.cue('powerup');
+    this.spawnParticles(p.x,p.y,p.z,POWERUP_GLYPHS[p.kind].bright,12);
   }
   // Barrel roll. Q rolls left and E rolls right, for as long as ROLL_TIME, and
   // the ship is untouchable for the whole of it - that dodge is what the move
@@ -915,6 +1218,7 @@ class Game{
           if(m.hp<=0){
             this.spawnParticles(m.x,m.y,m.z,9,20);
             this.cue('mine');
+            this.dropPowerup(m.x,m.y,m.z);
             if(s.debugMode==='chaos')s.trackerCount++;
             if(s.debugMode!=='obstacleCollision'&&s.debugMode!=='mineCollision')
               s.score+=500*this.registerKill();
@@ -986,6 +1290,30 @@ function shakeOffset(state){
   };
 }
 
+// What each wall colour becomes while a warp transition is running.
+//
+// The tunnel is blue at the far end and cyan at the near one, and a warp carries
+// the whole ramp across to magenta and out to white at the mouth. It is a lookup
+// rather than an arithmetic shift because the palette is ANSI 256 indices and
+// there is no arithmetic between two of them that means anything: the five
+// colours drawTunnel can pick are listed, and a colour not in the list is left
+// as it was.
+const WARP_WALLS={
+  [C.DARK_BLUE]:C.MAGENTA,
+  [C.BLUE]:C.NEON_MAGENTA,
+  [C.BRIGHT_BLUE]:C.BRIGHT_MAGENTA,
+  [C.CYAN]:C.BRIGHT_MAGENTA,
+  [C.BRIGHT_CYAN]:C.BRIGHT_WHITE,
+};
+
+// A wall colour as the warp transition leaves it, which is the colour itself
+// whenever no transition is running.
+function warpWallColor(color,state){
+  if(state.warpFlash<=0)return color;
+  const shifted=WARP_WALLS[color];
+  return shifted===undefined?color:shifted;
+}
+
 function drawStarfield(screen,state,gameTop,gameBottom){
   const h=screen.height,w=screen.width;
   for(const star of state.stars){
@@ -1012,18 +1340,24 @@ function drawTunnel(screen,state,gameTop,gameBottom){
     else if(t<0.5){wallChar='\u2592';wallColor=pulse>0.6?C.BLUE:C.BRIGHT_BLUE}
     else if(t<0.8){wallChar='\u2593';wallColor=pulse>0.6?C.BRIGHT_BLUE:C.CYAN}
     else{wallChar='\u2588';wallColor=pulse>0.6?C.CYAN:C.BRIGHT_CYAN}
+    // The ramp is picked first and shifted after, so the depth banding and the
+    // pulse both survive the warp rather than being flattened by it.
+    wallColor=warpWallColor(wallColor,state);
     for(let dx=0;dx<thickness;dx++){
       screen.put(leftWall-dx,row,wallChar,wallColor,C.BLACK);
       screen.put(rightWall+dx,row,wallChar,wallColor,C.BLACK);
     }
     const isRing=(row-gameTop+ringOffset)%ringSpacing===0;
     if(isRing&&t>0.1){
-      const ringColor=t>0.5?C.BRIGHT_CYAN:C.CYAN;
+      const ringColor=warpWallColor(t>0.5?C.BRIGHT_CYAN:C.CYAN,state);
       screen.put(leftWall,row,'\u2563',ringColor,C.BLACK);
       screen.put(rightWall,row,'\u2560',ringColor,C.BLACK);
+      // The floor dots are drawn in a wall colour and shift with the walls, or
+      // a warp leaves a row of blue dots strung between two magenta walls.
       if(t>0.3){
+        const dotColor=warpWallColor(C.DARK_BLUE,state);
         for(let x=leftWall+2;x<rightWall;x+=4)
-          screen.put(x,row,'\u00B7',C.DARK_BLUE,C.BLACK);
+          screen.put(x,row,'\u00B7',dotColor,C.BLACK);
       }
     }
   }
@@ -1060,6 +1394,21 @@ function drawEntitiesFar(screen,state,gameTop,gameBottom){
     const color=pulse>0.6?C.BRIGHT_GREEN:C.GREEN;
     const ch=size>=2?'\u25C6':'\u2666';
     drawBlock(screen,pos.col,pos.row,size,ch,color,gameTop,gameBottom);
+  }
+  // Dropped powerups. Each is one glyph in its own colour rather than a shaded
+  // block, because what it does is the only thing worth reading off it at a
+  // glance and there are three of them to tell apart: + restores shield, ! is
+  // rapid fire, ~ is slow motion. The pulse is offset by depth, so a pair of
+  // drops in the air together does not blink in unison.
+  for(const p of state.powerups){
+    if(p.z<-state.maxViewZ||p.z>5)continue;
+    const pos=gameToScreen(p.x,p.y,p.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row<gameTop||pos.row>=gameBottom)continue;
+    const size=max(1,floor(pos.scale*2));
+    const spec=POWERUP_GLYPHS[p.kind];
+    const pulse=sin(state.time*6+p.z)*0.3+0.7;
+    const color=pulse>0.6?spec.bright:spec.dim;
+    drawBlock(screen,pos.col,pos.row,size,spec.char,color,gameTop,gameBottom);
   }
 }
 
@@ -1238,6 +1587,18 @@ function drawHUD(screen,state){
     }
   }
 
+  // Warp banner. It shares the centre of this row with the debug label and the
+  // NEW BEST banner, and loses to both: a debug run has its label up for the
+  // whole run, so the banner is held back rather than blinking over it for two
+  // seconds, and NEW BEST is drawn after this and covers it on the rare frame the
+  // two coincide. The level counts from 1, so the first one a run ever shows
+  // reads WARP LEVEL 2.
+  if(state.warpFlash>0&&state.debugMode===null){
+    const blink=sin(state.uiTime*8)>0;
+    screen.putStringCenter(HUD_ROWS,`>> WARP LEVEL ${state.warpLevel} <<`,
+      blink?C.BRIGHT_WHITE:C.BRIGHT_MAGENTA,C.BLACK);
+  }
+
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
   // with the debug label above.
   if(state.newBestFlash>0){
@@ -1268,10 +1629,43 @@ function drawFooter(screen,state){
   screen.putString(2,footerY+1,spd,
     state.boosting?C.BRIGHT_MAGENTA:C.BRIGHT_CYAN,C.BLACK);
 
+  // Active powerups count themselves down beside the speed, which is the other
+  // number on this strip that moves while a run is under way. Each badge is drawn
+  // only where there is room for it before the mute slot at the right, so the
+  // narrowest supported grid drops a badge rather than overwriting the border -
+  // the same rule the hint list above follows.
+  const muteRoom=state.muted?' MUTED '.length:0;
+  let badgeX=2+spd.length;
+  for(const badge of powerupBadges(state)){
+    if(badgeX+badge.text.length>w-2-muteRoom)break;
+    screen.putString(badgeX,footerY+1,badge.text,badge.color,C.BLACK);
+    badgeX+=badge.text.length;
+  }
+
   if(state.muted){
     const mute=' MUTED ';
     screen.putString(w-mute.length-2,footerY+1,mute,C.BRIGHT_YELLOW,C.BLACK);
   }
+}
+
+// The countdown badges for whatever powerups are running, left to right in a
+// fixed order so two of them on screen together do not swap places between
+// frames.
+//
+// Separate from the drawing because it is the whole of what the status strip
+// says about a pickup, and a test reading the finished row cannot tell a badge
+// dropped for want of room from one the engine never raised.
+function powerupBadges(state){
+  const out=[];
+  if(state.rapidFire>0)out.push({
+    text:` ${POWERUP_GLYPHS.rapid.label} ${state.rapidFire.toFixed(1)}s `,
+    color:POWERUP_GLYPHS.rapid.bright,
+  });
+  if(state.slowMotion>0)out.push({
+    text:` ${POWERUP_GLYPHS.slow.label} ${state.slowMotion.toFixed(1)}s `,
+    color:POWERUP_GLYPHS.slow.bright,
+  });
+  return out;
 }
 
 function drawPauseOverlay(screen,state){
@@ -1309,12 +1703,28 @@ function drawEffects(screen,state){
     screen.put(0,0,'\u2554',C.BRIGHT_GREEN,C.BLACK);
     screen.put(w-1,0,'\u2557',C.BRIGHT_GREEN,C.BLACK);
   }
-  if(state.boosting){
-    for(let row=HUD_ROWS+1;row<h-FOOTER_ROWS;row+=3){
-      const offset=floor(state.time*30+row)%5;
-      if(offset===0){
-        screen.put(1,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
-        screen.put(w-2,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
+  // Speed lines, down both margins. Boosting draws them every third row in
+  // magenta; a warp transition draws them every second row, twice as fast and in
+  // white, with a second line one column further in. That is what intensifying
+  // comes to on a character grid: there is no brightness to turn up, only more of
+  // the thing and a hotter colour.
+  //
+  // A boost through a warp draws the warp's pattern rather than both at once.
+  // Laying the two over each other lights so many rows that neither reads as
+  // motion any more.
+  if(state.boosting||state.warpFlash>0){
+    const warping=state.warpFlash>0;
+    const step=warping?2:3;
+    const rate=warping?60:30;
+    const color=warping?C.BRIGHT_WHITE:C.BRIGHT_MAGENTA;
+    for(let row=HUD_ROWS+1;row<h-FOOTER_ROWS;row+=step){
+      const offset=floor(state.time*rate+row)%5;
+      if(offset!==0)continue;
+      screen.put(1,row,'\u2502',color,C.BLACK);
+      screen.put(w-2,row,'\u2502',color,C.BLACK);
+      if(warping){
+        screen.put(2,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
+        screen.put(w-3,row,'\u2502',C.BRIGHT_MAGENTA,C.BLACK);
       }
     }
   }
@@ -1609,6 +2019,64 @@ function renderTooSmall(screen){
   screen.putStringCenter(mid+1,TOO_SMALL_HINT,C.WHITE,C.BLACK);
 }
 
+// ===== Touch controls =====
+// A phone has no keyboard, so the browser build grows a thumbstick and two
+// buttons when it finds itself on one. The stick reading is arithmetic and
+// lives here where a test can walk it; the elements, the pointers and the
+// reveal are down in the page wiring, which is the part that needs a DOM.
+
+/** Pixels from the stick's centre that count as full deflection. */
+const STICK_RADIUS=56;
+/** The share of that radius a thumb has to cross before the stick steers. */
+const STICK_DEADZONE=0.3;
+/**
+ * The share of a push that has to fall on one axis for that axis to count.
+ *
+ * 0.38 is a little under sin(22.5 degrees), so the circle divides into eight
+ * even sectors: four straight pushes and four diagonals, with no direction
+ * harder to hold than any other.
+ */
+const STICK_AXIS_SHARE=0.38;
+
+/**
+ * A stick reading as the four direction keys it stands for.
+ *
+ * dx and dy are pixels from the centre of the stick, with dy growing downward
+ * as the page measures it while the ship's own y grows upward - that inversion
+ * is the one thing here that is not symmetric, and it is why a thumb pushed
+ * toward the top of the screen comes back as UP.
+ *
+ * Two thresholds rather than one. The dead zone decides whether the stick is
+ * being pushed at all, so a thumb resting on it does not steer. The axis share
+ * then decides which of the eight directions the push is nearest, and drops the
+ * smaller half of a diagonal nobody meant to hold - which is what makes a
+ * straight push feel straight.
+ */
+function stickKeys(dx,dy,radius=STICK_RADIUS){
+  const out={LEFT:false,RIGHT:false,UP:false,DOWN:false};
+  const dist=sqrt(dx*dx+dy*dy);
+  if(dist<radius*STICK_DEADZONE)return out;
+  if(abs(dx)>=dist*STICK_AXIS_SHARE){
+    if(dx<0)out.LEFT=true;else out.RIGHT=true;
+  }
+  if(abs(dy)>=dist*STICK_AXIS_SHARE){
+    if(dy<0)out.UP=true;else out.DOWN=true;
+  }
+  return out;
+}
+
+/**
+ * What the FIRE button sends in a given mode.
+ *
+ * A phone has no ENTER either, and the title screen, the debug menu and the
+ * game over screen all wait on one. The button is the trigger during a run and
+ * the confirm key everywhere else, which is the reading a player already has of
+ * the biggest button on the screen.
+ */
+function touchFireKey(mode){
+  return mode==='playing'?'SPACE':'ENTER';
+}
+
 // ===== Sound (Web Audio) =====
 // Every cue is synthesized on the spot: there are no audio files to fetch, so
 // nothing to load before a run and nothing to keep in step with the build.
@@ -1621,6 +2089,10 @@ const SOUND_CUES={
   orb:   {wave:'sine',    from:660,to:1400,dur:0.18,gain:0.06},
   damage:{wave:'sawtooth',from:220,to:50,  dur:0.30,gain:0.09},
   mine:  {wave:'square',  from:180,to:28,  dur:0.45,gain:0.10},
+  // A powerup sweeps up further and longer than the orb does, and on a
+  // triangle rather than a sine, so the two pickups are told apart by ear:
+  // an orb is a tick and a powerup is a rising chime.
+  powerup:{wave:'triangle',from:520,to:1760,dur:0.28,gain:0.07},
 };
 
 // The engine hum. Its pitch is this note times the speed readout the HUD shows,
@@ -1762,6 +2234,24 @@ function handleResize(){
 window.addEventListener('resize',handleResize);
 handleResize();
 
+// ===== System colour scheme =====
+// Followed rather than offered: the page asks the system what it wants and
+// repaints when the answer changes, so a desktop switching to light at sunset
+// takes the game with it mid-run. There is no key for it, because it is not a
+// preference about the game - the CRT overlay on C is.
+const lightQuery=window.matchMedia('(prefers-color-scheme: light)');
+let scheme=lightQuery.matches?'light':'dark';
+
+function applyTheme(){
+  PALETTE=themePalette(scheme);
+  document.body.classList.toggle('light',scheme==='light');
+}
+applyTheme();
+lightQuery.addEventListener('change',(e)=>{
+  scheme=e.matches?'light':'dark';
+  applyTheme();
+});
+
 // ===== CRT overlay and sound, wired to the page =====
 let crtOn=loadCrt();
 
@@ -1816,6 +2306,130 @@ window.addEventListener('keyup',e=>{
   if(k){e.preventDefault();keys[k]=false}
 });
 
+// ===== Touch controls, wired to the page =====
+// The on-screen stick and buttons feed the same two maps the keyboard does, so
+// nothing downstream knows or cares which one a run is being played on.
+
+const touchLayer=document.getElementById('touch');
+const stickEl=document.getElementById('stick');
+const nubEl=document.getElementById('nub');
+const fireEl=document.getElementById('fire');
+const boostEl=document.getElementById('boost');
+
+/** Press or release a key exactly as the keydown handler does. */
+function setKey(k,down){
+  if(down){
+    if(!keys[k])justPressed[k]=true;
+    keys[k]=true;
+  }else{
+    keys[k]=false;
+  }
+}
+
+/**
+ * Show the controls the first time a touch arrives, and never before.
+ *
+ * Capability is the wrong question: a laptop with a touchscreen reports touch
+ * support and is nearly always being driven by its keyboard, and a thumbstick
+ * parked over the tunnel there is worse than none at all. An actual touch is
+ * the answer to the right question, and it costs one frame of the first tap.
+ */
+let touchShown=false;
+function revealTouch(){
+  if(touchShown)return;
+  touchShown=true;
+  touchLayer.hidden=false;
+}
+window.addEventListener('touchstart',revealTouch,{passive:true});
+
+// The stick. One pointer owns it at a time, tracked by id so a thumb on the
+// stick and a thumb on FIRE do not take each other's events - which is most of
+// what playing with two thumbs is.
+let stickPointer=null;
+const STICK_KEYS=['LEFT','RIGHT','UP','DOWN'];
+
+function releaseStick(){
+  stickPointer=null;
+  for(const k of STICK_KEYS)setKey(k,false);
+  nubEl.style.transform='translate(0,0)';
+  stickEl.classList.remove('on');
+}
+
+function driveStick(e){
+  const box=stickEl.getBoundingClientRect();
+  const radius=box.width/2;
+  const dx=e.clientX-(box.left+radius);
+  const dy=e.clientY-(box.top+radius);
+  const held=stickKeys(dx,dy,radius);
+  for(const k of STICK_KEYS)setKey(k,held[k]);
+  // The nub follows the thumb as far as the ring and no further, so the
+  // control shows what it is reporting.
+  const dist=sqrt(dx*dx+dy*dy);
+  const cap=dist>radius?radius/dist:1;
+  nubEl.style.transform=`translate(${dx*cap}px,${dy*cap}px)`;
+}
+
+stickEl.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  revealTouch();
+  audio.resume();
+  stickPointer=e.pointerId;
+  stickEl.setPointerCapture(e.pointerId);
+  stickEl.classList.add('on');
+  driveStick(e);
+});
+stickEl.addEventListener('pointermove',e=>{
+  if(e.pointerId!==stickPointer)return;
+  e.preventDefault();
+  driveStick(e);
+});
+for(const type of ['pointerup','pointercancel','pointerleave']){
+  stickEl.addEventListener(type,e=>{
+    if(e.pointerId!==stickPointer)return;
+    e.preventDefault();
+    releaseStick();
+  });
+}
+
+/**
+ * A button that holds a key down for as long as it is held.
+ *
+ * `resolve` is called once, on the press, and the key it names is the key the
+ * release lets go of. FIRE reads the mode to decide, and a run that ends under
+ * the player's thumb would otherwise leave SPACE stuck down while ENTER was
+ * what got released.
+ */
+function holdButton(el,resolve){
+  let pointerId=null;
+  let held=null;
+  const release=()=>{
+    if(held!==null)setKey(held,false);
+    held=null;
+    pointerId=null;
+    el.classList.remove('on');
+  };
+  el.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    revealTouch();
+    audio.resume();
+    pointerId=e.pointerId;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('on');
+    held=resolve();
+    setKey(held,true);
+  });
+  for(const type of ['pointerup','pointercancel','pointerleave']){
+    el.addEventListener(type,e=>{
+      if(e.pointerId!==pointerId)return;
+      e.preventDefault();
+      release();
+    });
+  }
+}
+
+holdButton(fireEl,()=>touchFireKey(game.state.mode));
+holdButton(boostEl,()=>'F');
+
 // ===== Main loop =====
 let lastTime=performance.now();
 const TARGET_FPS=30;
@@ -1846,7 +2460,7 @@ function frame(now){
   // at the top of every frame, so the frame that resumes plays its own.
   if(!gridFits){
     audio.engineOff();
-    ctx.fillStyle='#000';
+    ctx.fillStyle=THEME_BG[scheme];
     ctx.fillRect(0,0,canvas.width,canvas.height);
     renderTooSmall(screen);
     screen.render(ctx,cellW,cellH,FONT);
@@ -1880,8 +2494,9 @@ function frame(now){
   // they sound like is the audio layer's business.
   audio.frame(game.state);
 
-  // Clear canvas
-  ctx.fillStyle='#000';
+  // Clear canvas, in the page's own colour so a light scheme does not leave a
+  // black frame around the grid.
+  ctx.fillStyle=THEME_BG[scheme];
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
   // Render to screen buffer
