@@ -71,6 +71,64 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [overlay-anchoring.prompt.md](.claude/prompts/overlay-anchoring.prompt.md)
   - From: Medium Effort
 
+### Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+
+- [ ] The shared HUD row gained a fourth tenant and its own test file did not
+  - **Issue**: `test/hud-row.test.mjs` exists for one invariant - the combo
+    counter is left-aligned on `HUD_ROWS` while the debug label and the NEW BEST
+    banner centre themselves on it, and none of the three may overwrite another.
+    The warp banner is now a fourth thing drawn on that row, and it is drawn
+    after the counter, so it is the one that would cover it. `test/warp.test.mjs`
+    pins the banner against the debug label and against NEW BEST but never
+    against the counter, and `hud-row.test.mjs` still opens by saying the row is
+    shared by three. The pairing holds today at every supported width - the
+    counter tops out at `COMBO x8`, ten columns wide ending at column 9, and
+    `>> WARP LEVEL 2 <<` is eighteen columns centred, which starts at column 21
+    on the 60-column floor - but nothing says so, and the margin is arithmetic
+    rather than a check: widen the banner or raise `COMBO_MAX` and the two meet
+    with no test to say they did.
+  - **Goal**: Extend `test/hud-row.test.mjs` to the fourth tenant rather than
+    leaving it in `warp.test.mjs`: stage a chain and a live `warpFlash` together
+    and walk the supported widths the file already walks, asserting the counter
+    ends before the banner begins. Correct the file's opening comment, which
+    names three. Both builds together, as the rest of that file already does.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+
+#### Found Issues
+
+- [ ] The light palette's entry count is quoted wrong in the CHANGELOG
+  - **Issue**: The `0.7.0-alpha` entry says light mode "re-inks the 26 indices
+    the game actually draws with". `LIGHT_INK` in `index.html` has 24 entries,
+    and `C` names 24 colours at 24 distinct indices - the two agree exactly,
+    which is what `test/browser-shell.test.mjs` asserts in `every colour the
+    game draws with is re-inked for light mode`. So the sentence's claim is
+    right and only its number is wrong, which is the worse failure of the two:
+    a reader checking it against the file finds a table that does not match and
+    has no way to tell which of the two is the error.
+  - **Goal**: Change `26` to `24` in that bullet. Nothing else in the entry
+    depends on the figure. Do not restate the version or re-cut the release.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+- [ ] A powerups test explains a tolerance by a frame ordering that is the other way round
+  - **Issue**: `a drop lands where the mine was` in `test/powerups.test.mjs`
+    carries `// It is dropped at the mine and then moved by the same frame, so
+    the check is that it started there rather than that it is still there`, and
+    that is not the order the frame runs in. `updatePlaying` calls
+    `updatePowerups` before `updateBullets`, and `dropPowerup` is called from
+    inside `updateBullets` where a bullet takes a mine's last hit point, so a
+    drop created on a frame is not touched again until the next one. What the
+    20-unit tolerance on z is actually absorbing is the mine's own `advance`:
+    `updateMines` carries it forward before the bullet kills it, while the
+    `where` the test captured is the position from before the frame. The
+    assertion holds either way - the comment is what is wrong - but it is the
+    comment a later reader would use to decide whether a tightened tolerance is
+    safe, and it would send them to the wrong number.
+  - **Goal**: Say what the tolerance covers: one frame of `advance` between the
+    captured position and the kill, with the drift never having run on the drop
+    at all. Check the same claim in the `dropPowerup` doc comment in
+    `src/game.ts` and `index.html` while there, which says a drop costs the seed
+    a draw but says nothing about when the drop first moves.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
