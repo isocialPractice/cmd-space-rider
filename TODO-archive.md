@@ -798,3 +798,21 @@ still be found by name.
     window bullet under `### Fixed` - that one repaired a guard that did not
     hold. Do not restate the version or re-cut the release.
   - From: Code Review Override - the burst check's exports and the changelog heading
+
+## Archived 09-24-26
+
+- [x] **Warp speed transition** — Visual effect when crossing difficulty thresholds (every 60s). Brief tunnel color shift, speed lines intensify, and a "WARP LEVEL 2" flash in the HUD.
+  - From: Medium Effort
+- [x] **Powerup drops** — When a mine is destroyed, chance to drop a powerup that drifts toward the player:
+  - Shield Regen (green +) — restores 25 shield
+  - Rapid Fire (cyan !) — 3x fire rate for 10 seconds
+  - Slow Motion (magenta ~) — halves game speed for 5 seconds
+  - From: Medium Effort
+- [x] **Overlay Anchoring**: **Touch controls (mobile browser)** — Add on-screen virtual joystick (left side) and fire/boost buttons (right side) for mobile play. Only show when touch events are detected. The canvas grid system already works at any viewport size.
+  - From: Medium Effort
+- [x] **Favicon from icon.svg** — Inline the icon SVG as a data URI favicon in index.html so the browser tab shows the ship icon.
+  - From: Polish
+- [x] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
+  - From: Polish
+- [x] Plan the site and record the design language
+  - From: Create and Deploy GitHub Pages Override

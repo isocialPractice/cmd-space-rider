@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheatsheet | CMD Space Rider</title>
+<meta name="description" content="Every CMD Space Rider key, flag, script and figure on one page.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>Cheatsheet</h1>
+<p>Every key, flag, script and figure on one page, for someone who has already read the documentation. The full text lives on the <a href="https://isocialpractice.github.io/cmd-space-rider/docs/">site</a>.</p>
+<h2 id="controls">Controls</h2>
+<div class="table-scroll"><table><thead><tr><th>Input</th><th>Action</th></tr></thead><tbody><tr><td><code>W</code> <code>A</code> <code>S</code> <code>D</code> or arrows</td><td>Steer</td></tr><tr><td><code>F</code> or <code>Shift</code> (browser)</td><td>Boost</td></tr><tr><td><code>Space</code></td><td>Fire pulse cannon</td></tr><tr><td><code>Q</code> / <code>E</code></td><td>Barrel roll</td></tr><tr><td><code>P</code></td><td>Pause / resume</td></tr><tr><td><code>M</code></td><td>Mute toggle</td></tr><tr><td><code>C</code> (browser)</td><td>CRT scanline overlay</td></tr><tr><td><code>Enter</code></td><td>Launch / relaunch</td></tr><tr><td><code>Esc</code></td><td>Menu / quit</td></tr><tr><td><code>Ctrl+C</code></td><td>Quit immediately (terminal)</td></tr><tr><td>Thumbstick / <code>FIRE</code> / <code>BOOST</code></td><td>Touch: steer / fire or confirm / boost</td></tr></tbody></table></div>
+<p>Press-not-hold keys are <code>P</code>, <code>M</code>, <code>Esc</code>, <code>Q</code> and <code>E</code>. They fire once per press and take a short deadzone after a hold.</p>
+<h2 id="cli">CLI</h2>
+<pre><code>space-rider                          Start in normal mode
+space-rider --debug                  Open the debug scenario menu
+space-rider --mode &lt;mode&gt;            Start a specific debug mode directly
+space-rider --help                   Show help</code></pre>
+<h2 id="browser-url-parameters">Browser URL parameters</h2>
+<pre><code>index.html?debug                     Open the debug scenario menu
+index.html?mode=chaos                Start a specific debug mode directly
+index.html?mode=mines                Mine Field
+index.html?mode=orbs                 Orb Harvest
+index.html?mode=obstacleCollision    Collision Course
+index.html?mode=mineCollision        Mine Sweeper</code></pre>
+<h2 id="debug-modes">Debug modes</h2>
+<div class="table-scroll"><table><thead><tr><th>#</th><th>Mode</th><th>Flag / param</th><th>What it isolates</th></tr></thead><tbody><tr><td>1</td><td>Mine Field</td><td><code>mines</code></td><td>Pure evasion</td></tr><tr><td>2</td><td>Orb Harvest</td><td><code>orbs</code></td><td>Collection</td></tr><tr><td>3</td><td>Collision Course</td><td><code>obstacleCollision</code></td><td>Obstacle impacts</td></tr><tr><td>4</td><td>Mine Sweeper</td><td><code>mineCollision</code></td><td>Mine collisions</td></tr><tr><td>5</td><td>Chaos Protocol</td><td><code>chaos</code></td><td>Everything, permanent boost, auto-fire</td></tr></tbody></table></div>
+<p>Debug runs never record a best score.</p>
+<h2 id="numbers">Numbers</h2>
+<div class="table-scroll"><table><thead><tr><th>Thing</th><th>Value</th></tr></thead><tbody><tr><td>Obstacle collision</td><td>25 shield</td></tr><tr><td>Mine collision</td><td>35 shield</td></tr><tr><td>Mine hit points</td><td>5 pulse hits</td></tr><tr><td>Orb pickup</td><td>10 shield, 500 points</td></tr><tr><td>Obstacle destroyed</td><td>200 points</td></tr><tr><td>Mine destroyed</td><td>500 points</td></tr><tr><td>Powerup drop chance</td><td>about 1 in 3 mines shot down</td></tr><tr><td>Shield Regen <code>+</code></td><td>25 shield</td></tr><tr><td>Rapid Fire <code>!</code></td><td>10 seconds, 3x cadence</td></tr><tr><td>Slow Motion <code>~</code></td><td>5 seconds, half world speed</td></tr><tr><td>Combo window</td><td>2 seconds, caps at <code>COMBO x8</code></td></tr><tr><td>Barrel roll</td><td>0.5 seconds invulnerable, then a cooldown</td></tr><tr><td>Warp step</td><td>every 60 seconds, banner for 2 seconds</td></tr><tr><td>Grid floor</td><td>60 columns by 20 rows</td></tr></tbody></table></div>
+<h2 id="scripts">Scripts</h2>
+<pre><code>npm run build      # Compile TypeScript to out/
+npm run start      # Run the compiled game
+npm run dev        # Build and run in one step
+npm run debug      # Build and run in debug mode
+npm run watch      # Watch mode for development
+npm test           # Build, then run the test suite
+npm run probe      # Build, then run a measurement probe</code></pre>
+<h2 id="probes">Probes</h2>
+<p><code>npm run probe</code> with no arguments lists what there is to measure. Each probe takes a grid and a build:</p>
+<pre><code>npm run probe -- seen-versus-kill
+npm run probe -- column --grid 205x50 --build browser
+npm run probe -- free-flight --passes 2</code></pre>
+<p>A probe reports; it never asserts. Every walk is seeded, so the same command gives the same numbers every time.</p>
+<h2 id="test-grids">Test grids</h2>
+<p>The pulse cannon checks run at three sizes, because the hit test is not size-neutral:</p>
+<div class="table-scroll"><table><thead><tr><th>Grid</th><th>Why</th></tr></thead><tbody><tr><td>80x24</td><td>What a terminal opens at</td></tr><tr><td>60x20</td><td>The floor a small browser window is clamped to</td></tr><tr><td>205x50</td><td>A full-screen window at the default font</td></tr></tbody></table></div>
+<h2 id="terminal-requirements">Terminal requirements</h2>
+<ul><li>60 columns by 20 rows minimum</li><li>256-colour ANSI</li><li>Unicode box-drawing and block elements</li><li>Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty</li></ul>
+<h2 id="browser-only-features">Browser-only features</h2>
+<p>High score persistence, sound, the CRT overlay (<code>C</code>), light mode, touch controls, and a canvas-offset screen shake. The terminal build jolts the play area by a whole character column instead, and keeps a best score for the session only.</p>
+<div class="pager"><a href="how-it-works.html">&lt;&lt; How It Works</a><span></span></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

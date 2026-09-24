@@ -1,0 +1,223 @@
+/* CMD Space Rider documentation site.
+   Every value here comes from DESIGN_LANGUAGE.md in the repository root, which
+   records where each one was derived from and the contrast ratio it measured.
+   Change the two together or they stop agreeing. */
+
+/* ===== Palette ===== */
+/* Dark is the default, for the reason the game gives: it is what a terminal
+   looks like, and it is what every colour was picked against. */
+:root {
+  --page:        #000000;  /* THEME_BG.dark, BLACK (0)     */
+  --surface:     #0a0a0c;  /* one step off the page        */
+  --text:        #aaaaaa;  /* WHITE (7),          9.04:1   */
+  --text-strong: #ffffff;  /* BRIGHT_WHITE (15), 21.00:1   */
+  --heading:     #55ffff;  /* BRIGHT_CYAN (14),  17.13:1   */
+  --link:        #55ffff;  /* BRIGHT_CYAN (14),  17.13:1   */
+  --muted:       #8a8a8a;  /* grey ramp 245,      6.08:1   */
+  --rule:        #00aaaa;  /* CYAN (6)                     */
+  --edge:        #5555ff;  /* BRIGHT_BLUE (12), decoration */
+  --good:        #55ff55;  /* BRIGHT_GREEN (10)            */
+  --warn:        #ffff55;  /* BRIGHT_YELLOW (11)           */
+  --bad:         #ff5555;  /* BRIGHT_RED (9)               */
+  --warp:        #ff55ff;  /* BRIGHT_MAGENTA (13)          */
+
+  /* The brand ship, from icon.svg: nose and hull, wings, engine bells. */
+  --ship-hull:   #55ffff;  /* BRIGHT_CYAN (14)             */
+  --ship-wing:   #5555ff;  /* BRIGHT_BLUE (12)             */
+  --ship-engine: #00aaaa;  /* CYAN (6)                     */
+
+  --s1: 4px; --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+
+  --mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
+}
+
+/* Light is the game's own re-inking, from LIGHT_INK. Two values are not quoted
+   from it: --muted, because LIGHT_INK[8] reaches only 3.06:1 and cannot carry
+   text, and --surface, which the game has no equivalent for. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --page:        #f2f2f4;  /* THEME_BG.light, LIGHT_INK[0] */
+    --surface:     #ffffff;
+    --text:        #4a4a52;  /* LIGHT_INK[7],       7.85:1   */
+    --text-strong: #101014;  /* LIGHT_INK[15],     16.98:1   */
+    --heading:     #00565f;  /* LIGHT_INK[6],       7.52:1   */
+    --link:        #00757f;  /* LIGHT_INK[14],      4.88:1   */
+    --muted:       #5f5f68;  /* compliant tone,     5.65:1   */
+    --rule:        #00757f;  /* LIGHT_INK[14]                */
+    --edge:        #8a8a94;  /* LIGHT_INK[8], decoration     */
+    --good:        #0a8a2c;  /* LIGHT_INK[10]                */
+    --warn:        #8f7300;  /* LIGHT_INK[11]                */
+    --bad:         #c11a1a;  /* LIGHT_INK[9]                 */
+    --warp:        #a81a9a;  /* LIGHT_INK[13]                */
+
+    /* Re-inked through the same indices the game re-inks: 14, 12 and 6. */
+    --ship-hull:   #00757f;  /* LIGHT_INK[14]                */
+    --ship-wing:   #2f3fc8;  /* LIGHT_INK[12]                */
+    --ship-engine: #00565f;  /* LIGHT_INK[6]                 */
+  }
+}
+
+/* ===== Reset =====
+   Radius is 0 everywhere on purpose: icon.svg holds seven shapes and not one
+   curve, so nothing on this site is rounded. */
+*, *::before, *::after { box-sizing: border-box; border-radius: 0; }
+body, h1, h2, h3, h4, p, ul, ol, figure, table, pre { margin: 0; }
+
+html { scroll-behavior: smooth; scroll-padding-top: var(--s8); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font: 400 16px/1.65 var(--mono);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ===== Skip link ===== */
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--surface); color: var(--link);
+  padding: var(--s2) var(--s3); border: 2px solid var(--rule);
+}
+.skip:focus { left: var(--s3); top: var(--s3); }
+
+/* ===== Menu ===== */
+.nav {
+  position: fixed; inset: 0 0 auto 0; z-index: 50;
+  background: var(--surface);
+  border-bottom: 2px solid var(--rule);
+}
+.nav-bar {
+  max-width: 1100px; margin: 0 auto;
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s2) var(--s4);
+}
+.brand {
+  display: flex; align-items: center; gap: var(--s2);
+  color: var(--text-strong); text-decoration: none;
+  font-weight: 700; white-space: nowrap;
+}
+.brand svg { display: block; width: 24px; height: 24px; }
+.brand:hover, .brand:focus-visible { color: var(--heading); }
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  background: transparent; color: var(--link);
+  border: 1px solid var(--rule);
+  font: 700 14px/1 var(--mono);
+  padding: var(--s2) var(--s3); cursor: pointer;
+}
+.nav-toggle:hover { color: var(--text-strong); border-color: var(--edge); }
+
+.menu { display: flex; align-items: center; gap: var(--s1); list-style: none; padding: 0; }
+.menu > li { position: relative; }
+.menu a {
+  display: block; color: var(--text); text-decoration: none;
+  padding: var(--s2) var(--s3); font-size: 14px; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.menu a:hover, .menu a:focus-visible { color: var(--heading); border-color: var(--rule); }
+.menu a[aria-current="page"] { color: var(--heading); border-bottom-color: var(--heading); }
+
+/* Dropdowns carry the in-page anchors of the longer pages. */
+.has-sub > button {
+  display: flex; align-items: center; gap: var(--s1);
+  background: transparent; color: var(--text);
+  border: 1px solid transparent;
+  font: 400 14px/1.65 var(--mono);
+  padding: var(--s2) var(--s3); cursor: pointer; white-space: nowrap;
+}
+.has-sub > button:hover, .has-sub > button:focus-visible { color: var(--heading); border-color: var(--rule); }
+.has-sub > button::after { content: "v"; font-size: 10px; }
+.has-sub > button[aria-expanded="true"]::after { content: "^"; }
+.sub {
+  display: none; position: absolute; top: 100%; left: 0; min-width: 200px;
+  background: var(--surface); border: 1px solid var(--rule);
+  list-style: none; padding: var(--s1);
+}
+.has-sub > button[aria-expanded="true"] + .sub { display: block; }
+
+/* ===== Page frame ===== */
+.wrap { max-width: 1100px; margin: 0 auto; padding: var(--s8) var(--s4) var(--s7); }
+main { max-width: 80ch; }
+
+/* ===== Type ===== */
+h1, h2, h3, h4 { color: var(--heading); font-weight: 700; }
+h1 { font-size: 31px; line-height: 1.2;  margin: var(--s5) 0 var(--s4); }
+h2 { font-size: 25px; line-height: 1.25; margin: var(--s7) 0 var(--s3); padding-bottom: var(--s2); border-bottom: 1px solid var(--rule); }
+h3 { font-size: 20px; line-height: 1.3;  margin: var(--s6) 0 var(--s3); }
+h4 { font-size: 16px; line-height: 1.3;  margin: var(--s5) 0 var(--s2); color: var(--text-strong); }
+
+p, ul, ol, table, pre, blockquote { margin-bottom: var(--s4); }
+ul, ol { padding-left: var(--s5); }
+li { margin-bottom: var(--s2); }
+strong, b { color: var(--text-strong); font-weight: 700; }
+
+a { color: var(--link); text-underline-offset: 3px; }
+a:hover, a:focus-visible { color: var(--text-strong); }
+
+.lede { font-size: 18px; color: var(--text-strong); }
+.muted { color: var(--muted); font-size: 14px; }
+
+/* ===== Code ===== */
+code {
+  background: var(--surface); color: var(--heading);
+  border: 1px solid var(--edge);
+  padding: 1px var(--s1); font-size: 14px;
+}
+pre {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule);
+  padding: var(--s3) var(--s4); overflow-x: auto; font-size: 14px; line-height: 1.55;
+}
+pre code { background: none; border: 0; padding: 0; color: var(--text); font-size: inherit; }
+
+/* ===== Tables ===== */
+.table-scroll { overflow-x: auto; margin-bottom: var(--s4); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--edge); padding: var(--s2) var(--s3); text-align: left; vertical-align: top; }
+th { background: var(--surface); color: var(--heading); font-weight: 700; }
+
+/* ===== Cards ===== */
+.grid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: var(--s5); }
+.card { background: var(--surface); border: 1px solid var(--rule); border-top: 2px solid var(--heading); padding: var(--s4); }
+.card h3 { margin: 0 0 var(--s2); font-size: 16px; }
+.card p { margin: 0; font-size: 14px; }
+a.card { text-decoration: none; display: block; }
+a.card:hover, a.card:focus-visible { border-color: var(--heading); }
+a.card:hover p, a.card:focus-visible p { color: var(--text); }
+
+blockquote { border-left: 4px solid var(--warn); background: var(--surface); padding: var(--s3) var(--s4); }
+blockquote p:last-child { margin-bottom: 0; }
+
+/* ===== Prev / next ===== */
+.pager { display: flex; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s7); padding-top: var(--s4); border-top: 1px solid var(--rule); }
+.pager a { text-decoration: none; font-size: 14px; }
+
+footer { max-width: 1100px; margin: 0 auto; padding: var(--s5) var(--s4) var(--s7); border-top: 1px solid var(--edge); color: var(--muted); font-size: 14px; }
+footer a { color: var(--link); }
+
+:focus-visible { outline: 2px solid var(--heading); outline-offset: 2px; }
+
+/* ===== Narrow screens ===== */
+@media (max-width: 860px) {
+  .nav-toggle { display: block; }
+  .menu {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 0;
+    background: var(--surface); border-bottom: 2px solid var(--rule);
+    padding: var(--s2); max-height: calc(100vh - 56px); overflow-y: auto;
+  }
+  .nav[data-open="true"] .menu { display: flex; }
+  .menu a, .has-sub > button { width: 100%; font-size: 16px; }
+  /* There is room to open every group at once here, so the dropdowns stop
+     collapsing and the button becomes the group's label rather than a control.
+     The caret goes with the behaviour it described. */
+  .sub { position: static; display: block; border: 0; border-left: 2px solid var(--rule); margin-left: var(--s3); }
+  .has-sub > button { color: var(--muted); cursor: default; font-size: 14px; }
+  .has-sub > button::after { content: ""; }
+  .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--muted); border-color: transparent; }
+  .wrap { padding-top: var(--s7); }
+}

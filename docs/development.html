@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Development | CMD Space Rider</title>
+<meta name="description" content="Build scripts, line endings, the test suite, and the measurement probes.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>Development</h1>
+<pre><code>npm run build      # Compile TypeScript to out/
+npm run start      # Run the compiled game
+npm run dev        # Build and run in one step
+npm run debug      # Build and run in debug mode
+npm run watch      # Watch mode for development
+npm test           # Build, then run the test suite
+npm run probe      # Build, then run a measurement probe</code></pre>
+<p><code>npm run probe</code> with no arguments lists what there is to measure. Each probe takes a grid and a build:</p>
+<pre><code>npm run probe -- seen-versus-kill
+npm run probe -- column --grid 205x50 --build browser
+npm run probe -- free-flight --passes 2</code></pre>
+<h3 id="line-endings">Line Endings</h3>
+<p>Everything in the repository is LF, pinned by <code>.gitattributes</code> rather than left to whichever editor writes a file last. Git normalizes on the way into the index, so an editor that writes CRLF still commits LF and a diff stays the size of the change rather than the size of the file. The file is tracked, so a clone needs nothing configured.</p>
+<p>Adding a new dotfile is the one thing that can need a local step. A global excludes file of the <code>.*</code> kind will hide it, and how you find out depends on how you staged it: <code>git add &lt;file&gt;</code> names the path, so git refuses it out loud and points at <code>-f</code>, while a bulk <code>git add .</code> or <code>git add -A</code> passes over it without a word. The quiet case is the one to watch for - if a dotfile you thought you staged never appears in <code>git status</code>, check it with <code>git check-ignore -v --no-index &lt;file&gt;</code> and stage it with <code>git add -f &lt;file&gt;</code>.</p>
+<h3 id="tests">Tests</h3>
+<p>The suite uses the Node built-in test runner and adds no dependencies. It covers both builds and the agreement between them.</p>
+<p>The terminal tests import the compiled output from <code>out/</code>, which is why <code>npm test</code> builds first. The browser build is a single self-contained <code>index.html</code> with no module boundary to import, so those tests read the file and evaluate its inline script up to the point where it starts touching the DOM. Everything above that line is game logic and rendering, which is what gets exercised.</p>
+<p>The pulse cannon checks run at three grid sizes rather than one: the 80x24 a terminal opens at, the 60x20 floor a small browser window is clamped to, and the 205x50 a full-screen window gives at the default font. The hit test is not size-neutral - a row is worth about two world units of height at 80x24 and about one at 205x50 - so a check pinned at one size can pass while the game a player sees misses.</p>
+<h3 id="probes">Probes</h3>
+<p>A probe reports; it never asserts. The figures quoted in comments, tests and the changelog come from <code>test/probes/</code>, so a number can be rebuilt from the repository rather than taken on trust, and a number moving is something you read rather than a build that fails. Each probe prints its own method - the grid, the placement walk, the ship heights, the band and the frame rate - above its table.</p>
+<p>Probes and tests fly the same engagement, out of <code>test/engagement.mjs</code>, and both run against the two real engines. A figure taken off a scratch copy of the engine can be right about the copy and wrong about the game.</p>
+<p>Most of them stage that engagement - one target parked in an emptied run, the ship steered onto it - which isolates the shot, and is not the shape a fault turns up in. <code>free-flight</code> is the other end: a run the engine opens for itself, sixty obstacles in the tunnel and volleys overlapping, watched frame by frame, with the walk over the firing columns no flown engagement ever reaches printed underneath it.</p>
+<p>Every walk here gives the same numbers every time. A staged walk always did, because it places what it flies; the run the engine opens for itself did not, because it drew its sixty obstacles from an unseeded <code>Math.random</code>. Quoting one of those passes put figures in this repository that the next run fell outside of, and restating them as spreads did not help - two ten-pass runs of the same walk disagreed with each other. So the engine takes a seed: <code>seedRng</code> pins every draw either build makes, both builds draw the same sequence from it, and <code>free-flight</code> flies a fixed set of seeded worlds. <code>--passes N</code> narrows it to the first N while you iterate; a figure quoted anywhere here is taken over the whole set, or at the first seed alone where the suite pins it, and each table says which. The game itself stays unseeded - a run nobody can predict is the point.</p>
+<div class="pager"><a href="project-structure.html">&lt;&lt; Project Structure</a><a href="terminal-requirements.html">Terminal Requirements &gt;&gt;</a></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

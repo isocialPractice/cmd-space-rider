@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How It Works | CMD Space Rider</title>
+<meta name="description" content="How the terminal renderer and the browser character grid are built.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>How It Works</h1>
+<h3 id="terminal-version">Terminal Version</h3>
+<p>The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode. Terminals only provide key-press events, not key-release, so a key counts as held until its characters stop arriving, and the decay window is checked once per frame. Keys that act on the press rather than the hold get a longer window than the movement keys, so that the first character of an OS auto-repeat is not read as a second press. That single write is synchronous, so a terminal falling behind blocks it and the loop with it; the input layer tracks how long each frame took and discounts the time it was blocked, since a loop that was not reading is no evidence a key went quiet.</p>
+<h3 id="browser-version">Browser Version</h3>
+<p>The browser version (<code>index.html</code>) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size: the font is drawn at its full size wherever the window has room for at least the 60x20 the game is laid out against, and shrinks toward that floor in a window that does not, so every cell the buffer holds has somewhere on the canvas to be drawn. Keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.</p>
+<p>Six things differ, each because the medium allows or demands it. High score persistence uses <code>localStorage</code>, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. A cue is played only when the audio context is actually running: a browser that blocks sound until the page has been touched hands back a suspended one, and the cues raised meanwhile are dropped rather than queued, so a run opened straight from a <code>?mode=</code> link is silent until the first key and then plays from that moment on rather than releasing everything it missed. A browser that permits the sound outright &mdash; a returning player's high media engagement, or the site given a sound permission &mdash; hands back one already running, and the same link plays from its first frame. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so <code>C</code> toggles it in the browser and it does not exist in the terminal. The colour scheme follows the system's own: a light desktop re-inks the palette the grid resolves through and repaints the page behind it, which a terminal has no say in, since there the colours are the terminal's. And a touchscreen gets a thumbstick and two buttons laid over the canvas, feeding the same two key maps the keyboard does &mdash; revealed on the first touch rather than on a capability check, because a laptop with a touchscreen is nearly always being driven by its keyboard.</p>
+<div class="pager"><a href="terminal-requirements.html">&lt;&lt; Terminal Requirements</a><a href="cheatsheet.html">Cheatsheet &gt;&gt;</a></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

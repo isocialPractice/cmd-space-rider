@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Space Rider">
+  <title>Space Rider</title>
+  <!-- The ship as the character grid draws it: a nose, a hull, two wings and
+       two engine bells. The colours are the palette's own BRIGHT_CYAN,
+       BRIGHT_BLUE and CYAN, so the tab matches the tunnel it opens. -->
+  <rect width="32" height="32" fill="#000000"/>
+  <path d="M16 3 21 14 11 14Z" fill="#55ffff"/>
+  <rect x="13" y="14" width="6" height="9" fill="#55ffff"/>
+  <path d="M11 15 3 21 11 21Z" fill="#5555ff"/>
+  <path d="M21 15 29 21 21 21Z" fill="#5555ff"/>
+  <rect x="8" y="23" width="4" height="6" fill="#00aaaa"/>
+  <rect x="20" y="23" width="4" height="6" fill="#00aaaa"/>
+</svg>
