@@ -39,6 +39,16 @@ its origin survives archiving into `## Complete`.
   - From: Polish
 - [ ] **Smooth font rendering** — Experiment with subpixel positioning and canvas font smoothing for crisper character rendering at small cell sizes.
   - From: Polish
+- [ ] Verify the documentation site deployed - The site under `docs/` was
+  written this run and reaches the remote with this run's commit. GitHub Pages
+  serves this repository from the `main` branch root (`build_type: legacy`), so
+  the publish is GitHub's own page build rather than an Actions workflow run,
+  and `gh api repos/isocialPractice/cmd-space-rider/pages/builds/latest` is the
+  endpoint that answers it - not `gh run list`, which has no workflow to report
+  on here. Check that the latest build reports `status: built` at the commit
+  carrying `docs/`, then fetch
+  `https://isocialpractice.github.io/cmd-space-rider/docs/` for a `200`.
+  - From: Create and Deploy GitHub Pages Override
 
 ### UI/UX Override - touch overlay placement on a landscape phone
 
@@ -128,6 +138,103 @@ its origin survives archiving into `## Complete`.
     `src/game.ts` and `index.html` while there, which says a drop costs the seed
     a draw but says nothing about when the drop first moves.
   - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+- [ ] The clone command is a placeholder on the page the README sends readers to
+  - **Issue**: `docs/getting-started.html` still carries `git clone
+    <repository-url>` under "Install from source", which is what the README
+    said before the split. The trimmed `README.md` and `QUICKSTART.md` both now
+    give `git clone https://github.com/isocialPractice/cmd-space-rider.git`, and
+    the README's own line under that block reads "See Getting Started for the
+    browser debug parameters and the rest" - so a reader who follows the link
+    for more detail lands on the one copy of the command that cannot be pasted.
+  - **Goal**: Put the real URL on the page, matching `README.md` and
+    `QUICKSTART.md`. Three files then give the same command.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+- [ ] The project structure page does not list the files the site is made of
+  - **Issue**: `docs/project-structure.html` lists `.gitattributes` among the
+    root files but none of what this run added beside it: `QUICKSTART.md`,
+    `CHEATSHEET.md`, `DESIGN_LANGUAGE.md`, and `.nojekyll` - which is the file
+    the publish depends on, since without it GitHub runs the branch through
+    Jekyll. The tree's `docs/` entry says only "This project's documentation
+    site" and does not open, so `assets/style.css`, `assets/docs.js` and
+    `assets/icon.svg` appear nowhere either. Someone reading the page to learn
+    what is in the repository comes away without the four files that put the
+    page in front of them.
+  - **Goal**: Add the three markdown files and `.nojekyll` to the root block,
+    each with the one-line comment the other entries carry, and open `docs/`
+    one level the way `src/` and `test/` are opened. `README.md`,
+    `CHANGELOG.md`, `TODO.md` and `LICENSE` were never in this tree and are not
+    part of this.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+
+#### Resolve Issues
+
+- [ ] Heading Rank 1
+  - **Issue**: The four pages made from a README section that had `###`
+    subsections carry that level through verbatim, so the first heading below
+    `<h1>` on each is an `<h3>`: `docs/usage.html` (Controls, Gameplay, Debug
+    Modes), `docs/development.html` (Line Endings, Tests, Probes),
+    `docs/how-it-works.html` (Terminal Version, Browser Version) and
+    `docs/getting-started.html`, which then goes on to `<h4>` for
+    Prerequisites, Install from source and Run the game. The three pages not
+    made that way - `index.html`, `quickstart.html`, `cheatsheet.html` - use
+    `<h2>` for the same rank. Two failures follow. A screen reader walking the
+    heading outline of `usage.html` reads level 1 then level 3 with no level 2
+    between them, which is what WCAG 1.3.1 is about. And the stylesheet gives
+    `h2` a section rule - `border-bottom: 1px solid var(--rule)`, 25px - that
+    `h3` does not have, so the same rank of section is drawn one way on
+    Quickstart and another on Usage. On `getting-started.html` "Prerequisites"
+    lands on `h4`, which the stylesheet sets at 16px in `--text-strong`:
+    identical to a bold paragraph.
+  - **Goal**: Promote `h3` to `h2` and `h4` to `h3` in those four pages. The
+    `id` attributes stay as they are, so the six dropdown anchors in the shared
+    nav keep resolving - check that they still do. Nothing else on the site
+    moves.
+  - From: Create and Deploy GitHub Pages Override
+- [ ] Site Link Form 1
+  - **Issue**: `docs/quickstart.html` and `docs/cheatsheet.html` link to their
+    own siblings by absolute deployed URL rather than by file name - five
+    `href="https://isocialpractice.github.io/cmd-space-rider/docs/..."` between
+    them, reaching the site home, `usage.html`, `cheatsheet.html` and
+    `development.html`. They came across from `QUICKSTART.md` and
+    `CHEATSHEET.md`, where the absolute form is right because GitHub renders
+    those files at a different path. On the pages it contradicts
+    `DESIGN_LANGUAGE.md`, which declares under **Layout**: "Relative links
+    throughout. The site is served from `/cmd-space-rider/docs/` rather than
+    from a domain root, so absolute paths would break. Relative links also mean
+    the pages open correctly straight off the filesystem." Open
+    `docs/quickstart.html` from a clone with no network and every one of those
+    five leaves the local copy; the other eight pages have no such link.
+  - **Goal**: Make the five relative - `index.html`, `usage.html`,
+    `cheatsheet.html`, `development.html` - matching every other in-site link
+    on the site. Leave `QUICKSTART.md` and `CHEATSHEET.md` absolute: they are
+    read on GitHub, where relative would be wrong.
+  - From: Create and Deploy GitHub Pages Override
+- [ ] Palette Ledger 1
+  - **Issue**: `docs/assets/style.css` opens by saying "Every value here comes
+    from DESIGN_LANGUAGE.md ... Change the two together or they stop agreeing",
+    and the two have stopped agreeing in three places. The light block declares
+    `--warn: #8f7300` (`LIGHT_INK[11]`) and the design file's light table has no
+    row for it, though the dark table lists its counterpart. The light block
+    splits `--rule: #00757f` from `--edge: #8a8a94` while the design file's
+    light table gives one "Rules, borders" row at `#8a8a94`, so the file names
+    the decoration value for the role the stylesheet gives to the link colour.
+    And `--good`, `--bad` and `--warp` are declared in both schemes and
+    referenced nowhere in the stylesheet or in any page, so three of the rows
+    the design file measures describe nothing on the site. Separately the
+    stylesheet carries three sizes off the declared scales: `.lede` at 18px and
+    the dropdown caret at 10px, against a type scale the file gives as 14, 16,
+    20, 25 and 31; and `max-height: calc(100vh - 56px)` on the narrow menu,
+    against a spacing scale of 4, 8, 12, 16, 24, 32, 48, 64. Nothing renders
+    wrong today - every measured ratio in the design file is correct, and the
+    two sub-4.5:1 values carry no text - but the file is the site's record of
+    why each value is what it is, and it no longer matches.
+  - **Goal**: Bring the two back together, deciding each way round rather than
+    editing one to match the other: give the light table a "Accent, warn" row
+    and a "Decoration only" row the way the dark table has, drop the three
+    unused properties or use them, and either add 18px and 10px to the type
+    scale or move `.lede` and the caret onto it. The `56px` is the fixed bar's
+    own height written twice - tie it to the bar or put it on the scale.
+  - From: Create and Deploy GitHub Pages Override
 
 ## Quick Wins
 
@@ -186,6 +293,16 @@ quality, browser integration, accessibility, and performance headroom.
 - [ ] **Smooth font rendering** — Experiment with subpixel positioning and canvas font smoothing for crisper character rendering at small cell sizes.
 - [ ] **Gamepad support (browser)** — Map standard gamepad API inputs: left stick for steering, A button for fire, B for boost, triggers for barrel roll.
 - [ ] **Performance mode** — Reduce particle count and star count on low-end devices. Detect frame drops and auto-adjust.
+- [ ] **Decide whether Pages should deploy from Actions instead of the branch** -
+  `gh api repos/isocialPractice/cmd-space-rider/pages` reports
+  `build_type: legacy` with `source: {branch: main, path: /}`, so the site is
+  GitHub's own branch build and any workflow added to `.github/workflows/` would
+  be ignored rather than run. Nothing is broken: the game serves from the root
+  and `docs/` serves beside it. The cost is that what gets published is whatever
+  is on the branch, with no build step available to it. Flipping the source on a
+  working site can take it down, so this wants a decision rather than a run:
+  leave it as it is, or set `build_type=workflow` and add a workflow that
+  uploads the root as the artifact. **Do not flip this unattended.**
 
 ## Measurement
 
@@ -200,18 +317,15 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 49 earlier items in `TODO-archive.md`, newest last.
+> 55 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Warp speed transition** — Visual effect when crossing difficulty thresholds (every 60s). Brief tunnel color shift, speed lines intensify, and a "WARP LEVEL 2" flash in the HUD.
-  - From: Medium Effort
-- [x] **Powerup drops** — When a mine is destroyed, chance to drop a powerup that drifts toward the player:
-  - Shield Regen (green +) — restores 25 shield
-  - Rapid Fire (cyan !) — 3x fire rate for 10 seconds
-  - Slow Motion (magenta ~) — halves game speed for 5 seconds
-  - From: Medium Effort
-- [x] **Overlay Anchoring**: **Touch controls (mobile browser)** — Add on-screen virtual joystick (left side) and fire/boost buttons (right side) for mobile play. Only show when touch events are detected. The canvas grid system already works at any viewport size.
-  - From: Medium Effort
-- [x] **Favicon from icon.svg** — Inline the icon SVG as a data URI favicon in index.html so the browser tab shows the ship icon.
-  - From: Polish
-- [x] **Prefers-color-scheme** — Detect system dark/light mode. Default is dark (game natural state). Light mode could invert to white background with dark tunnel walls for accessibility.
-  - From: Polish
+- [x] **Heading Rank**: Split the README's level 2 sections into pages under `docs/`
+  - From: Create and Deploy GitHub Pages Override
+- [x] **Site Link Form**: Write `QUICKSTART.md` and `CHEATSHEET.md`, and their site pages
+  - From: Create and Deploy GitHub Pages Override
+- [x] **Palette Ledger**: Write the stylesheet and the menu script from `DESIGN_LANGUAGE.md`
+  - From: Create and Deploy GitHub Pages Override
+- [x] Trim `README.md` to a front door with linked section headings
+  - From: Create and Deploy GitHub Pages Override
+- [x] Add `.nojekyll` at the published root
+  - From: Create and Deploy GitHub Pages Override
