@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart | CMD Space Rider</title>
+<meta name="description" content="The shortest path to flying CMD Space Rider, in a browser or a terminal.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>Quickstart</h1>
+<p>The shortest path to flying. For the full documentation, see the <a href="https://isocialpractice.github.io/cmd-space-rider/docs/">site</a>.</p>
+<h2 id="play-in-a-browser">Play in a browser</h2>
+<p>Nothing to install. Open the hosted build:</p>
+<pre><code>https://isocialpractice.github.io/cmd-space-rider/</code></pre>
+<p>Or clone the repository and open <code>index.html</code> in any modern browser. It is a single self-contained file: no build step, no server, no dependencies.</p>
+<h2 id="play-in-a-terminal">Play in a terminal</h2>
+<p>Node.js v16 or later is the only prerequisite.</p>
+<pre><code>git clone https://github.com/isocialPractice/cmd-space-rider.git
+cd cmd-space-rider
+npm install
+npm run build
+npm start</code></pre>
+<h2 id="the-five-keys-that-matter">The five keys that matter</h2>
+<div class="table-scroll"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody><tr><td><code>W</code> <code>A</code> <code>S</code> <code>D</code> or arrows</td><td>Steer</td></tr><tr><td><code>Space</code></td><td>Fire the pulse cannon</td></tr><tr><td><code>F</code> or <code>Shift</code></td><td>Boost</td></tr><tr><td><code>Q</code> / <code>E</code></td><td>Barrel roll, and nothing can touch you during it</td></tr><tr><td><code>P</code></td><td>Pause</td></tr></tbody></table></div>
+<p><code>Enter</code> launches a run, <code>Esc</code> returns to the menu, and <code>Ctrl+C</code> quits the terminal build outright.</p>
+<h2 id="how-to-survive">How to survive</h2>
+<ul><li>Obstacles cost 25 shield, mines cost 35. Orbs restore 10 and pay 500 points.</li><li>Mines take 5 pulse hits. Shooting one is worth 500 points and has about a one in three chance of dropping a powerup.</li><li>A shot holds the column it was fired down, so line the ship up under the target. Height is not an aiming axis.</li><li>Kills inside two seconds of each other chain, up to <code>COMBO x8</code>.</li><li>Roll out of trouble rather than steering out of it. The roll is half a second of invulnerability on a cooldown.</li><li>The run steps up a difficulty level every minute, and the warp banner is a few seconds of warning rather than decoration.</li></ul>
+<h2 id="a-terminal-that-fits">A terminal that fits</h2>
+<p>The floor is 60 columns by 20 rows, with 256-colour and Unicode support. A window smaller than that shows a notice instead of the game. Windows Terminal, iTerm2, GNOME Terminal, Alacritty and Kitty all work.</p>
+<h2 id="next">Next</h2>
+<ul><li><a href="https://isocialpractice.github.io/cmd-space-rider/docs/usage.html">Controls, gameplay and debug modes</a></li><li><a href="https://isocialpractice.github.io/cmd-space-rider/docs/cheatsheet.html">Cheatsheet</a></li><li><a href="https://isocialpractice.github.io/cmd-space-rider/docs/development.html">Development and tests</a></li></ul>
+<div class="pager"><a href="index.html">&lt;&lt; Home</a><a href="features.html">Features &gt;&gt;</a></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

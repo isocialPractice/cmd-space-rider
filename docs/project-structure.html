@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Structure | CMD Space Rider</title>
+<meta name="description" content="Every file in the CMD Space Rider repository and what it holds.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>Project Structure</h1>
+<pre><code>cmd-space-rider/
+  index.html        # Browser version (canvas terminal emulator, zero dependencies)
+  src/
+    index.ts        # CLI entry point, terminal setup, main loop
+    input.ts        # Key tables, raw stdin decoding, and key decay windows
+    game.ts         # Game engine: state, physics, collision, entity management
+    render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
+    menu.ts         # Menu screens: title, debug menu, game over
+    screen.ts       # Double-buffered ANSI screen buffer
+    types.ts        # Types, shared constants, colors, and the seeded RNG
+  test/
+    helpers.mjs                 # Shared test rigging
+    engagement.mjs              # One pulse cannon engagement, at any grid
+    probes/                     # Figures the comments and tests quote, reported
+    browser-engine.test.mjs     # Browser build behaviour
+    terminal-engine.test.mjs    # Terminal build behaviour
+    input.test.mjs              # Terminal input decoding and key repeat
+    menu-layout.test.mjs        # Menu screens fit every supported size, and the
+                                #   grid a browser window is given fits the window
+    barrel-roll.test.mjs        # Roll timing, invincibility, and cooldown
+    combo.test.mjs              # Combo chaining, decay, and the HUD counter
+    sound.test.mjs              # Sound cues and the browser synthesizer
+    hud-row.test.mjs            # The HUD row the counter, label and banner share
+    warp.test.mjs               # The difficulty step and the transition it shows
+    powerups.test.mjs           # Drops, drift, pickups, rapid fire, slow motion
+    browser-shell.test.mjs      # Colour scheme, touch controls, and the favicon
+    pulse-cannon.test.mjs       # Where shots go and what they register against
+    parity.test.mjs             # Both builds agree
+  docs/             # This project's documentation site
+  hero.png          # Hero banner graphic
+  icon.svg          # Ship icon, inlined into index.html as the favicon
+  .gitattributes    # Line endings: LF, in the index and the working tree
+  package.json      # CLI tool manifest and dependencies
+  tsconfig.json     # TypeScript configuration</code></pre>
+<div class="pager"><a href="usage.html">&lt;&lt; Usage (CLI)</a><a href="development.html">Development &gt;&gt;</a></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

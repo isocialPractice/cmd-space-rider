@@ -2,79 +2,40 @@
 
 # CMD Space Rider
 
+`Ctrl + click` to view [cmd-space-rider documentation](https://isocialpractice.github.io/cmd-space-rider/docs/)
+
 A retro DOS-style terminal space tunnel game. Pilot your ship through an endless neon warp tunnel, dodge obstacles, collect energy orbs, and chase the high score &mdash; right in your command line or browser.
 
 `Ctrl + click` to play [game](https://isocialpractice.github.io/cmd-space-rider/) in the browser.
 
-## Features
+## [Features](https://isocialpractice.github.io/cmd-space-rider/docs/features.html)
 
 - **DOS terminal graphics** &mdash; Pseudo-3D tunnel rendered with Unicode block elements, box-drawing characters, and 256-color ANSI palette. No graphical window required.
 - **Browser preview** &mdash; Open `index.html` in any browser to play the same game rendered as a canvas-based terminal emulator. No build step, no server, no dependencies.
 - **Cross-platform** &mdash; Runs on Windows, macOS, and Linux. Any terminal that supports 256 colors and Unicode.
-- **Neon warp tunnel** &mdash; Fly through a perspective-scrolling tunnel with pulsing neon walls, animated ring stripes, and a parallax starfield.
-- **Ship controls** &mdash; Steer, boost, and fire a pulse cannon.
-- **Obstacles and mines** &mdash; Dodge rotating obstacle blocks and blinking mines that deal shield damage on contact.
-- **Energy orbs** &mdash; Collect glowing orbs to gain score and restore shield.
-- **Progressive difficulty** &mdash; Speed gradually increases with distance. Obstacle density grows every minute. Mines begin spawning after the first minute and escalate over time.
-- **Warp transitions** &mdash; Every minute the run steps up a difficulty level, and the step announces itself: the tunnel walls shift from blue and cyan to magenta and white, the speed lines down both margins double up, and a `>> WARP LEVEL 2 <<` banner blinks on the HUD for two seconds.
-- **Powerup drops** &mdash; About a third of the mines you shoot down leave a pickup behind, and it drifts toward the ship as it comes in. A green `+` restores 25 shield, a cyan `!` gives ten seconds of rapid fire, and a magenta `~` halves the world's speed for five. The two timed ones count themselves down in the footer.
-- **HUD** &mdash; Live score, distance traveled, shield percentage, shield bar, and a speed readout showing the current multiple of the starting speed.
-- **High score persistence** &mdash; The browser version saves your best score and restores it on load. A `[ NEW BEST ]` banner flashes the moment a run passes it.
-- **Pause** &mdash; Press `P` to halt a run and show a `[ PAUSED ]` overlay. The world freezes with it, so once an in-flight flash or shake has finished, the pulsing overlay label is all that still moves. Useful in the browser, where there is no terminal interrupt.
-- **Screen shake** &mdash; Taking damage jolts the view for a fraction of a second. The browser build offsets the whole canvas; the terminal build jolts only the play area, leaving the HUD and border anchored.
-- **Barrel roll** &mdash; `Q` and `E` roll the ship for half a second. The wings turn through the roll and the hull goes white, and nothing can touch the ship while it does. A cooldown keeps it an escape rather than a way of life.
-- **Combo scoring** &mdash; Kills strung together inside two seconds chain: the second is worth double, the third triple, and a `COMBO x3` counter reads the multiplier back on the HUD. The chain tops out at `COMBO x8`. Two quiet seconds drop it.
-- **Retro sound** &mdash; The browser version synthesizes every tone on the spot with the Web Audio API. No audio files, nothing to load: a pulse cannon zap, an orb chime, a damage crunch, a mine explosion, and an engine hum that pitches up with the boost. Most browsers want the page touched once before they will make any noise, so sound usually starts on the first keypress; a browser that permits it outright plays from the first frame.
-- **CRT overlay** &mdash; The browser version lays scanlines and a soft vignette over the canvas. On out of the box, toggled with `C`, and the choice is remembered across reloads.
-- **Touch controls** &mdash; The browser version grows a thumbstick and a pair of buttons the first time it is actually touched, so a phone can fly a run and a laptop with a touchscreen is left alone. The `FIRE` button doubles as `Enter` on the menus, which is the only key a phone otherwise has no way to press.
-- **Light mode** &mdash; The browser version follows the system colour scheme. Dark is the game's natural state and stays the default; a system set to light gets the same tunnel re-inked in dark blues and teals on pale paper, and it switches under a run in progress without touching it.
-- **Debug mode** &mdash; Five test scenarios accessible via CLI flag or URL parameter for isolated gameplay testing.
+- **Neon warp tunnel** &mdash; Perspective-scrolling walls, animated ring stripes, a parallax starfield, and a warp transition every minute.
+- **Ship controls** &mdash; Steer, boost, fire a pulse cannon, and barrel roll out of trouble.
+- **Progressive difficulty** &mdash; Speed, obstacle density and mines all escalate with distance.
 
-## Getting Started
+The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, retro sound, the CRT overlay, touch controls, light mode, and the five debug scenarios.
 
-### Play in Browser (no install)
+## [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html)
 
-Open `index.html` in any modern browser. That's it.
+Open `index.html` in any modern browser, or play the [hosted build](https://isocialpractice.github.io/cmd-space-rider/). That is the whole browser install.
 
-URL parameters for debug modes:
-
-```
-index.html?debug                   Open the debug scenario menu
-index.html?mode=chaos              Start a specific debug mode directly
-index.html?mode=mines              Mine Field mode
-index.html?mode=orbs               Orb Harvest mode
-index.html?mode=obstacleCollision  Collision Course mode
-index.html?mode=mineCollision      Mine Sweeper mode
-```
-
-### Play in Terminal
-
-#### Prerequisites
-
-- [Node.js](https://nodejs.org/) v16 or later
-
-#### Install from source
+For the terminal, with [Node.js](https://nodejs.org/) v16 or later:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/isocialPractice/cmd-space-rider.git
 cd cmd-space-rider
 npm install
 npm run build
-```
-
-#### Run the game
-
-```bash
 npm start
 ```
 
-Or directly:
+See [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html) for the browser debug parameters and the rest, or the [Quickstart](QUICKSTART.md) for the short version.
 
-```bash
-node out/index.js
-```
-
-## Usage (CLI)
+## [Usage (CLI)](https://isocialpractice.github.io/cmd-space-rider/docs/usage.html)
 
 ```
 space-rider                          Start in normal mode
@@ -83,126 +44,31 @@ space-rider --mode <mode>            Start a specific debug mode directly
 space-rider --help                   Show help
 ```
 
-### Controls
-
 | Input | Action |
 |---|---|
 | `W` / `A` / `S` / `D` or Arrow keys | Steer ship |
-| `F` or `Shift` (browser) | Boost |
 | `Space` | Fire pulse cannon |
+| `F` or `Shift` (browser) | Boost |
 | `Q` / `E` | Barrel roll |
 | `P` | Pause / resume a run |
-| `M` | Mute toggle |
-| `C` (browser) | CRT scanline overlay on / off |
-| `Enter` | Launch / relaunch |
-| `Esc` | Return to menu / quit |
-| `Ctrl+C` | Quit immediately (terminal) |
-| Thumbstick / `FIRE` / `BOOST` (touch) | Steer / fire or confirm / boost |
 
-`M` silences the browser version and shows a `MUTED` indicator in the footer. The
-terminal version has no audio, so there the flag only raises the indicator.
+The [Usage page](https://isocialpractice.github.io/cmd-space-rider/docs/usage.html) carries the full control table, the key repeat and deadzone behaviour, the gameplay rules, and the five debug modes. The [Cheatsheet](CHEATSHEET.md) puts every key, flag and figure on one page.
 
-The keys that act on the press rather than the hold &mdash; `P`, `M`, `Esc`, and
-the `Q` and `E` roll &mdash; fire once per press. Holding one down does not
-repeat it at any of the repeat rates the standard OS sliders offer.
-
-That costs a short deadzone after a hold, because a terminal has no key-up event
-and silence is the only thing that can stand in for one. `P`, `M` and `Esc` take
-it flat: having held one, the next press of it is ignored for a beat, so a
-deliberate second tap needs a moment between them. Nothing is competing for those
-keys, and a beat is cheap.
-
-The roll is the escape move, so `Q` and `E` do not pay that flat rate. Their
-deadzone is measured off the repeat stream instead, which lasts about twice the
-gap between repeat characters &mdash; a fifth of a second on a normally
-configured keyboard. Let go after a long hold and the next press rolls, with the
-roll cooldown left to decide whether it lands. What cannot be recovered is a
-re-press inside the repeat rate itself: arriving exactly as soon as the next
-repeat character would have, it is the same stream, and nothing tells them apart.
-
-Silence only counts against a key while the game is listening for it. A terminal
-that cannot keep up with the repaint blocks the write the game hands it, and the
-loop with it, so keystrokes queue up and land together when it clears. That
-pause is the game's, not the player's, and it is discounted rather than read as
-the key having been let go &mdash; so holding the roll on a terminal falling
-behind still rolls once. A press made inside such a pause is the one thing lost:
-it cannot be told from the hold carrying on, and the game was frozen for it
-anyway.
-
-Gaps that pause leaves are not the repeat rate either, so they are not measured
-as it. On a terminal that blocks on every frame there is no gap left that was
-timed against a loop actually reading, nothing is measured, and the roll falls
-back to the same flat deadzone `P`, `M` and `Esc` carry. That is the wide end
-rather than the narrow one, and on a loop ticking that slowly it is about three
-frames.
-
-### Gameplay
-
-- **Dodge obstacles** &mdash; Red rotating blocks deal 25 shield damage.
-- **Avoid mines** &mdash; Blinking red cubes deal 35 shield damage. They take 5 pulse hits to destroy.
-- **Collect energy orbs** &mdash; Green glowing orbs restore 10 shield and award 500 points.
-- **Destroy targets** &mdash; Shooting obstacles awards 200 points; destroying mines awards 500 points.
-- **Aim by column** &mdash; A shot holds the column it was fired down, so line the ship up under the target and pull the trigger. The further out the target, the more its own column drifts outward before the shot arrives, so a long shot wants leading a character or so; the volley's spread covers most of that for you, and it widens with the window as the drift does. The tracer is drawn only while the shot is still inside the tunnel: fire from hard against a wall and it goes dark almost at once, because holding the column carries it out through the wall and nothing spawns out there for it to hit. A dark shot keeps flying and registers nothing while it is dark, so a block you can see with no bolt on it survives. Height is not an aiming axis at all. A shot registers where its tracer is drawn on the target and nowhere else, and a tracer climbs its whole column, so it meets whatever is drawn in that column however high or low in the tunnel the two of you are. What you see is what counts: a bolt drawn through a block destroys it, and one drawn past it does not.
-- **Chain your kills** &mdash; A second kill within two seconds doubles what it pays, a third triples it, and so on up to `COMBO x8`, where the multiplier stops climbing. Further kills still hold the chain open, they just do not raise it. The multiplier shows as `COMBO x3` on the HUD and resets after two quiet seconds. Orbs are a pickup rather than a kill and never chain.
-- **Roll out of trouble** &mdash; `Q` or `E` rolls the ship for half a second, and nothing can hit it mid-roll. The cooldown runs from the start of the roll, so there is a beat of level flight before the next one.
-- **Take the drops** &mdash; A mine destroyed by gunfire has about a one in three chance of leaving a powerup, which then drifts toward the ship while the tunnel carries it in. Shield Regen (`+`) restores 25 shield. Rapid Fire (`!`) lets you hold the trigger down for ten seconds rather than tapping it, at three times the cadence a tap sustains. Slow Motion (`~`) runs the whole world at half speed for five seconds, the ship included, which buys real thinking time without changing the geometry of anything. Ramming a mine destroys it too and drops nothing: that one already cost you 35 shield.
-- **Read the warp** &mdash; Every minute the difficulty steps and the tunnel says so for two seconds, walls and all. Obstacles thicken on that same boundary, so the banner is a few seconds of warning rather than a decoration.
-- **Survive** &mdash; The game ends when shield reaches 0.
-- **Chase your best** &mdash; Only normal runs count toward the best score. Debug scenarios are diagnostics and never record one.
-
-### Debug Modes
-
-Access via `--debug` (CLI) or `?debug` (browser):
-
-| # | Mode | CLI flag / URL param | Description |
-|---|---|---|---|
-| 1 | **Mine Field** | `mines` | Only mines. Pure evasion. |
-| 2 | **Orb Harvest** | `orbs` | Only orbs. Collect them all. |
-| 3 | **Collision Course** | `obstacleCollision` | Hit obstacles. Track every impact. |
-| 4 | **Mine Sweeper** | `mineCollision` | Ram mines. Log collisions. |
-| 5 | **Chaos Protocol** | `chaos` | Everything at once with permanent boost and auto-fire. |
-
-Navigate the debug menu with arrow keys or number keys, then press `Enter` to launch.
-
-## Project Structure
+## [Project Structure](https://isocialpractice.github.io/cmd-space-rider/docs/project-structure.html)
 
 ```
 cmd-space-rider/
   index.html        # Browser version (canvas terminal emulator, zero dependencies)
-  src/
-    index.ts        # CLI entry point, terminal setup, main loop
-    input.ts        # Key tables, raw stdin decoding, and key decay windows
-    game.ts         # Game engine: state, physics, collision, entity management
-    render.ts       # Terminal renderer: tunnel, ship, entities, HUD, effects
-    menu.ts         # Menu screens: title, debug menu, game over
-    screen.ts       # Double-buffered ANSI screen buffer
-    types.ts        # Types, shared constants, colors, and the seeded RNG
-  test/
-    helpers.mjs                 # Shared test rigging
-    engagement.mjs              # One pulse cannon engagement, at any grid
-    probes/                     # Figures the comments and tests quote, reported
-    browser-engine.test.mjs     # Browser build behaviour
-    terminal-engine.test.mjs    # Terminal build behaviour
-    input.test.mjs              # Terminal input decoding and key repeat
-    menu-layout.test.mjs        # Menu screens fit every supported size, and the
-                                #   grid a browser window is given fits the window
-    barrel-roll.test.mjs        # Roll timing, invincibility, and cooldown
-    combo.test.mjs              # Combo chaining, decay, and the HUD counter
-    sound.test.mjs              # Sound cues and the browser synthesizer
-    hud-row.test.mjs            # The HUD row the counter, label and banner share
-    warp.test.mjs               # The difficulty step and the transition it shows
-    powerups.test.mjs           # Drops, drift, pickups, rapid fire, slow motion
-    browser-shell.test.mjs      # Colour scheme, touch controls, and the favicon
-    pulse-cannon.test.mjs       # Where shots go and what they register against
-    parity.test.mjs             # Both builds agree
-  hero.png          # Hero banner graphic
+  src/              # CLI entry point, input, engine, renderer, menus, screen buffer
+  test/             # Both builds, the agreement between them, and the probes
+  docs/             # This project's documentation site
   icon.svg          # Ship icon, inlined into index.html as the favicon
-  .gitattributes    # Line endings: LF, in the index and the working tree
   package.json      # CLI tool manifest and dependencies
-  tsconfig.json     # TypeScript configuration
 ```
 
-## Development
+Every file under `src/` and `test/` is listed on the [Project Structure page](https://isocialpractice.github.io/cmd-space-rider/docs/project-structure.html).
+
+## [Development](https://isocialpractice.github.io/cmd-space-rider/docs/development.html)
 
 ```bash
 npm run build      # Compile TypeScript to out/
@@ -214,96 +80,37 @@ npm test           # Build, then run the test suite
 npm run probe      # Build, then run a measurement probe
 ```
 
-`npm run probe` with no arguments lists what there is to measure. Each probe
-takes a grid and a build:
+The [Development page](https://isocialpractice.github.io/cmd-space-rider/docs/development.html) covers the line ending policy, how the suite reaches both builds, and what the probes measure and why they are seeded.
 
-```bash
-npm run probe -- seen-versus-kill
-npm run probe -- column --grid 205x50 --build browser
-npm run probe -- free-flight --passes 2
-```
+## [Terminal Requirements](https://isocialpractice.github.io/cmd-space-rider/docs/terminal-requirements.html)
 
-### Line Endings
-
-Everything in the repository is LF, pinned by `.gitattributes` rather than left
-to whichever editor writes a file last. Git normalizes on the way into the
-index, so an editor that writes CRLF still commits LF and a diff stays the size
-of the change rather than the size of the file. The file is tracked, so a clone
-needs nothing configured.
-
-Adding a new dotfile is the one thing that can need a local step. A global
-excludes file of the `.*` kind will hide it, and how you find out depends on how
-you staged it: `git add <file>` names the path, so git refuses it out loud and
-points at `-f`, while a bulk `git add .` or `git add -A` passes over it without
-a word. The quiet case is the one to watch for - if a dotfile you thought you
-staged never appears in `git status`, check it with
-`git check-ignore -v --no-index <file>` and stage it with `git add -f <file>`.
-
-### Tests
-
-The suite uses the Node built-in test runner and adds no dependencies. It covers
-both builds and the agreement between them.
-
-The terminal tests import the compiled output from `out/`, which is why `npm test`
-builds first. The browser build is a single self-contained `index.html` with no
-module boundary to import, so those tests read the file and evaluate its inline
-script up to the point where it starts touching the DOM. Everything above that
-line is game logic and rendering, which is what gets exercised.
-
-The pulse cannon checks run at three grid sizes rather than one: the 80x24 a
-terminal opens at, the 60x20 floor a small browser window is clamped to, and the
-205x50 a full-screen window gives at the default font. The hit test is not
-size-neutral - a row is worth about two world units of height at 80x24 and about
-one at 205x50 - so a check pinned at one size can pass while the game a player
-sees misses.
-
-### Probes
-
-A probe reports; it never asserts. The figures quoted in comments, tests and the
-changelog come from `test/probes/`, so a number can be rebuilt from the
-repository rather than taken on trust, and a number moving is something you read
-rather than a build that fails. Each probe prints its own method - the grid, the
-placement walk, the ship heights, the band and the frame rate - above its table.
-
-Probes and tests fly the same engagement, out of `test/engagement.mjs`, and both
-run against the two real engines. A figure taken off a scratch copy of the
-engine can be right about the copy and wrong about the game.
-
-Most of them stage that engagement - one target parked in an emptied run, the
-ship steered onto it - which isolates the shot, and is not the shape a fault
-turns up in. `free-flight` is the other end: a run the engine opens for itself,
-sixty obstacles in the tunnel and volleys overlapping, watched frame by frame,
-with the walk over the firing columns no flown engagement ever reaches printed
-underneath it.
-
-Every walk here gives the same numbers every time. A staged walk always did,
-because it places what it flies; the run the engine opens for itself did not,
-because it drew its sixty obstacles from an unseeded `Math.random`. Quoting one
-of those passes put figures in this repository that the next run fell outside
-of, and restating them as spreads did not help - two ten-pass runs of the same
-walk disagreed with each other. So the engine takes a seed: `seedRng` pins every
-draw either build makes, both builds draw the same sequence from it, and
-`free-flight` flies a fixed set of seeded worlds. `--passes N` narrows it to the
-first N while you iterate; a figure quoted anywhere here is taken over the whole
-set, or at the first seed alone where the suite pins it, and each table says
-which. The game itself stays unseeded - a run nobody can predict is the point.
-
-## Terminal Requirements
-
-- **Minimum size**: 60 columns x 20 rows &mdash; the menu screens fit themselves to the height available, giving up spacing and then the per-mode descriptions rather than dropping a line off the bottom.
-- **In the browser**: the same 60x20 is the floor, and the page shrinks the font to reach it rather than letting the grid overrun the window. A window too small for 60x20 even at the smallest font shows a "Window too small!" notice instead of the game, as the CLI build does in a terminal it cannot fit; the run is left where it stood and the engine hum stops with it, so resizing back brings the same game up.
+- **Minimum size**: 60 columns x 20 rows. The browser holds the same floor and shrinks the font to reach it.
 - **Color support**: 256-color ANSI (most modern terminals)
 - **Unicode support**: Box-drawing and block element characters
 - **Recommended terminals**: Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty
 
-## How It Works
+## [How It Works](https://isocialpractice.github.io/cmd-space-rider/docs/how-it-works.html)
 
-### Terminal Version
+The terminal build draws through a custom double-buffered screen renderer built on raw ANSI escape codes, flushed to stdout as a single optimized write per frame. The browser build reproduces the same game as a canvas character grid, running identical game logic. Six things differ between them, each because the medium allows or demands it, and the [How It Works page](https://isocialpractice.github.io/cmd-space-rider/docs/how-it-works.html) sets out all six.
 
-The game uses a custom double-buffered screen renderer built on raw ANSI escape codes. Each frame, the screen buffer is populated with characters and colors, then flushed to stdout as a single optimized write. Input is handled via Node.js raw stdin mode. Terminals only provide key-press events, not key-release, so a key counts as held until its characters stop arriving, and the decay window is checked once per frame. Keys that act on the press rather than the hold get a longer window than the movement keys, so that the first character of an OS auto-repeat is not read as a second press. That single write is synchronous, so a terminal falling behind blocks it and the loop with it; the input layer tracks how long each frame took and discounts the time it was blocked, since a loop that was not reading is no evidence a key went quiet.
+## Documentation
 
-### Browser Version
+The full documentation is a [site](https://isocialpractice.github.io/cmd-space-rider/docs/) built from this README:
 
-The browser version (`index.html`) is a self-contained HTML file that faithfully reproduces the terminal game as a canvas-based character grid. Each character cell is drawn to an HTML5 Canvas using a monospace font, matching the exact same rendering pipeline: screen buffer, perspective projection, tunnel drawing, entity rendering, HUD, and menus. The grid dimensions adapt dynamically to the browser window size: the font is drawn at its full size wherever the window has room for at least the 60x20 the game is laid out against, and shrinks toward that floor in a window that does not, so every cell the buffer holds has somewhere on the canvas to be drawn. Keyboard input maps directly to the same control scheme. All game logic &mdash; collision detection, entity spawning, difficulty scaling, scoring, and debug modes &mdash; is identical to the CLI version.
+| Page | What it covers |
+|---|---|
+| [Quickstart](https://isocialpractice.github.io/cmd-space-rider/docs/quickstart.html) | The shortest path to flying |
+| [Features](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) | Everything the game does |
+| [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html) | Browser and terminal install |
+| [Usage (CLI)](https://isocialpractice.github.io/cmd-space-rider/docs/usage.html) | Controls, gameplay, debug modes |
+| [Project Structure](https://isocialpractice.github.io/cmd-space-rider/docs/project-structure.html) | Every file and what it holds |
+| [Development](https://isocialpractice.github.io/cmd-space-rider/docs/development.html) | Scripts, tests, probes |
+| [Terminal Requirements](https://isocialpractice.github.io/cmd-space-rider/docs/terminal-requirements.html) | Size, colour and Unicode support |
+| [How It Works](https://isocialpractice.github.io/cmd-space-rider/docs/how-it-works.html) | The two renderers |
+| [Cheatsheet](https://isocialpractice.github.io/cmd-space-rider/docs/cheatsheet.html) | Every key, flag and figure |
 
-Six things differ, each because the medium allows or demands it. High score persistence uses `localStorage`, which the terminal has no equivalent for, so the CLI version keeps a best score for the session only. The damage screen shake offsets the canvas by a few pixels in the browser, while the terminal has no subpixel positioning and jolts the play area by a whole character column instead. Sound is synthesized with the Web Audio API: the engine names the events either way, queueing a cue for the frame it has just simulated, and only the browser turns those names into tones. A cue is played only when the audio context is actually running: a browser that blocks sound until the page has been touched hands back a suspended one, and the cues raised meanwhile are dropped rather than queued, so a run opened straight from a `?mode=` link is silent until the first key and then plays from that moment on rather than releasing everything it missed. A browser that permits the sound outright &mdash; a returning player's high media engagement, or the site given a sound permission &mdash; hands back one already running, and the same link plays from its first frame. The CRT overlay is CSS laid over the canvas rather than anything drawn into the character grid, so `C` toggles it in the browser and it does not exist in the terminal. The colour scheme follows the system's own: a light desktop re-inks the palette the grid resolves through and repaints the page behind it, which a terminal has no say in, since there the colours are the terminal's. And a touchscreen gets a thumbstick and two buttons laid over the canvas, feeding the same two key maps the keyboard does &mdash; revealed on the first touch rather than on a capability check, because a laptop with a touchscreen is nearly always being driven by its keyboard.
+The site's look is recorded in [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

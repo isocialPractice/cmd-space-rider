@@ -1,5 +1,67 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- The documentation is now a site under `docs/`, published by GitHub Pages
+  alongside the game. The README had grown to 309 lines, past the 300-line
+  threshold the automation measures it against, so its seven level 2 sections
+  were split one to a page: Features, Getting Started, Usage (CLI), Project
+  Structure, Development, Terminal Requirements and How It Works. The text was
+  moved rather than rewritten - every word of those sections is carried into
+  the pages, checked word by word against the README as it stood before the
+  split - so nothing that was documented has been lost or shortened in the
+  move.
+- `QUICKSTART.md` and `CHEATSHEET.md`, both also site pages. The quickstart is
+  the shortest path to flying, in a browser or a terminal. The cheatsheet is
+  for someone who has already read the documentation and wants the keys, the
+  flags, the scripts and the figures on one screen.
+- `DESIGN_LANGUAGE.md`, recording where the site's look came from. Nothing in
+  it was invented: the palette is the game's own `base16` table, the light
+  theme is the game's own `LIGHT_INK` re-inking of it, and the geometry is read
+  off `icon.svg`, which holds seven shapes and not one curve - which is why
+  nothing on the site is rounded. Two values are not quoted from the game, and
+  both are named there with the reason: `GRAY` (8) reaches only 2.82:1 on black
+  and `LIGHT_INK[8]` only 3.06:1 on paper, so neither carries text, and muted
+  text uses a compliant tone in each scheme instead. Every text pair on the
+  site was measured and reaches at least 4.5:1.
+- `.nojekyll` at the published root, so nothing on the site is dropped for
+  beginning with an underscore.
+
+### Changed
+
+- `README.md` is now a front door rather than a manual: 116 lines and 6,815
+  characters, down from 309 and 23,059. Each section keeps a short stand-in -
+  the install block, the flag list, the five keys that matter, the npm scripts
+  - and its heading links to the page carrying the full text.
+
+### Fixed
+
+- The quickstart page split every wrapped list item in "How to survive" into a
+  bullet and a stray paragraph, so four of the six ended mid-sentence - a
+  bullet reading "has about a one" followed by a paragraph reading "in three
+  chance of dropping a powerup". The six items are one list again, each
+  carrying the whole of its sentence.
+- The site home claimed every figure in the documentation comes from a probe.
+  The probes back the measured figures in this repository's comments, tests and
+  changelog; the figures the pages quote - shield costs, point values, timings -
+  are constants in `src/types.ts` and `src/game.ts`. The sentence now says what
+  the probes actually cover, which is what the development page already said.
+- The README's structure tree named `docs/` and the Project Structure page it
+  links to did not list it, while the README claimed the page listed every file.
+  The page's tree now carries `docs/`, and the README claims only what the page
+  holds: every file under `src/` and `test/`.
+
+### Notes
+
+- The site needed no deploy workflow and none was added. This repository's
+  Pages source is the `main` branch root, which serves every path on the
+  branch, so `docs/` publishes on push and the game keeps the root URL. A
+  workflow would have been ignored rather than run. Whether to move Pages onto
+  Actions instead is queued as a roadmap item rather than done here, since
+  flipping the source on a working site can take it down.
+
 ## [0.7.0-alpha] - 2026-09-23
 
 ### Added

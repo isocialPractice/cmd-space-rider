@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home | CMD Space Rider</title>
+<meta name="description" content="A retro DOS-style terminal space tunnel game.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" data-open="false"><div class="nav-bar"><a class="brand" href="index.html"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 3 21 14 11 14Z" fill="var(--ship-hull)"/><rect x="13" y="14" width="6" height="9" fill="var(--ship-hull)"/><path d="M11 15 3 21 11 21Z" fill="var(--ship-wing)"/><path d="M21 15 29 21 21 21Z" fill="var(--ship-wing)"/><rect x="8" y="23" width="4" height="6" fill="var(--ship-engine)"/><rect x="20" y="23" width="4" height="6" fill="var(--ship-engine)"/></svg><span>Space Rider</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu">MENU</button><ul class="menu" id="menu"><li><a href="index.html">Home</a></li><li><a href="quickstart.html">Quickstart</a></li><li><a href="features.html">Features</a></li><li class="has-sub"><a href="getting-started.html">Getting Started</a><ul class="sub"><li><a href="getting-started.html#play-in-browser-no-install">Play in Browser</a></li><li><a href="getting-started.html#play-in-terminal">Play in Terminal</a></li></ul></li><li class="has-sub"><a href="usage.html">Usage</a><ul class="sub"><li><a href="usage.html#controls">Controls</a></li><li><a href="usage.html#gameplay">Gameplay</a></li><li><a href="usage.html#debug-modes">Debug Modes</a></li></ul></li><li class="has-sub"><a href="development.html">Development</a><ul class="sub"><li><a href="development.html#line-endings">Line Endings</a></li><li><a href="development.html#tests">Tests</a></li><li><a href="development.html#probes">Probes</a></li></ul></li><li class="has-sub"><button type="button" aria-expanded="false">Reference</button><ul class="sub"><li><a href="project-structure.html">Project Structure</a></li><li><a href="terminal-requirements.html">Terminal Requirements</a></li><li><a href="how-it-works.html">How It Works</a></li><li><a href="cheatsheet.html">Cheatsheet</a></li></ul></li></ul></div></nav>
+<div class="wrap">
+<main id="main">
+<h1>CMD Space Rider</h1>
+<p class="lede">A retro DOS-style terminal space tunnel game. Pilot your ship
+through an endless neon warp tunnel, dodge obstacles, collect energy orbs, and
+chase the high score &mdash; right in your command line or browser.</p>
+<p><code>Ctrl + click</code> to play <a href="https://isocialpractice.github.io/cmd-space-rider/">the game</a> in the browser,
+or read the <a href="quickstart.html">quickstart</a> to run it in a terminal.</p>
+<h2 id="start-here">Start here</h2>
+<div class="grid">
+<a class="card" href="quickstart.html"><h3>Quickstart</h3><p>The essentials, for
+getting it running now.</p></a>
+<a class="card" href="features.html"><h3>Features</h3><p>What the game does, in
+one list.</p></a>
+<a class="card" href="getting-started.html"><h3>Getting Started</h3><p>Play in a
+browser, or install and run from source.</p></a>
+<a class="card" href="usage.html"><h3>Usage</h3><p>Controls, gameplay, and the
+five debug scenarios.</p></a>
+<a class="card" href="development.html"><h3>Development</h3><p>Scripts, line
+endings, the test suite, and the probes.</p></a>
+<a class="card" href="cheatsheet.html"><h3>Cheatsheet</h3><p>Every key, flag and
+script on one page.</p></a>
+</div>
+<h2 id="what-it-is">What it is</h2>
+<p>The game runs two ways from one codebase. The terminal build is a Node CLI
+that draws a pseudo-3D tunnel with Unicode block elements and a 256-colour ANSI
+palette, with no graphical window involved. The browser build is a single
+self-contained <code>index.html</code> that reproduces the same game as a
+canvas-based character grid, with no build step, no server and no
+dependencies.</p>
+<p>The two are kept in agreement by the test suite rather than by hand:
+<code>test/parity.test.mjs</code> checks that both builds behave the same way,
+and the measured figures quoted in this repository's comments, tests and
+changelog come from a probe in <code>test/probes/</code> rather than from a
+scratch copy of the engine.</p>
+
+<div class="pager"><span></span><a href="quickstart.html">Quickstart &gt;&gt;</a></div>
+</main>
+</div>
+<footer>
+<p>CMD Space Rider is MIT licensed. <a href="https://github.com/isocialPractice/cmd-space-rider">Source on GitHub</a> &middot;
+<a href="https://isocialpractice.github.io/cmd-space-rider/">Play in the browser</a></p>
+<p class="muted">These pages are the project README, split into a site. The
+look is recorded in <code>DESIGN_LANGUAGE.md</code>.</p>
+</footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>
