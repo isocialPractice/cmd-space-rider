@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.1-alpha] - 2026-09-25
 
 ### Added
 
@@ -28,6 +28,25 @@
   site was measured and reaches at least 4.5:1.
 - `.nojekyll` at the published root, so nothing on the site is dropped for
   beginning with an underscore.
+- The touch overlay's geometry is pinned in `test/browser-shell.test.mjs`. Four
+  checks resolve the `#stick`, `#fire` and `#boost` rules the way a browser does
+  - `vw` and `vh` against the viewport, `aspect-ratio:1` taking the height off
+  the resolved width, `max-width` capping both - then walk eight device shapes:
+  two phones in portrait, four in landscape and a tablet each way. Each box is
+  converted to the character rows it covers and checked against the rows the HUD
+  and the footer own. Run against the rules as they stood before the fix below,
+  they reproduce that fault's measured figures exactly - 55.4px of gap at a
+  667px viewport, and the stick in row 19 of a 66x20 grid - which is how the
+  assertions were checked before being trusted.
+- `test/hud-row.test.mjs` covers the fourth thing drawn on the shared HUD row.
+  The file was written for three tenants - the combo counter left-aligned, the
+  debug label and the NEW BEST banner centred on it - and the warp banner has
+  since become a fourth, drawn after the counter and so the one that would cover
+  it. The counter and the banner are now walked together across the supported
+  widths at three chain lengths and two warp levels, and the both-builds check
+  covers three stagings rather than one. The margin held on arithmetic alone
+  until now: the counter ends at column 9, and an eighteen-column banner starts
+  at column 21 on the 60-column floor.
 
 ### Changed
 
@@ -35,6 +54,31 @@
   characters, down from 309 and 23,059. Each section keeps a short stand-in -
   the install block, the flag list, the five keys that matter, the npm scripts
   - and its heading links to the page carrying the full text.
+- The on-screen controls are anchored to the character grid rather than to the
+  window. `handleResize` publishes `--footerpx` - the band at the foot of the
+  viewport holding the footer's two rows and whatever the grid leaves unpainted
+  below them - and the three control rules read it. No viewport unit can know
+  how tall two character rows are, because that depends on the font the fitter
+  settled on.
+- `DESIGN_LANGUAGE.md` and `docs/assets/style.css` agree again. The stylesheet
+  opens by saying every value in it comes from the design file, and three things
+  had come apart: the light scheme declared an accent the light table had no row
+  for, it split the rule colour from the decoration colour while the table gave
+  one row for both, and three accent properties were declared in both schemes
+  and used nowhere. The light table now carries the two rows the dark table
+  already had, measured the same way - `#00757f` at 4.88:1 for rules, `#8a8a94`
+  at 3.06:1 for decoration - plus the warn accent at 4.07:1, held to decoration
+  in both schemes since the light value does not reach 4.5:1. The three unused
+  properties are gone from the stylesheet and from both tables, with a note
+  saying why: ten pages of prose have no success state, no error state and no
+  warp transition to colour.
+- Three sizes that were off the declared scales are on them or recorded as
+  exceptions. The lede moves from 18px to 20px, which is the type scale's own
+  step. The collapsed menu's height cap reads `--bar` - the fixed bar's height,
+  declared once as `--s7` plus its 2px border - rather than repeating `56px`.
+  The 10px dropdown caret stays as it is and is now recorded under Type as the
+  one size on the site below the scale's floor, because at 14px it reads as
+  another character of the button's label instead of as a caret.
 
 ### Fixed
 
@@ -52,6 +96,59 @@
   links to did not list it, while the README claimed the page listed every file.
   The page's tree now carries `docs/`, and the README claims only what the page
   holds: every file under `src/` and `test/`.
+- The on-screen controls covered the HUD and the footer on a phone held in
+  landscape, which is the orientation a 60x20 tunnel is widest in. BOOST's
+  offset was written as FIRE's width plus a gap, but `max-width` caps FIRE's
+  height at 118px and not the offset, so past a viewport of about 492px the gap
+  grew without bound: 7.5px at 375 wide, 55.4px at 667, 119.9px at 915 and
+  188.8px at 1180, by which point BOOST had floated to the top right corner and
+  onto the shield bar. Separately the stick and FIRE both sat at `6vh`, which is
+  under the footer's two character rows - 22.5px against 36px on a 375-high
+  viewport - so on a short viewport they covered the status strip carrying
+  `SPD`, the powerup badges and `MUTED`. Neither happens at any of the eight
+  shapes the tests now walk.
+- Four site pages opened on an `<h3>` below their `<h1>`, with no level 2
+  between. `usage.html`, `development.html`, `how-it-works.html` and
+  `getting-started.html` were made from README sections that had `###`
+  subsections, and carried that level through verbatim, so a screen reader
+  walking the outline read level 1 then level 3 - which is what WCAG 1.3.1 is
+  about - and the stylesheet drew the same rank of section two ways, since `h2`
+  carries a section rule and `h3` does not. On `getting-started.html`
+  "Prerequisites" landed on `h4`, which the stylesheet sets at 16px in
+  `--text-strong`: indistinguishable from a bold paragraph. Each of the four is
+  promoted one rank. The `id` attributes are untouched, and all 51 in-site
+  anchors were checked to still resolve.
+- Five links on `docs/quickstart.html` and `docs/cheatsheet.html` reached their
+  own siblings by deployed URL rather than by file name, so opening either page
+  from a clone with no network left the local copy. They came across from
+  `QUICKSTART.md` and `CHEATSHEET.md`, where the absolute form is right because
+  GitHub renders those files at another path: the two markdown files keep it,
+  and the pages are relative, as `DESIGN_LANGUAGE.md` says the site is
+  throughout.
+- `docs/getting-started.html` still gave `git clone <repository-url>`, the
+  placeholder the README carried before the split - on the one page the README's
+  install block sends a reader to for the rest of the detail. All three files
+  now give the same command.
+- `docs/project-structure.html` listed none of the files the site is made of:
+  `QUICKSTART.md`, `CHEATSHEET.md`, `DESIGN_LANGUAGE.md`, and `.nojekyll`, which
+  is the file the publish depends on. Its `docs/` entry did not open either, so
+  the stylesheet, the menu script and the site icon appeared nowhere. The root
+  block now carries the four files, and `docs/` is opened one level the way
+  `src/` and `test/` already were.
+- The `0.7.0-alpha` entry below said light mode re-inks 26 indices. `LIGHT_INK`
+  holds 24, and `C` names 24 colours at 24 distinct indices - which is what
+  `test/browser-shell.test.mjs` asserts - so the claim was right and only the
+  figure was wrong, which is the worse way round: a reader checking it against
+  the file finds a table that disagrees and no way to tell which is the error.
+- A comment in `test/powerups.test.mjs` explained the 20-unit tolerance on a
+  drop's z by a frame ordering that runs the other way round. `updatePowerups`
+  is called before `updateBullets`, and `dropPowerup` is called from inside
+  `updateBullets`, so a drop created on a frame is not drifted until the next
+  one. What the tolerance absorbs is one frame of the mine's own `advance`,
+  carried forward by `updateMines` before the bullet takes its last hit point.
+  The assertion was never wrong; the comment a later reader would use to judge
+  whether a tighter tolerance was safe was. The `dropPowerup` doc comment in
+  `src/game.ts` and `index.html` now says when a drop first moves.
 
 ### Notes
 
@@ -61,6 +158,11 @@
   workflow would have been ignored rather than run. Whether to move Pages onto
   Actions instead is queued as a roadmap item rather than done here, since
   flipping the source on a working site can take it down.
+- The first deploy is confirmed. GitHub's own branch build reports `built` at the
+  commit carrying `docs/`, and the site answers 200. Because Pages serves this
+  repository from the branch root rather than from Actions, the build is
+  GitHub's and `gh api .../pages/builds/latest` is what reports it; `gh run list`
+  has no workflow to report on here and its empty result is not a failure.
 
 ## [0.7.0-alpha] - 2026-09-23
 
@@ -154,7 +256,7 @@
 - The browser build follows the system colour scheme. Dark is the game's natural
   state and stays the default, including when the system says nothing:
   `themePalette` hands the dark scheme the base palette itself rather than a copy
-  that happens to agree. Light re-inks the 26 indices the game actually draws
+  that happens to agree. Light re-inks the 24 indices the game actually draws
   with - BLACK becomes the paper, BRIGHT_WHITE becomes the ink, and the tunnel's
   blues and cyans come down to dark blues and teals that read against white - and
   leaves the 216-colour cube and the grey ramp behind them as xterm defines them,

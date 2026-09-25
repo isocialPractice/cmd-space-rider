@@ -2,7 +2,7 @@
   "name": "cmd-space-rider",
   "displayName": "Space Rider",
   "description": "A retro DOS-style terminal space tunnel game. Pilot your ship through neon tunnels, dodge obstacles, collect energy orbs, and chase the high score \u2014 right in your command line.",
-  "version": "0.7.0-alpha",
+  "version": "0.7.1-alpha",
   "publisher": "isocialPractice",
   "license": "MIT",
   "homepage": "https://isocialpractice.github.io/cmd-space-rider/docs/",

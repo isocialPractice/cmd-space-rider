@@ -66,7 +66,7 @@ cmd-space-rider/
   package.json      # CLI tool manifest and dependencies
 ```
 
-Every file under `src/` and `test/` is listed on the [Project Structure page](https://isocialpractice.github.io/cmd-space-rider/docs/project-structure.html).
+Every file under `src/`, `test/` and `docs/` is listed on the [Project Structure page](https://isocialpractice.github.io/cmd-space-rider/docs/project-structure.html), with the root files the game and the site are built from.
 
 ## [Development](https://isocialpractice.github.io/cmd-space-rider/docs/development.html)
 

@@ -16,10 +16,7 @@
   --muted:       #8a8a8a;  /* grey ramp 245,      6.08:1   */
   --rule:        #00aaaa;  /* CYAN (6)                     */
   --edge:        #5555ff;  /* BRIGHT_BLUE (12), decoration */
-  --good:        #55ff55;  /* BRIGHT_GREEN (10)            */
   --warn:        #ffff55;  /* BRIGHT_YELLOW (11)           */
-  --bad:         #ff5555;  /* BRIGHT_RED (9)               */
-  --warp:        #ff55ff;  /* BRIGHT_MAGENTA (13)          */
 
   /* The brand ship, from icon.svg: nose and hull, wings, engine bells. */
   --ship-hull:   #55ffff;  /* BRIGHT_CYAN (14)             */
@@ -28,6 +25,11 @@
 
   --s1: 4px; --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+
+  /* The fixed bar's own height: --s7 of content box plus its 2px border. The
+     narrow menu hangs off the bottom of the bar and caps its height against
+     this, so the figure is declared here rather than restated as a literal. */
+  --bar: calc(var(--s7) + 2px);
 
   --mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
 }
@@ -46,10 +48,7 @@
     --muted:       #5f5f68;  /* compliant tone,     5.65:1   */
     --rule:        #00757f;  /* LIGHT_INK[14]                */
     --edge:        #8a8a94;  /* LIGHT_INK[8], decoration     */
-    --good:        #0a8a2c;  /* LIGHT_INK[10]                */
-    --warn:        #8f7300;  /* LIGHT_INK[11]                */
-    --bad:         #c11a1a;  /* LIGHT_INK[9]                 */
-    --warp:        #a81a9a;  /* LIGHT_INK[13]                */
+    --warn:        #8f7300;  /* LIGHT_INK[11], decoration    */
 
     /* Re-inked through the same indices the game re-inks: 14, 12 and 6. */
     --ship-hull:   #00757f;  /* LIGHT_INK[14]                */
@@ -158,7 +157,7 @@ strong, b { color: var(--text-strong); font-weight: 700; }
 a { color: var(--link); text-underline-offset: 3px; }
 a:hover, a:focus-visible { color: var(--text-strong); }
 
-.lede { font-size: 18px; color: var(--text-strong); }
+.lede { font-size: 20px; color: var(--text-strong); }
 .muted { color: var(--muted); font-size: 14px; }
 
 /* ===== Code ===== */
@@ -208,7 +207,7 @@ footer a { color: var(--link); }
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     flex-direction: column; align-items: stretch; gap: 0;
     background: var(--surface); border-bottom: 2px solid var(--rule);
-    padding: var(--s2); max-height: calc(100vh - 56px); overflow-y: auto;
+    padding: var(--s2); max-height: calc(100vh - var(--bar)); overflow-y: auto;
   }
   .nav[data-open="true"] .menu { display: flex; }
   .menu a, .has-sub > button { width: 100%; font-size: 16px; }

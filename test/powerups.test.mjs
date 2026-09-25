@@ -128,8 +128,12 @@ for (const build of BUILDS) {
           game.update(FRAME, {}, {});
           if (s.mines.length > 0 || s.powerups.length === 0) continue;
           const [drop] = s.powerups;
-          // It is dropped at the mine and then moved by the same frame, so the
-          // check is that it started there rather than that it is still there.
+          // The tolerance covers one frame of the mine's own advance:
+          // `updateMines` carries it forward before `updateBullets` takes its
+          // last hit point, while `where` is the position from before that
+          // frame. The drop itself has not moved at all - `updatePowerups`
+          // runs before `updateBullets`, so a drop created inside the latter
+          // is not drifted until the next frame.
           assert.ok(Math.abs(drop.z - where.z) < 20, `z ${drop.z} against ${where.z}`);
           assert.ok(Math.abs(drop.x - where.x) <= 2.5, `x ${drop.x} against ${where.x}`);
           return;

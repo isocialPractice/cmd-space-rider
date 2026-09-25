@@ -268,6 +268,11 @@ export class Game {
    * figure quoted off a flight taken before this existed will not reproduce
    * against a flight taken after it.
    *
+   * A drop is placed where the mine was when the bullet reached it, which is
+   * already one frame of `advance` past where the mine started that frame, and
+   * it does not move until the next one: `updatePowerups` has run by the time
+   * `updateBullets` calls this.
+   *
    * The collision-tracking scenarios get nothing. They are diagnostics rather
    * than scored runs - neither pays a combo either - and a pickup drifting
    * through one is a moving part in a screen that exists to count collisions.

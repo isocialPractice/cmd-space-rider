@@ -42,10 +42,7 @@ colour was picked against.
 | Muted text | `#8a8a8a` | grey ramp index 245 | 6.08:1 | passes |
 | Rules, borders | `#00aaaa` | `CYAN` (6) | 7.33:1 | passes |
 | Decoration only | `#5555ff` | `BRIGHT_BLUE` (12) | 4.13:1 | accents only |
-| Accent, good | `#55ff55` | `BRIGHT_GREEN` (10) | 15.82:1 | passes |
 | Accent, warn | `#ffff55` | `BRIGHT_YELLOW` (11) | 19.69:1 | passes |
-| Accent, bad | `#ff5555` | `BRIGHT_RED` (9) | 6.68:1 | passes |
-| Accent, warp | `#ff55ff` | `BRIGHT_MAGENTA` (13) | 8.00:1 | passes |
 
 Two exclusions, both measured rather than assumed:
 
@@ -70,22 +67,38 @@ colour `#f2f2f4`.
 | Headings | `#00565f` | `LIGHT_INK[6]` | 7.52:1 | passes |
 | Links | `#00757f` | `LIGHT_INK[14]` | 4.88:1 | passes |
 | Muted text | `#5f5f68` | compliant tone, see below | 5.65:1 | passes |
-| Rules, borders | `#8a8a94` | `LIGHT_INK[8]` | 3.06:1 | decoration only |
-| Accent, good | `#0a8a2c` | `LIGHT_INK[10]` | 4.01:1 | large text only |
-| Accent, bad | `#c11a1a` | `LIGHT_INK[9]` | 5.48:1 | passes |
-| Accent, warp | `#a81a9a` | `LIGHT_INK[13]` | 5.73:1 | passes |
+| Rules, borders | `#00757f` | `LIGHT_INK[14]` | 4.88:1 | passes |
+| Decoration only | `#8a8a94` | `LIGHT_INK[8]` | 3.06:1 | accents only |
+| Accent, warn | `#8f7300` | `LIGHT_INK[11]` | 4.07:1 | accents only |
 
-One substitution, for the same reason as the dark theme's:
+One substitution and one exclusion, on the same footing as the dark theme's:
 
 - **`LIGHT_INK[8]`, `#8a8a94`, reaches only 3.06:1 on paper.** It is the light
-  theme's grey and it cannot carry muted text, so it is kept for rules and
-  borders and muted text uses `#5f5f68`, which is the same hue taken down until
-  it passes. This is the one value on the site not quoted from the game, and it
-  exists because compliance wins over fidelity.
+  theme's grey and it cannot carry muted text, so it is kept for decoration -
+  the borders on code and table cells, and the rule above the footer - and
+  muted text uses `#5f5f68`, which is the same hue taken down until it passes.
+  This is the one value on the site not quoted from the game, and it exists
+  because compliance wins over fidelity.
+- **`LIGHT_INK[11]`, `#8f7300`, reaches only 4.07:1.** It is the one accent the
+  site uses, down the left edge of a blockquote, where it is a 4px rule and
+  carries no text. Its dark counterpart clears 4.5:1 comfortably and this one
+  does not, so the role is held to the stricter of the two: decoration in both
+  schemes.
+
+Unlike the dark theme, light splits the rule colour from the decoration colour
+the other way round: `LIGHT_INK[14]` is both the link and the rule, because the
+grey that would otherwise carry rules is the value that failed above.
 
 Body text on a raised surface is checked separately, since the surface is not
 the page: `#aaaaaa` on `#0a0a0c` is 8.51:1, and `#4a4a52` on `#ffffff` is
 8.78:1. Links on the light surface are 5.45:1.
+
+The game's remaining accents - `BRIGHT_GREEN`, `BRIGHT_RED` and
+`BRIGHT_MAGENTA`, with their `LIGHT_INK` counterparts - are deliberately not
+listed. Ten pages of prose have no success state, no error state and no warp
+transition to colour, so the stylesheet declares no property for them and these
+tables measure nothing that does not appear on a page. They are earning their
+keep in the game's own palette, which is where `index.html` records them.
 
 ## Geometry
 
@@ -121,6 +134,7 @@ on the 4px spacing grid as often as it can:
 | --- | --- | --- | --- |
 | Body | 16px | 400 | 1.65 |
 | Small, captions | 14px | 400 | 1.5 |
+| Lede | 20px | 400 | 1.65 |
 | `h4` | 16px | 700 | 1.3 |
 | `h3` | 20px | 700 | 1.3 |
 | `h2` | 25px | 700 | 1.25 |
@@ -130,11 +144,25 @@ Body line height is 1.65 rather than the tighter figure a monospace face is
 usually given, because the pages carry long explanatory paragraphs moved out of
 the README rather than code.
 
+One size on the site is off this scale, and it is the only one:
+
+- **The dropdown caret is 10px.** It is the `v` and `^` the menu buttons draw
+  after their label, and it is decoration rather than text - at the scale's 14px
+  floor it reads as one more character of the label instead of as a caret. It
+  carries nothing the button's `aria-expanded` does not already carry, so no
+  reader depends on its size.
+
 ## Layout
 
 - **Fixed top menu**, so it stays reachable while reading. The site has ten
   pages, which is the "few pages" case: a top bar with dropdowns onto the
   in-page anchors of the longer pages, rather than a side menu.
+- **The bar's height is declared once**, as `--bar`: `--s7` of content box plus
+  its own 2px border, so it stays on the spacing scale. The collapsed menu hangs
+  off the bottom of the bar and caps itself at `calc(100vh - var(--bar))`, so a
+  ten-page menu on a short phone scrolls inside the viewport rather than running
+  off the end of it. Reading the bar rather than repeating its height is what
+  keeps the two from drifting apart.
 - **Responsive from a phone to a wide desktop.** The menu collapses behind a
   button under 860px, and the content column is capped at 80ch so a line of
   monospace text stays readable on a wide screen.

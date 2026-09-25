@@ -16,7 +16,7 @@
 <main id="main">
 <h1>Project Structure</h1>
 <pre><code>cmd-space-rider/
-  index.html        # Browser version (canvas terminal emulator, zero dependencies)
+  index.html          # Browser version (canvas terminal emulator, zero dependencies)
   src/
     index.ts        # CLI entry point, terminal setup, main loop
     input.ts        # Key tables, raw stdin decoding, and key decay windows
@@ -43,12 +43,30 @@
     browser-shell.test.mjs      # Colour scheme, touch controls, and the favicon
     pulse-cannon.test.mjs       # Where shots go and what they register against
     parity.test.mjs             # Both builds agree
-  docs/             # This project's documentation site
-  hero.png          # Hero banner graphic
-  icon.svg          # Ship icon, inlined into index.html as the favicon
-  .gitattributes    # Line endings: LF, in the index and the working tree
-  package.json      # CLI tool manifest and dependencies
-  tsconfig.json     # TypeScript configuration</code></pre>
+  docs/               # This project's documentation site
+    index.html                  # Site home
+    quickstart.html             # QUICKSTART.md as a page
+    features.html               # What a run has in it
+    getting-started.html        # Install and run, browser and terminal
+    usage.html                  # Controls, gameplay, and the debug modes
+    development.html            # Line endings, tests, and probes
+    project-structure.html      # This page
+    terminal-requirements.html  # What a terminal needs to draw the game
+    how-it-works.html           # How both builds are put together
+    cheatsheet.html             # CHEATSHEET.md as a page
+    assets/
+      style.css                 # The whole site, both colour schemes
+      docs.js                   # The nav menu and its dropdowns
+      icon.svg                  # The ship icon, as the site favicon
+  hero.png            # Hero banner graphic
+  icon.svg            # Ship icon, inlined into index.html as the favicon
+  QUICKSTART.md       # The shortest path to a run, and the page made from it
+  CHEATSHEET.md       # Every key and HUD field on one page
+  DESIGN_LANGUAGE.md  # The site's look: colours, type, spacing, and layout
+  .gitattributes      # Line endings: LF, in the index and the working tree
+  .nojekyll           # Serves the branch as-is; without it GitHub runs Jekyll
+  package.json        # CLI tool manifest and dependencies
+  tsconfig.json       # TypeScript configuration</code></pre>
 <div class="pager"><a href="usage.html">&lt;&lt; Usage (CLI)</a><a href="development.html">Development &gt;&gt;</a></div>
 </main>
 </div>

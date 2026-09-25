@@ -207,6 +207,186 @@ test('a drag on the controls cannot scroll or zoom the page', () => {
   assert.match(html, /#stick,#fire,#boost\{[^}]*touch-action:none/s);
 });
 
+// ----- Where the controls sit -----
+//
+// The overlay is laid out in CSS and the grid underneath it is laid out by
+// fitGrid, so nothing in either file alone can say whether the two agree. What
+// follows resolves the three rules the way a browser would - vw and vh against
+// the viewport, aspect-ratio:1 taking the height off the resolved width, and
+// max-width capping both - then converts each box to the character rows it
+// covers and checks it against the rows the HUD and the footer own.
+//
+// Browser only, like the rest of this file: a terminal has no overlay, so
+// test/parity.test.mjs has nothing to pair this with.
+
+// Comments are stripped first: they sit between rules, so an uncommented
+// parser reads one into the following rule's selector list and the rule then
+// matches nothing.
+const STYLE = html
+  .slice(html.indexOf('<style>'), html.indexOf('</style>'))
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * The declarations that apply to a bare `#id`, later rules winning as the
+ * cascade has them. Selectors are matched whole, so `#fire.on` and
+ * `body.light #fire` - which carry only colours - are correctly left out.
+ */
+function declarationsFor(id) {
+  const out = {};
+  const rule = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = rule.exec(STYLE))) {
+    if (!m[1].split(',').map((sel) => sel.trim()).includes(`#${id}`)) continue;
+    for (const decl of m[2].split(';')) {
+      const at = decl.indexOf(':');
+      if (at < 0) continue;
+      out[decl.slice(0, at).trim()] = decl.slice(at + 1).trim();
+    }
+  }
+  return out;
+}
+
+/** Resolve a CSS length against a viewport, in device pixels. */
+function lengthPx(value, vp, what) {
+  const expr = value.trim()
+    .replace(/var\(--footerpx[^)]*\)/g, `${vp.footerPx}`)
+    .replace(/\bcalc\(/g, '(')
+    .replace(/\bmin\(/g, 'Math.min(')
+    .replace(/\bmax\(/g, 'Math.max(')
+    .replace(/(-?[\d.]+)vw/g, (_, n) => `(${n} * ${vp.w} / 100)`)
+    .replace(/(-?[\d.]+)vh/g, (_, n) => `(${n} * ${vp.h} / 100)`)
+    .replace(/(-?[\d.]+)px/g, '$1');
+  // Nothing but arithmetic is ever evaluated: an unresolved unit, or a var()
+  // this harness does not know about, leaves a name behind and fails here
+  // rather than quietly resolving to something plausible.
+  assert.match(
+    expr.replace(/Math\.(min|max)/g, ''),
+    /^[-+*/(),.\s\d]+$/,
+    `${what} carries a length this test cannot resolve: ${value}`
+  );
+  return Function(`"use strict";return (${expr});`)();
+}
+
+/** The box one control occupies, in device pixels from the viewport's top left. */
+function boxOf(id, vp) {
+  const d = declarationsFor(id);
+  assert.equal(d['aspect-ratio'], '1', `#${id} takes its height off its width`);
+
+  let w = lengthPx(d.width, vp, `#${id}`);
+  if (d['max-width']) w = Math.min(w, lengthPx(d['max-width'], vp, `#${id}`));
+  // aspect-ratio:1 makes the height the used width, and max-height caps it the
+  // same way max-width caps the width.
+  let h = w;
+  if (d['max-height']) h = Math.min(h, lengthPx(d['max-height'], vp, `#${id}`));
+
+  const bottomOffset = lengthPx(d.bottom, vp, `#${id}`);
+  const left = d.left !== undefined
+    ? lengthPx(d.left, vp, `#${id}`)
+    : vp.w - lengthPx(d.right, vp, `#${id}`) - w;
+
+  return {
+    id, w, h,
+    left, right: left + w,
+    top: vp.h - bottomOffset - h, bottom: vp.h - bottomOffset,
+  };
+}
+
+/** A cell the size Courier New draws at a given font size, near enough. */
+const modelCell = (size) => ({ w: Math.max(1, Math.ceil(size * 0.6)), h: size + browser.CELL_LEADING });
+
+/**
+ * Viewports the overlay is walked over: two phones in portrait, four phones in
+ * landscape, and a tablet each way. The landscape shapes are the ones the fault
+ * was measured on - a 60x20 tunnel is widest on a phone held sideways, which is
+ * the orientation the viewport-unit offsets came apart at.
+ */
+const SHAPES = [
+  { w: 375, h: 667 }, { w: 412, h: 915 },
+  { w: 667, h: 375 }, { w: 740, h: 360 },
+  { w: 915, h: 412 }, { w: 932, h: 430 },
+  { w: 820, h: 1180 }, { w: 1180, h: 820 },
+];
+
+/** The grid and the derived custom property one viewport resolves to. */
+function viewport(shape) {
+  const grid = browser.fitGrid(shape.w, shape.h, modelCell);
+  return {
+    ...shape,
+    grid,
+    // What handleResize publishes: the band at the foot of the viewport
+    // holding the footer's rows and whatever the grid leaves unpainted below
+    // them. A vh constant cannot know either figure.
+    footerPx: shape.h - (grid.rows - browser.FOOTER_ROWS) * grid.cellH,
+  };
+}
+
+/** The character rows a box covers, clamped to the grid. */
+function rowsOf(box, vp) {
+  const last = vp.grid.rows - 1;
+  const clamp = (row) => Math.min(last, Math.max(0, row));
+  return {
+    first: clamp(Math.floor(box.top / vp.grid.cellH)),
+    last: clamp(Math.floor((box.bottom - 1) / vp.grid.cellH)),
+  };
+}
+
+test('browser: BOOST sits just above FIRE at every shape', () => {
+  // The offset was written as FIRE's width plus a gap, but max-width caps
+  // FIRE's height and not the offset, so past a viewport of about 492px the
+  // two came apart and BOOST floated off towards the top right corner.
+  for (const shape of SHAPES) {
+    const vp = viewport(shape);
+    const fire = boxOf('fire', vp);
+    const boost = boxOf('boost', vp);
+    const gap = fire.top - boost.bottom;
+    assert.ok(gap >= 0, `${shape.w}x${shape.h}: BOOST overlaps FIRE by ${(-gap).toFixed(1)}px`);
+    assert.ok(
+      gap <= 3 * shape.w / 100,
+      `${shape.w}x${shape.h}: BOOST leaves ${gap.toFixed(1)}px above FIRE, over 3vw`
+    );
+  }
+});
+
+test('browser: no control reaches the HUD rows or the footer rows', () => {
+  // The controls sat at a viewport-unit offset while the footer is two
+  // character rows tall, so on any short viewport they covered the status
+  // strip carrying SPD, the powerup badges and MUTED.
+  for (const shape of SHAPES) {
+    const vp = viewport(shape);
+    const lastPlayable = vp.grid.rows - 1 - browser.FOOTER_ROWS;
+    const where = `${shape.w}x${shape.h} (${vp.grid.cols}x${vp.grid.rows})`;
+    for (const id of ['stick', 'fire', 'boost']) {
+      const { first, last } = rowsOf(boxOf(id, vp), vp);
+      assert.ok(first >= browser.HUD_ROWS, `${where}: #${id} reaches row ${first}, in the HUD`);
+      assert.ok(last <= lastPlayable, `${where}: #${id} reaches row ${last}, in the footer`);
+    }
+  }
+});
+
+test('browser: every control stays inside the viewport', () => {
+  for (const shape of SHAPES) {
+    const vp = viewport(shape);
+    for (const id of ['stick', 'fire', 'boost']) {
+      const box = boxOf(id, vp);
+      assert.ok(box.left >= 0 && box.right <= shape.w, `${shape.w}x${shape.h}: #${id} off the sides`);
+      assert.ok(box.top >= 0 && box.bottom <= shape.h, `${shape.w}x${shape.h}: #${id} off the ends`);
+    }
+  }
+});
+
+test('browser: the controls are anchored to the grid, not to the viewport', () => {
+  // The offset has to know how tall the footer is, and only the fitter knows
+  // that, so handleResize publishes it and the three rules read it back.
+  assert.match(html, /setProperty\(\s*'--footerpx'/);
+  for (const id of ['stick', 'fire', 'boost']) {
+    assert.match(
+      declarationsFor(id).bottom,
+      /var\(--footerpx/,
+      `#${id} reads the footer band rather than a vh constant`
+    );
+  }
+});
+
 // ----- The favicon -----
 
 test('the tab carries the ship icon, inline', () => {

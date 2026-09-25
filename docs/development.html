@@ -26,14 +26,14 @@ npm run probe      # Build, then run a measurement probe</code></pre>
 <pre><code>npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
 npm run probe -- free-flight --passes 2</code></pre>
-<h3 id="line-endings">Line Endings</h3>
+<h2 id="line-endings">Line Endings</h2>
 <p>Everything in the repository is LF, pinned by <code>.gitattributes</code> rather than left to whichever editor writes a file last. Git normalizes on the way into the index, so an editor that writes CRLF still commits LF and a diff stays the size of the change rather than the size of the file. The file is tracked, so a clone needs nothing configured.</p>
 <p>Adding a new dotfile is the one thing that can need a local step. A global excludes file of the <code>.*</code> kind will hide it, and how you find out depends on how you staged it: <code>git add &lt;file&gt;</code> names the path, so git refuses it out loud and points at <code>-f</code>, while a bulk <code>git add .</code> or <code>git add -A</code> passes over it without a word. The quiet case is the one to watch for - if a dotfile you thought you staged never appears in <code>git status</code>, check it with <code>git check-ignore -v --no-index &lt;file&gt;</code> and stage it with <code>git add -f &lt;file&gt;</code>.</p>
-<h3 id="tests">Tests</h3>
+<h2 id="tests">Tests</h2>
 <p>The suite uses the Node built-in test runner and adds no dependencies. It covers both builds and the agreement between them.</p>
 <p>The terminal tests import the compiled output from <code>out/</code>, which is why <code>npm test</code> builds first. The browser build is a single self-contained <code>index.html</code> with no module boundary to import, so those tests read the file and evaluate its inline script up to the point where it starts touching the DOM. Everything above that line is game logic and rendering, which is what gets exercised.</p>
 <p>The pulse cannon checks run at three grid sizes rather than one: the 80x24 a terminal opens at, the 60x20 floor a small browser window is clamped to, and the 205x50 a full-screen window gives at the default font. The hit test is not size-neutral - a row is worth about two world units of height at 80x24 and about one at 205x50 - so a check pinned at one size can pass while the game a player sees misses.</p>
-<h3 id="probes">Probes</h3>
+<h2 id="probes">Probes</h2>
 <p>A probe reports; it never asserts. The figures quoted in comments, tests and the changelog come from <code>test/probes/</code>, so a number can be rebuilt from the repository rather than taken on trust, and a number moving is something you read rather than a build that fails. Each probe prints its own method - the grid, the placement walk, the ship heights, the band and the frame rate - above its table.</p>
 <p>Probes and tests fly the same engagement, out of <code>test/engagement.mjs</code>, and both run against the two real engines. A figure taken off a scratch copy of the engine can be right about the copy and wrong about the game.</p>
 <p>Most of them stage that engagement - one target parked in an emptied run, the ship steered onto it - which isolates the shot, and is not the shape a fault turns up in. <code>free-flight</code> is the other end: a run the engine opens for itself, sixty obstacles in the tunnel and volleys overlapping, watched frame by frame, with the walk over the firing columns no flown engagement ever reaches printed underneath it.</p>

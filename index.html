@@ -56,7 +56,14 @@ body.crt #crt{opacity:1}
   border:2px solid rgba(85,255,255,.55);background:rgba(0,32,40,.35);
   color:#55ffff;display:flex;align-items:center;justify-content:center;
 }
-#stick{left:5vw;bottom:6vh;width:34vw;max-width:170px;aspect-ratio:1;border-radius:50%}
+/* The bottom offset is the footer's own band rather than a vh constant. The
+   footer is FOOTER_ROWS character rows tall, and how tall a row is depends
+   on the font the fitter settled on, so no viewport unit can know it -
+   handleResize measures it and publishes --footerpx for these rules. On a
+   phone held in landscape a 6vh offset was under two rows, and the stick and
+   FIRE covered the status strip carrying SPD, the badges and MUTED. */
+#stick{left:5vw;bottom:calc(var(--footerpx,36px) + 1vh);
+  width:34vw;max-width:170px;aspect-ratio:1;border-radius:50%}
 #nub{
   width:38%;height:38%;border-radius:50%;
   background:rgba(85,255,255,.45);
@@ -64,8 +71,13 @@ body.crt #crt{opacity:1}
   transform:translate(0,0);
 }
 #fire,#boost{right:5vw;width:24vw;max-width:118px;aspect-ratio:1;border-radius:50%}
-#fire{bottom:6vh}
-#boost{bottom:calc(6vh + 26vw);max-height:118px;
+#fire{bottom:calc(var(--footerpx,36px) + 1vh)}
+/* BOOST stands on FIRE's real height, which max-width caps at 118px, plus a
+   2vw gap. The offset used to be 26vw - FIRE's width plus the gap - which
+   tracked the height only while it was still 24vw: past a viewport of about
+   492px the offset kept growing, the height did not, and BOOST drifted off
+   towards the top right corner and onto the HUD. */
+#boost{bottom:calc(var(--footerpx,36px) + 1vh + min(24vw,118px) + 2vw);max-height:118px;
   border-color:rgba(255,85,255,.55);color:#ff55ff;background:rgba(40,0,40,.35)}
 #stick.on,#fire.on,#boost.on{background:rgba(85,255,255,.3);border-color:#55ffff}
 #boost.on{background:rgba(255,85,255,.3);border-color:#ff55ff}
@@ -623,6 +635,11 @@ class Game{
   // test/engagement.mjs seeds for and it stays reproducible, but a figure quoted
   // off a flight taken before this existed will not reproduce against one taken
   // after it.
+  //
+  // A drop is placed where the mine was when the bullet reached it, which is
+  // already one frame of advance past where the mine started that frame, and it
+  // does not move until the next one: updatePowerups has run by the time
+  // updateBullets calls this.
   //
   // The collision-tracking scenarios get nothing. They are diagnostics rather
   // than scored runs - neither pays a combo either - and a pickup drifting
@@ -2229,6 +2246,12 @@ function handleResize(){
   game.initStars(termWidth,termHeight);
   game.state.screenWidth=termWidth;
   game.state.screenHeight=termHeight;
+  // What the touch overlay anchors to: the band at the foot of the viewport
+  // holding the footer's rows and whatever the grid leaves unpainted below
+  // them. Both depend on the font this fit settled on, so the CSS is told
+  // rather than left to guess in viewport units.
+  document.documentElement.style.setProperty(
+    '--footerpx',(canvas.height-(termHeight-FOOTER_ROWS)*cellH)+'px');
 }
 
 window.addEventListener('resize',handleResize);
