@@ -51,6 +51,36 @@ body.crt #crt{opacity:1}
   -webkit-user-select:none;user-select:none;
 }
 #touch[hidden]{display:none}
+/* How big the controls are drawn, declared once here because two rules read
+   each figure: --ctl is both FIRE's size and the height BOOST's offset stands
+   on, and writing that offset as a second copy of the size is what put BOOST
+   on the HUD the first time.
+
+   Three caps, because three different things bound a control. A share of the
+   screen wide enough for a thumb. A pixel ceiling, past which it is not worth
+   drawing any larger. And the room actually available, which is the one that
+   was missing: what the controls cost - for FIRE and BOOST, two of them and
+   the 2vw gap between them - was driven by how wide the viewport is, while the
+   room for them is driven by how tall it is, so on anything short and wide
+   they outgrew the playable band and BOOST climbed back onto the shield bar.
+
+   No viewport unit can bound that. The band is a whole number of character
+   rows at whatever font the fitter settled on, so handleResize publishes it as
+   --playpx and each size is solved out of it: whatever is left of the band
+   once the 1vh offset and the gap are taken, shared between however many
+   controls stand in it.
+
+   The 8px is clearance. Solved exactly, the top edge lands on the HUD's bottom
+   edge and sub-pixel rounding decides which side of it the first row falls;
+   8px is a little under half a character row at the default font, so the
+   control clears the shield bar rather than touching it. The fallbacks are
+   what these resolve to if the property never arrives, and they are
+   deliberately large: the two viewport caps then win and the controls lay out
+   as they always did, rather than collapsing to nothing. */
+:root{
+  --ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2));
+  --stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px));
+}
 #stick,#fire,#boost{
   position:absolute;pointer-events:auto;touch-action:none;
   border:2px solid rgba(85,255,255,.55);background:rgba(0,32,40,.35);
@@ -63,21 +93,21 @@ body.crt #crt{opacity:1}
    phone held in landscape a 6vh offset was under two rows, and the stick and
    FIRE covered the status strip carrying SPD, the badges and MUTED. */
 #stick{left:5vw;bottom:calc(var(--footerpx,36px) + 1vh);
-  width:34vw;max-width:170px;aspect-ratio:1;border-radius:50%}
+  width:var(--stick);aspect-ratio:1;border-radius:50%}
 #nub{
   width:38%;height:38%;border-radius:50%;
   background:rgba(85,255,255,.45);
   /* Centred by the flex parent, then offset by the live reading. */
   transform:translate(0,0);
 }
-#fire,#boost{right:5vw;width:24vw;max-width:118px;aspect-ratio:1;border-radius:50%}
+#fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%}
 #fire{bottom:calc(var(--footerpx,36px) + 1vh)}
-/* BOOST stands on FIRE's real height, which max-width caps at 118px, plus a
-   2vw gap. The offset used to be 26vw - FIRE's width plus the gap - which
-   tracked the height only while it was still 24vw: past a viewport of about
-   492px the offset kept growing, the height did not, and BOOST drifted off
-   towards the top right corner and onto the HUD. */
-#boost{bottom:calc(var(--footerpx,36px) + 1vh + min(24vw,118px) + 2vw);max-height:118px;
+/* BOOST stands on FIRE's real height plus a 2vw gap - the same --ctl, not a
+   restatement of it. The offset used to be 26vw, FIRE's width plus the gap,
+   which tracked the height only while it was still 24vw: past a viewport of
+   about 492px the offset kept growing, the height did not, and BOOST drifted
+   off towards the top right corner and onto the HUD. */
+#boost{bottom:calc(var(--footerpx,36px) + 1vh + var(--ctl) + 2vw);
   border-color:rgba(255,85,255,.55);color:#ff55ff;background:rgba(40,0,40,.35)}
 #stick.on,#fire.on,#boost.on{background:rgba(85,255,255,.3);border-color:#55ffff}
 #boost.on{background:rgba(255,85,255,.3);border-color:#ff55ff}
@@ -2036,6 +2066,37 @@ function renderTooSmall(screen){
   screen.putStringCenter(mid+1,TOO_SMALL_HINT,C.WHITE,C.BLACK);
 }
 
+/**
+ * The band at the foot of the viewport the touch overlay anchors to: the
+ * footer's own character rows, plus whatever the grid leaves unpainted below
+ * them, in pixels.
+ *
+ * Both halves depend on the font the fit settled on, so no viewport unit can
+ * know either - fitGrid floors the row count, so a viewport is almost never a
+ * whole number of cells and the remainder sits below the last row. Lifted out
+ * of handleResize, which only publishes what this returns, because that
+ * function is below the DOM marker and nothing in the suite can execute it.
+ */
+function footerBandPx(grid,viewportH){
+  return viewportH-(grid.rows-FOOTER_ROWS)*grid.cellH;
+}
+
+/**
+ * The band the game is played in, in pixels: the rows between the HUD at the
+ * top and the footer at the bottom. This is the room the touch overlay has to
+ * fit in, and the figure the controls are sized against.
+ *
+ * Published as well as the footer's band because the two answer different
+ * questions. --footerpx says where the overlay starts; --playpx says how much
+ * of the screen it may take. Sizing the controls in viewport units answered
+ * neither: what a control costs is driven by how wide the viewport is, while
+ * the room for it is driven by how tall the viewport is, so the two came apart
+ * on anything short and wide.
+ */
+function playBandPx(grid){
+  return (grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH;
+}
+
 // ===== Touch controls =====
 // A phone has no keyboard, so the browser build grows a thumbstick and two
 // buttons when it finds itself on one. The stick reading is arithmetic and
@@ -2246,12 +2307,12 @@ function handleResize(){
   game.initStars(termWidth,termHeight);
   game.state.screenWidth=termWidth;
   game.state.screenHeight=termHeight;
-  // What the touch overlay anchors to: the band at the foot of the viewport
-  // holding the footer's rows and whatever the grid leaves unpainted below
-  // them. Both depend on the font this fit settled on, so the CSS is told
-  // rather than left to guess in viewport units.
-  document.documentElement.style.setProperty(
-    '--footerpx',(canvas.height-(termHeight-FOOTER_ROWS)*cellH)+'px');
+  // What the touch overlay anchors to. The figure itself is footerBandPx,
+  // above the DOM marker where the suite can reach it; this line only hands
+  // it to the CSS, which cannot work it out in viewport units.
+  const root=document.documentElement.style;
+  root.setProperty('--footerpx',footerBandPx(grid,canvas.height)+'px');
+  root.setProperty('--playpx',playBandPx(grid)+'px');
 }
 
 window.addEventListener('resize',handleResize);

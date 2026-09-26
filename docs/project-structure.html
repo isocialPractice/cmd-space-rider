@@ -29,6 +29,13 @@
     helpers.mjs                 # Shared test rigging
     engagement.mjs              # One pulse cannon engagement, at any grid
     probes/                     # Figures the comments and tests quote, reported
+      run.mjs                   # The probe rig: runs one probe against both builds
+      column.mjs                # Volley spread, column creep, and the far band's kills
+      frame-rate.mjs            # Whether a shot resolves the same at any frame length
+      free-flight.mjs           # Screen against register, in a run nobody staged
+      seen-versus-kill.mjs      # Kills with no tracer, and tracers with no kill
+      suite-replay.mjs          # The suite's own bands, replayed at a given grid
+      overlay-anchor.mjs        # Viewports the touch overlay is placed wrongly on
     browser-engine.test.mjs     # Browser build behaviour
     terminal-engine.test.mjs    # Terminal build behaviour
     input.test.mjs              # Terminal input decoding and key repeat

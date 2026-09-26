@@ -917,3 +917,74 @@ still be found by name.
     `src/game.ts` and `index.html` while there, which says a drop costs the seed
     a draw but says nothing about when the drop first moves.
   - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+
+## Archived 09-26-26
+
+- [x] The clone command is a placeholder on the page the README sends readers to
+  - **Issue**: `docs/getting-started.html` still carries `git clone
+    <repository-url>` under "Install from source", which is what the README
+    said before the split. The trimmed `README.md` and `QUICKSTART.md` both now
+    give `git clone https://github.com/isocialPractice/cmd-space-rider.git`, and
+    the README's own line under that block reads "See Getting Started for the
+    browser debug parameters and the rest" - so a reader who follows the link
+    for more detail lands on the one copy of the command that cannot be pasted.
+  - **Goal**: Put the real URL on the page, matching `README.md` and
+    `QUICKSTART.md`. Three files then give the same command.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+- [x] The project structure page does not list the files the site is made of
+  - **Issue**: `docs/project-structure.html` lists `.gitattributes` among the
+    root files but none of what this run added beside it: `QUICKSTART.md`,
+    `CHEATSHEET.md`, `DESIGN_LANGUAGE.md`, and `.nojekyll` - which is the file
+    the publish depends on, since without it GitHub runs the branch through
+    Jekyll. The tree's `docs/` entry says only "This project's documentation
+    site" and does not open, so `assets/style.css`, `assets/docs.js` and
+    `assets/icon.svg` appear nowhere either. Someone reading the page to learn
+    what is in the repository comes away without the four files that put the
+    page in front of them.
+  - **Goal**: Add the three markdown files and `.nojekyll` to the root block,
+    each with the one-line comment the other entries carry, and open `docs/`
+    one level the way `src/` and `test/` are opened. `README.md`,
+    `CHANGELOG.md`, `TODO.md` and `LICENSE` were never in this tree and are not
+    part of this.
+  - From: Code Review Override - the HUD row's fourth tenant and two figures that do not hold
+- [x] Heading Rank 1
+  - **Issue**: The four pages made from a README section that had `###`
+    subsections carry that level through verbatim, so the first heading below
+    `<h1>` on each is an `<h3>`: `docs/usage.html` (Controls, Gameplay, Debug
+    Modes), `docs/development.html` (Line Endings, Tests, Probes),
+    `docs/how-it-works.html` (Terminal Version, Browser Version) and
+    `docs/getting-started.html`, which then goes on to `<h4>` for
+    Prerequisites, Install from source and Run the game. The three pages not
+    made that way - `index.html`, `quickstart.html`, `cheatsheet.html` - use
+    `<h2>` for the same rank. Two failures follow. A screen reader walking the
+    heading outline of `usage.html` reads level 1 then level 3 with no level 2
+    between them, which is what WCAG 1.3.1 is about. And the stylesheet gives
+    `h2` a section rule - `border-bottom: 1px solid var(--rule)`, 25px - that
+    `h3` does not have, so the same rank of section is drawn one way on
+    Quickstart and another on Usage. On `getting-started.html` "Prerequisites"
+    lands on `h4`, which the stylesheet sets at 16px in `--text-strong`:
+    identical to a bold paragraph.
+  - **Goal**: Promote `h3` to `h2` and `h4` to `h3` in those four pages. The
+    `id` attributes stay as they are, so the six dropdown anchors in the shared
+    nav keep resolving - check that they still do. Nothing else on the site
+    moves.
+  - From: Create and Deploy GitHub Pages Override
+- [x] Site Link Form 1
+  - **Issue**: `docs/quickstart.html` and `docs/cheatsheet.html` link to their
+    own siblings by absolute deployed URL rather than by file name - five
+    `href="https://isocialpractice.github.io/cmd-space-rider/docs/..."` between
+    them, reaching the site home, `usage.html`, `cheatsheet.html` and
+    `development.html`. They came across from `QUICKSTART.md` and
+    `CHEATSHEET.md`, where the absolute form is right because GitHub renders
+    those files at a different path. On the pages it contradicts
+    `DESIGN_LANGUAGE.md`, which declares under **Layout**: "Relative links
+    throughout. The site is served from `/cmd-space-rider/docs/` rather than
+    from a domain root, so absolute paths would break. Relative links also mean
+    the pages open correctly straight off the filesystem." Open
+    `docs/quickstart.html` from a clone with no network and every one of those
+    five leaves the local copy; the other eight pages have no such link.
+  - **Goal**: Make the five relative - `index.html`, `usage.html`,
+    `cheatsheet.html`, `development.html` - matching every other in-site link
+    on the site. Leave `QUICKSTART.md` and `CHEATSHEET.md` absolute: they are
+    read on GitHub, where relative would be wrong.
+  - From: Create and Deploy GitHub Pages Override

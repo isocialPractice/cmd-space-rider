@@ -227,16 +227,16 @@ const STYLE = html
   .replace(/\/\*[\s\S]*?\*\//g, '');
 
 /**
- * The declarations that apply to a bare `#id`, later rules winning as the
+ * The declarations that apply to a bare selector, later rules winning as the
  * cascade has them. Selectors are matched whole, so `#fire.on` and
  * `body.light #fire` - which carry only colours - are correctly left out.
  */
-function declarationsFor(id) {
+function declarationsFor(selector) {
   const out = {};
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   let m;
   while ((m = rule.exec(STYLE))) {
-    if (!m[1].split(',').map((sel) => sel.trim()).includes(`#${id}`)) continue;
+    if (!m[1].split(',').map((sel) => sel.trim()).includes(selector)) continue;
     for (const decl of m[2].split(';')) {
       const at = decl.indexOf(':');
       if (at < 0) continue;
@@ -246,10 +246,40 @@ function declarationsFor(id) {
   return out;
 }
 
+/**
+ * The custom properties the page declares on `:root`, read out of the
+ * stylesheet rather than restated here. `--ctl` is the size the controls are
+ * drawn at and the height BOOST's offset stands on, and a test carrying its
+ * own copy of that figure would agree with itself rather than with the page.
+ *
+ * `--footerpx` and `--playpx` are deliberately not among them: the page
+ * publishes both at runtime from handleResize, so they vary per viewport and
+ * `viewport()` supplies them instead.
+ */
+const ROOT_VARS = Object.fromEntries(
+  Object.entries(declarationsFor(':root')).filter(([name]) => name.startsWith('--'))
+);
+
 /** Resolve a CSS length against a viewport, in device pixels. */
 function lengthPx(value, vp, what) {
-  const expr = value.trim()
-    .replace(/var\(--footerpx[^)]*\)/g, `${vp.footerPx}`)
+  // The page's custom properties, the two handleResize publishes at runtime
+  // winning over the stylesheet's `:root` block exactly as an inline style on
+  // the root element does in a browser.
+  const vars = { ...ROOT_VARS, '--footerpx': `${vp.footerPx}px`, '--playpx': `${vp.playPx}px` };
+  let expr = value.trim();
+  // A property may be written in terms of another - --ctl is solved out of
+  // --playpx - so substitute until the text stops carrying one. The pass limit
+  // is what makes a property that refers to itself fail the assertion below
+  // rather than spin here.
+  for (let pass = 0; pass < 8 && expr.includes('var('); pass++) {
+    const before = expr;
+    expr = expr.replace(
+      /var\(\s*(--[\w-]+)\s*(?:,[^()]*)?\)/g,
+      (whole, name) => (name in vars ? `(${vars[name]})` : whole)
+    );
+    if (expr === before) break;
+  }
+  expr = expr
     .replace(/\bcalc\(/g, '(')
     .replace(/\bmin\(/g, 'Math.min(')
     .replace(/\bmax\(/g, 'Math.max(')
@@ -269,7 +299,7 @@ function lengthPx(value, vp, what) {
 
 /** The box one control occupies, in device pixels from the viewport's top left. */
 function boxOf(id, vp) {
-  const d = declarationsFor(id);
+  const d = declarationsFor(`#${id}`);
   assert.equal(d['aspect-ratio'], '1', `#${id} takes its height off its width`);
 
   let w = lengthPx(d.width, vp, `#${id}`);
@@ -296,15 +326,31 @@ const modelCell = (size) => ({ w: Math.max(1, Math.ceil(size * 0.6)), h: size + 
 
 /**
  * Viewports the overlay is walked over: two phones in portrait, four phones in
- * landscape, and a tablet each way. The landscape shapes are the ones the fault
- * was measured on - a 60x20 tunnel is widest on a phone held sideways, which is
- * the orientation the viewport-unit offsets came apart at.
+ * landscape, and a tablet each way. The landscape shapes are the ones the
+ * viewport-unit offsets came apart at - a 60x20 tunnel is widest on a phone
+ * held sideways, which is the orientation they were measured in.
+ *
+ * The six short shapes below them are the second failure, where the controls
+ * and the gap between them outgrew the playable band: what they cost is driven
+ * by the viewport's width while the room for them is driven by its height, so
+ * a viewport under about 340px tall put BOOST back on the shield bar.
+ *
+ * The last two are not devices. They are the floor of what the game will play
+ * at - fitGrid reports `fits: true` at both, so the game draws and the overlay
+ * is live the moment a touch arrives - and they are here because the stick
+ * comes apart before BOOST does on a narrow one. Without them the stick's
+ * bound is held by nothing but the assertion that the rule reads --playpx,
+ * which is a check that the fix is present rather than that it works.
  */
 const SHAPES = [
   { w: 375, h: 667 }, { w: 412, h: 915 },
   { w: 667, h: 375 }, { w: 740, h: 360 },
   { w: 915, h: 412 }, { w: 932, h: 430 },
   { w: 820, h: 1180 }, { w: 1180, h: 820 },
+  { w: 1180, h: 300 }, { w: 820, h: 300 },
+  { w: 932, h: 330 }, { w: 667, h: 300 },
+  { w: 740, h: 330 }, { w: 740, h: 320 },
+  { w: 349, h: 160 }, { w: 400, h: 180 },
 ];
 
 /** The grid and the derived custom property one viewport resolves to. */
@@ -313,10 +359,14 @@ function viewport(shape) {
   return {
     ...shape,
     grid,
-    // What handleResize publishes: the band at the foot of the viewport
-    // holding the footer's rows and whatever the grid leaves unpainted below
-    // them. A vh constant cannot know either figure.
-    footerPx: shape.h - (grid.rows - browser.FOOTER_ROWS) * grid.cellH,
+    // The two figures handleResize publishes, taken from the page's own
+    // functions rather than restated here. footerPx is the band at the foot of
+    // the viewport holding the footer's rows and whatever the grid leaves
+    // unpainted below them; playPx is the band between the HUD and the footer,
+    // which is the room the overlay has to fit in. No viewport unit can know
+    // either, which is the whole reason the page publishes them.
+    footerPx: browser.footerBandPx(grid, shape.h),
+    playPx: browser.playBandPx(grid),
   };
 }
 
@@ -374,13 +424,75 @@ test('browser: every control stays inside the viewport', () => {
   }
 });
 
+test('browser: the published footer band is the footer and nothing else', () => {
+  // The figure the whole overlay hangs off. Asserting it against its own
+  // arithmetic would only prove the test can do the sum, so these are the two
+  // properties that make it the *footer's* band: it covers the footer's rows,
+  // and it covers no row the game paints. fitGrid floors the row count, so the
+  // slack below the last row is always under one cell - which is what puts the
+  // band inside a single row of FOOTER_ROWS * cellH.
+  //
+  // That bracket is what catches a wrong row constant. Substituting HUD_ROWS
+  // for FOOTER_ROWS used to leave the whole suite green; it now fails here,
+  // because 3 rows of band is a whole row more than the footer owns.
+  for (const shape of SHAPES) {
+    const vp = viewport(shape);
+    const { cellH } = vp.grid;
+    const where = `${shape.w}x${shape.h} (${vp.grid.cols}x${vp.grid.rows})`;
+    assert.ok(
+      vp.footerPx >= browser.FOOTER_ROWS * cellH,
+      `${where}: the band is ${vp.footerPx}px, under the footer's ${browser.FOOTER_ROWS} rows`
+    );
+    assert.ok(
+      vp.footerPx < (browser.FOOTER_ROWS + 1) * cellH,
+      `${where}: the band is ${vp.footerPx}px, over a row more than the footer owns`
+    );
+  }
+});
+
+test('browser: every control is sized against the band, not against the viewport', () => {
+  // What a control costs is driven by how wide the viewport is; the room for
+  // it is driven by how tall the viewport is, in character rows nothing in CSS
+  // can measure. So each size has to be solved out of the band the page
+  // publishes. A viewport cap alone is what let BOOST climb onto the HUD on
+  // every short landscape shape, which is what the six short SHAPES hold.
+  for (const name of ['--ctl', '--stick']) {
+    assert.ok(ROOT_VARS[name], `the page declares ${name} on :root`);
+    assert.match(
+      ROOT_VARS[name],
+      /var\(--playpx/,
+      `${name} is bounded by the published band rather than by a viewport unit`
+    );
+  }
+  assert.equal(declarationsFor('#stick').width, 'var(--stick)');
+  for (const id of ['fire', 'boost']) {
+    assert.equal(
+      declarationsFor(`#${id}`).width,
+      'var(--ctl)',
+      `#${id} is drawn at --ctl rather than at its own copy of the figure`
+    );
+  }
+  // BOOST stands on FIRE's height. Written as a second copy of the size it
+  // drifts the moment either cap binds, which is the fault that put BOOST in
+  // the top right corner, so it has to be the same property.
+  assert.match(
+    declarationsFor('#boost').bottom,
+    /var\(--ctl\)/,
+    "BOOST's offset reads the same size FIRE is drawn at"
+  );
+  // Both properties are published, and the page is the only thing that can
+  // work either out.
+  assert.match(html, /setProperty\(\s*'--footerpx'/);
+  assert.match(html, /setProperty\(\s*'--playpx'/);
+});
+
 test('browser: the controls are anchored to the grid, not to the viewport', () => {
   // The offset has to know how tall the footer is, and only the fitter knows
   // that, so handleResize publishes it and the three rules read it back.
   assert.match(html, /setProperty\(\s*'--footerpx'/);
   for (const id of ['stick', 'fire', 'boost']) {
     assert.match(
-      declarationsFor(id).bottom,
+      declarationsFor(`#${id}`).bottom,
       /var\(--footerpx/,
       `#${id} reads the footer band rather than a vh constant`
     );

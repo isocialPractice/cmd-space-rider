@@ -27,7 +27,7 @@ const EXPORTS = [
   'BASE_SPEED_START', 'SHAKE_PIXELS', 'BEST_SCORE_KEY', 'CRT_KEY',
   'ROLL_TIME', 'ROLL_COOLDOWN', 'COMBO_TIME', 'COMBO_MAX',
   'SHOT_SLACK_COLS', 'SLACK_REF_WIDTH', 'shotSlackCols',
-  'fitGrid', 'renderTooSmall',
+  'fitGrid', 'renderTooSmall', 'footerBandPx', 'playBandPx',
   'MIN_WIDTH', 'MIN_HEIGHT', 'FONT_SIZE', 'MIN_FONT_SIZE', 'CELL_LEADING',
   'WARP_INTERVAL', 'WARP_FLASH_TIME', 'warpWallColor',
   'POWERUP_DROP_CHANCE', 'POWERUP_DRIFT', 'POWERUP_SHIELD_GAIN',

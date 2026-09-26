@@ -88,13 +88,14 @@ npm run probe      # Build, then run a measurement probe
 
 ## Probes
 
-`npm run probe` with no arguments lists what there is to measure. Each probe
-takes a grid and a build:
+`npm run probe` with no arguments lists what there is to measure. The probes
+that fly a shot take a grid and a build:
 
 ```bash
 npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
 npm run probe -- free-flight --passes 2
+npm run probe -- overlay-anchor    # no grid, no build: it walks viewports
 ```
 
 A probe reports; it never asserts. Every walk is seeded, so the same command

@@ -39,6 +39,7 @@ const PROBES = {
   'frame-rate': () => import('./frame-rate.mjs'),
   'column': () => import('./column.mjs'),
   'free-flight': () => import('./free-flight.mjs'),
+  'overlay-anchor': () => import('./overlay-anchor.mjs'),
 };
 
 function parseArgs(argv) {

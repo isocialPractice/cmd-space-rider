@@ -45,10 +45,11 @@ npm run watch      # Watch mode for development
 npm test           # Build, then run the test suite
 npm run probe      # Build, then run a measurement probe</code></pre>
 <h2 id="probes">Probes</h2>
-<p><code>npm run probe</code> with no arguments lists what there is to measure. Each probe takes a grid and a build:</p>
+<p><code>npm run probe</code> with no arguments lists what there is to measure. The probes that fly a shot take a grid and a build:</p>
 <pre><code>npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
-npm run probe -- free-flight --passes 2</code></pre>
+npm run probe -- free-flight --passes 2
+npm run probe -- overlay-anchor    # no grid, no build: it walks viewports</code></pre>
 <p>A probe reports; it never asserts. Every walk is seeded, so the same command gives the same numbers every time.</p>
 <h2 id="test-grids">Test grids</h2>
 <p>The pulse cannon checks run at three sizes, because the hit test is not size-neutral:</p>
