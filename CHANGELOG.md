@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.7.2-alpha] - 2026-09-26
+
+### Added
+
+- `test/probes/overlay-anchor.mjs`, which walks the touch overlay over every
+  viewport the game will play at rather than over a list of device shapes. A
+  claim about every viewport is not something a list can support, and both
+  figures quoted under Fixed below come from it: run
+  `npm run probe -- overlay-anchor` to rebuild them. It takes no grid and no
+  build, which is new for a probe here - a terminal has no overlay, and the
+  viewport is the thing being walked rather than a setting.
+- `footerBandPx` and `playBandPx`, the two figures the overlay is laid out
+  against, lifted out of `handleResize` into functions of a fitted grid. The
+  first was already published as `--footerpx`; the second is new and published
+  as `--playpx`. `handleResize` sits below the
+  `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at, so
+  nothing in the suite could execute either figure while it lived there.
+
+### Changed
+
+- The touch controls are sized against the band the game is played in rather
+  than against the viewport. `--ctl` and `--stick` are each solved out of
+  `--playpx`: whatever is left of the band once the offset and the gap are
+  taken, shared between however many controls stand in it, capped as before by
+  a share of the screen width and a pixel ceiling. On the eight device shapes
+  the suite already walked, every control is drawn at exactly the size it was;
+  only viewports too short for the old size shrink.
+- `test/browser-shell.test.mjs` resolves the page's own custom properties
+  instead of restating their arithmetic. Its CSS resolver reads the `:root`
+  block out of the stylesheet and substitutes `var()` until the text stops
+  carrying one, and its viewport model calls `footerBandPx` and `playBandPx`
+  rather than computing the same figures a second way. Six short shapes and
+  two at the floor of what the game plays at join the eight it walked.
+
+### Fixed
+
+- BOOST climbed back onto the HUD on a short viewport, which is the half of
+  the anchoring fault the previous release did not reach. The controls were
+  sized in viewport width while the room for them is measured in character
+  rows, so the two came apart on anything short and wide: BOOST covered rows
+  0-8 at 1180x300 and 820x300, rows 1-8 at 667x300, rows 1-9 at 932x330, and
+  rows 2-9 at 740x330 and 740x320, where rows 0 to 2 are the SCORE / DIST /
+  SHIELD row and the shield bar. The stick had the same fault on a narrow
+  viewport and reached row 2 at 349x160. Walked over every viewport the game
+  will play at, 158,235 of 682,500 placed a control on the HUD or the footer -
+  BOOST at all of them, the stick at 51,843 - against none now.
+- The figure the overlay hangs on was asserted nowhere. `--footerpx` was
+  published from a function the suite cannot execute, and the only check on it
+  was that the call appears in the file; the tests then computed the figure
+  for themselves, so they agreed with a second implementation rather than with
+  the page. Substituting `HUD_ROWS` for `FOOTER_ROWS` in that line left the
+  whole suite green while every control sat a row too high. It now fails two
+  tests.
+- The Project Structure page gave `test/probes/` a line but never opened it,
+  so the six files under it appeared nowhere while the README claimed every
+  file under `src/`, `test/` and `docs/` was listed. The page opens `probes/`,
+  and every tracked file under the three directories is now named on it.
+- The `0.7.1-alpha` entry above described a README sentence that same release
+  had rewritten, quoting the claim as `src/` and `test/` where the shipped
+  README says `src/`, `test/` and `docs/`. The bullet now says what the file
+  says.
+- The development and cheatsheet pages both said every probe takes a grid and
+  a build, which `overlay-anchor` does not. Both now say it is the probes that
+  fly a shot that do, and name the exception.
+
 ## [0.7.1-alpha] - 2026-09-25
 
 ### Added
@@ -94,8 +159,9 @@
   the probes actually cover, which is what the development page already said.
 - The README's structure tree named `docs/` and the Project Structure page it
   links to did not list it, while the README claimed the page listed every file.
-  The page's tree now carries `docs/`, and the README claims only what the page
-  holds: every file under `src/` and `test/`.
+  The page's tree now carries `docs/` opened one level, and the README names the
+  directories the page covers: every file under `src/`, `test/` and `docs/`,
+  with the root files the game and the site are built from.
 - The on-screen controls covered the HUD and the footer on a phone held in
   landscape, which is the orientation a 60x20 tunnel is widest in. BOOST's
   offset was written as FIRE's width plus a gap, but `max-width` caps FIRE's
