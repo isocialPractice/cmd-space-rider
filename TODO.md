@@ -84,6 +84,75 @@ its origin survives archiving into `## Complete`.
     claim to say the accent is available but unused - that is the state the
     ledger item was opened to end.
   - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+- [ ] The probe rig's own header still says every probe takes a grid and a build
+  - **Issue**: `test/probes/run.mjs:8` reads "Every probe runs against both real
+    engines, loaded through the same module the tests use. That is the point of
+    the rig", and `:17` reads "With no --grid the probe runs at every grid in
+    GRIDS. With no --build it runs both." Neither is true of `overlay-anchor`,
+    which the same run registered eleven lines below the first of them at `:42`:
+    it loads `loadBrowserEngine()` alone and its `run()` takes no parameters, so
+    the `args` the rig hands it are discarded. The run corrected exactly this
+    sentence in `CHEATSHEET.md`, `docs/cheatsheet.html` and
+    `docs/development.html` and left the rig's own header, so the three
+    documents about the rig now disagree with the rig. The usage line at `:70`
+    advertises `--grid` and `--build` unconditionally too, and
+    `npm run probe -- overlay-anchor --grid 80x24` is accepted and silently
+    ignored rather than refused.
+  - **Goal**: Bring the header to what the three documents now say - the probes
+    that fly a shot take a grid and a build, and `overlay-anchor` takes neither.
+    Then settle what the rig does with a flag the named probe does not take:
+    either refuse it, or say in the usage line which flags apply to which probe.
+    Silently ignoring it is the one option to rule out, since a figure quoted
+    from `--grid 80x24` would then be a figure from a walk that never happened.
+  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+- [ ] The new probe restates the rule it measures instead of reading it
+  - **Issue**: `test/probes/overlay-anchor.mjs:40-50` writes both sizing rules
+    out in JavaScript. The `'before the band'` half has to be written out - the
+    rule is gone from the stylesheet - but `'bounded by the band'` is the rule
+    that is in `index.html:81-82` right now, restated rather than read, so the
+    two can come apart with nothing saying so: change `--ctl` in the stylesheet
+    and the probe goes on reporting "0 of 682,500" for a rule the page no longer
+    has, while the CHANGELOG quotes that 0 as a fact about the page. This is the
+    fault the same run fixed one file over - `test/browser-shell.test.mjs:259`
+    now reads the `:root` block out of the stylesheet into `ROOT_VARS` instead
+    of restating it - so the repository has a resolver for this and the probe
+    does not use it.
+  - **Goal**: Give the two one resolver. Lift `declarationsFor` and `lengthPx`
+    out of `test/browser-shell.test.mjs` into `test/helpers.mjs`, or into a
+    small module beside it, and have the test and the probe both resolve `--ctl`
+    and `--stick` through it. The probe then states only the historical rule,
+    which is the one figure it has no other source for.
+  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+
+#### Resolve Issues
+
+- [ ] Published Figure 1
+  - **Issue**: The arithmetic moved above the marker and the suite executes it
+    now, but the line that binds each figure to its property name did not, and
+    that line is still checked only by `assert.match(html,
+    /setProperty\(\s*'--footerpx'/)` and its twin for `--playpx`
+    (`test/browser-shell.test.mjs:485-486`) - the calls have to be present, not
+    correct. Verified by mutation: swapping the two arguments at
+    `index.html:2314-2315`, so `--footerpx` is given `playBandPx(grid)` and
+    `--playpx` is given `footerBandPx(grid,canvas.height)`, leaves all 454 tests
+    green. In a browser that is not a near miss. At 375x667 it publishes
+    `--footerpx: 600px` and `--playpx: 31px`, so FIRE is drawn 4.4px across and
+    sits 607px up a 667px viewport instead of 90px across and 38px up; at
+    932x430 it is 10.5px across and 328px up instead of 118px and 56px. Every
+    control is a dot near the top of the screen and none of them is reachable by
+    a thumb. `handleResize` is still below the
+    `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at,
+    so nothing in the suite executes the call itself.
+  - **Goal**: Pin the pairing rather than the presence. Either lift the
+    publishing above the marker as well - a pure function of a fitted grid and a
+    viewport height returning the two properties as a map, which `handleResize`
+    then only hands to the style - and assert the map; or parse the two
+    `setProperty` lines out of the file and assert each names the function that
+    belongs to it. The first is the same lift the `## Current` item *The page's
+    use of the fitted grid has no check* proposes for the `ScreenBuffer`
+    re-seating in that function, so the two are one piece of work if they land
+    together.
+  - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads
 
 ## Quick Wins
 
@@ -221,7 +290,7 @@ the roadmap section each one came from.
     `test/browser-shell.test.mjs` either way, so the bound is pinned rather than
     argued.
   - From: Medium Effort
-- [x] Nothing reads the figure the overlay fix hangs on
+- [x] **Published Figure**: Nothing reads the figure the overlay fix hangs on
   - **Issue**: `--footerpx` is the whole of this run's fix, and its value is
     asserted nowhere. `index.html:2253` publishes
     `canvas.height-(termHeight-FOOTER_ROWS)*cellH`, and the only assertion that
