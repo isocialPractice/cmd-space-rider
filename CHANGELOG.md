@@ -1,5 +1,99 @@
 # Changelog
 
+## [0.7.3-alpha] - 2026-09-27
+
+### Added
+
+- `test/docs-site.test.mjs`, the first coverage the suite has of the
+  documentation site. It needs no browser: the menu and the palette are checked
+  as the text of their own files, the way `test/browser-shell.test.mjs` already
+  reads `index.html`. Four checks - the nav is the same markup on all ten pages,
+  every group carrying in-page anchors has the control that reveals it, every
+  in-page anchor names an `id` that exists on the page it points at, and every
+  custom property the stylesheet declares reaches a reader.
+- `test/page-style.mjs`, the CSS resolver lifted out of
+  `test/browser-shell.test.mjs` so the suite and `test/probes/overlay-anchor.mjs`
+  read one copy of it. It parses a stylesheet rule by rule, folds the
+  declarations that apply to a selector, and resolves a length against a
+  viewport - custom properties, `calc`, `min`, `max`, `px`, `vw` and `vh` - or
+  throws. Rules are walked brace by brace rather than matched with a regex over
+  `{...}`: the regex finds the rules inside an `@media` block but reads them as
+  though they were top level, so nothing downstream can ask which block a rule
+  belongs to.
+- `overlayVars` in `index.html`: the two custom properties the touch overlay
+  reads, as a map of property name to CSS length, above the
+  `// ===== Canvas Setup & Sizing =====` marker where the suite can execute it.
+  `handleResize` now hands that map to the root element's style and works out
+  nothing of its own.
+
+### Changed
+
+- The probe rig refuses a flag the named probe does not read instead of
+  discarding it. `npm run probe -- overlay-anchor --grid 80x24` was accepted and
+  silently ignored, so a figure could be quoted from a grid nothing ever looked
+  at. It now exits non-zero and says which flags that probe takes, and
+  `npm run probe` with no name prints the flag list for all six.
+- `test/probes/overlay-anchor.mjs` resolves `--ctl` and `--stick` out of the
+  stylesheet through `test/page-style.mjs` rather than restating them in
+  JavaScript. The resolved sizes were checked against the arithmetic they replace
+  at all 682,500 viewports the probe walks and agree to the pixel at every one,
+  so the probe's reported figures are unchanged: 158,235 viewports misplaced a
+  control before the band bounded the controls, and none do after. The
+  historical pair stays written out, because those two lengths are gone from the
+  stylesheet and this file is the only record of them.
+- The three dropdown groups that are pages as well as groups keep their link at
+  the top level and gained a caret button beside it that opens the list, so the
+  page stays one click away and its sections are two. Reference has no page of
+  its own and is still a button alone. `docs/assets/docs.js` needed no change:
+  it already collects `.has-sub > button`.
+- `--warn` is gone from both colour schemes, with the `blockquote` rules that
+  read it and the three places in `DESIGN_LANGUAGE.md` that measured it.
+  `BRIGHT_YELLOW` joins `BRIGHT_GREEN`, `BRIGHT_RED` and `BRIGHT_MAGENTA` in the
+  paragraph recording the accents the site deliberately does not carry.
+
+### Fixed
+
+- Three of the four nav dropdown groups could not be opened on a desktop.
+  `.has-sub > button[aria-expanded="true"] + .sub` is the only rule that reveals
+  a dropdown, and Getting Started, Usage and Development each labelled
+  themselves with an `<a>`, so it never matched them; `docs/assets/docs.js`
+  binds the same selector, so there was no handler on those three either. Their
+  eight in-page anchors kept `display: none` with no control anywhere that
+  changed it, and the caret is scoped to `> button` too, so the three dead
+  labels advertised nothing. Below the 860px breakpoint every group is open
+  already and all eight worked, which is what made it a desktop-only failure
+  nobody saw. The nav is repeated verbatim in all ten pages and all ten are
+  changed; a fix applied to nine of them now fails.
+- The one accent `DESIGN_LANGUAGE.md` said the site used was on nothing the site
+  has. `--warn` was declared in both schemes and read by exactly one rule, the
+  4px left edge of a blockquote, and no page under `docs/` has a blockquote - so
+  the value resolved correctly and reached no reader. Settled the way
+  `--good`, `--bad` and `--warp` were settled one release ago, by dropping the
+  property and the rule rather than keeping an accent the site has available and
+  does not use.
+- The probe rig's own header said every probe runs against both engines and that
+  every probe takes a grid and a build, eleven lines above registering
+  `overlay-anchor`, which loads the browser alone and whose `run()` takes no
+  parameters. `CHEATSHEET.md`, `docs/cheatsheet.html` and `docs/development.html`
+  were corrected for exactly this last release and the rig was left saying the
+  old thing, so the three documents about the rig disagreed with the rig.
+- `overlay-anchor` restated the rule it measures instead of reading it. The
+  `bounded by the band` sizes were written out in JavaScript while the page
+  carries them at `index.html:81-82`, so changing `--ctl` in the stylesheet left
+  the probe reporting `0 of 682,500` for a rule the page no longer had, with the
+  changelog quoting that 0 as a fact about the page. Unbinding `--ctl` now moves
+  the figure to 158,235.
+- `--footerpx` and `--playpx` were checked for being published, not for being
+  published under the right names. The only assertions that reached the two
+  `setProperty` lines were `assert.match(html, /setProperty\(\s*'--footerpx'/)`
+  and its twin, so swapping the two arguments left all 454 tests green. That is
+  not a near miss in a browser: swapped, a 375x667 phone resolves
+  `--footerpx: 600px` and `--playpx: 31px`, which draws FIRE 4.4px across and
+  607px up a 667px viewport instead of 90px across and 38px up, and no control
+  is reachable by a thumb. The pairing is stated in `overlayVars` now and the
+  suite reads both figures back off that map by name, so the same swap fails two
+  tests.
+
 ## [0.7.2-alpha] - 2026-09-26
 
 ### Added
