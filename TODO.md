@@ -120,6 +120,71 @@ its origin survives archiving into `## Complete`.
     `.has-sub > button` carries an `aria-label`, which is checkable as text.
   - From: UI/UX Override - the caret's box, and the bar the anchors land under
 
+### Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
+
+#### Resolve Issues
+
+- [ ] Probe Flags 1 - the rig's flag table is the new contract and nothing checks it
+  - **Issue**: The settlement works when run by hand - `npm run probe` prints the
+    table, `npm run probe -- overlay-anchor --grid 80x24` prints "overlay-anchor
+    does not take --grid" and exits 1, and each `flags` list matches the
+    parameters its probe's `run()` destructures today. Nothing in `test/` reaches
+    any of that, and the table's own comment at `test/probes/run.mjs:42-46` says
+    "a probe gaining or losing an argument is a line changed here rather than a
+    flag silently ignored", which is the thing no longer true the moment the two
+    fall out of step. The failing direction is the one the completed item was
+    opened to end. Verified by mutation: drop `count` from the destructuring at
+    `test/probes/column.mjs:47` so the probe stops reading it, and
+    `npm run probe -- column --grid 80x24 --build browser --count 6` is still
+    accepted, still prints "contact: 24 placements" and still reports a figure a
+    caller will read as a narrowed walk - with all 460 tests green, because the
+    table still lists the flag. `CHEATSHEET.md:101-103`,
+    `docs/cheatsheet.html:53` and `docs/development.html:30` all promise the
+    non-zero exit as well, so three documents now rest on behaviour nothing
+    exercises.
+  - **Goal**: Pin the table against the probes rather than against itself.
+    `run.mjs` executes a probe at import - top-level `await` on
+    `process.argv` - so the suite cannot import it as it stands: either move
+    `PROBES` into a module `run.mjs` imports and a test can too, or read both
+    files as text the way `test/browser-shell.test.mjs` reads `index.html`.
+    Then assert, for every probe, that its `flags` list is exactly the parameter
+    names its `run()` destructures - so a probe losing `count` fails here rather
+    than going quiet - and assert the refusal end to end with one `spawnSync` of
+    `node test/probes/run.mjs overlay-anchor --grid 80x24`, checking the exit
+    code and the message naming the flag it refused. Browser and terminal both: the rig
+    is neither, so `test/parity.test.mjs` has nothing to pair this with.
+  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+
+#### Found Issues
+
+- [ ] The new resolver collects at-rule context and then ignores it
+  - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
+    preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
+    naming a selector regardless of that context. On `index.html` this cannot
+    show: the page has one `:root` and no `@media` at all. On
+    `docs/assets/style.css`, which `test/docs-site.test.mjs:26` already points
+    the same module at, it does. `:root` is declared twice - the dark block at
+    `:9` and the light block inside `@media (prefers-color-scheme: light)` at
+    `:39` - so `styleSheet(css).properties` comes back as the light scheme:
+    `--page` is `#f2f2f4` where the base block declares `#000000`, and `--text`,
+    `--heading` and `--rule` likewise. The doc comment at `:102` says these are
+    "the custom properties the sheet declares on `:root`", which is the dark
+    scheme, so the function and its own description disagree. Nothing reads
+    `properties` or `declarationsFor` for the docs sheet yet, which is the only
+    reason the suite is green - `test/docs-site.test.mjs` walks `style.rules`
+    directly and filters on `rule.at.length` itself.
+  - **Goal**: Decide what the two folding functions mean by a sheet with a media
+    query in it, and say it in one place rather than leaving each caller to
+    remember. Either `declarationsFor` takes the top-level cascade only and a
+    caller asking for a media block's rules goes through `rules`, or it takes a
+    condition and folds what matches - the first is the smaller change and is
+    what both current callers want. Correct the `properties` comment to whichever
+    it becomes. Worth an assertion in `test/docs-site.test.mjs` either way, since
+    the site's stylesheet is the repository's only sheet that declares `:root`
+    twice and is therefore the only thing that can catch this: resolve `--page`
+    off `docs/assets/style.css` and pin which scheme answers.
+  - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -241,7 +306,7 @@ the roadmap section each one came from.
     claim to say the accent is available but unused - that is the state the
     ledger item was opened to end.
   - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] The probe rig's own header still says every probe takes a grid and a build
+- [x] **Probe Flags**: The probe rig's own header still says every probe takes a grid and a build
   - **Issue**: `test/probes/run.mjs:8` reads "Every probe runs against both real
     engines, loaded through the same module the tests use. That is the point of
     the rig", and `:17` reads "With no --grid the probe runs at every grid in
