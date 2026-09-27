@@ -18,10 +18,18 @@
 //
 //   npm run probe -- overlay-anchor
 //
-// Browser only. A terminal has no overlay, so test/parity.test.mjs has nothing
-// to pair this with and the --grid and --build flags do not apply.
+// Browser only, and it takes no flags: it walks its own viewports and loads the
+// browser engine alone, so run() ignores the rig's arguments entirely. A
+// terminal has no overlay, so test/parity.test.mjs has nothing to pair this
+// with. The rig refuses --grid and --build for this probe rather than accepting
+// and discarding them, because a figure quoted from a flag nothing read is a
+// figure from a walk that never happened.
 
-import { loadBrowserEngine } from '../helpers.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { REPO_ROOT, loadBrowserEngine } from '../helpers.mjs';
+import { pageStyle } from '../page-style.mjs';
 
 /**
  * Viewports walked. Every integer width and height over the range a phone or a
@@ -36,16 +44,31 @@ function axis(tightFrom, tightTo, coarseTo, step = 7) {
   return out;
 }
 
-/** The rules as they stand, and as they stood before the band bounded them. */
+/**
+ * The page's own --stick and --ctl, resolved out of index.html through the same
+ * module test/browser-shell.test.mjs resolves them through.
+ *
+ * Restating them here is what this probe used to do, and it is the one thing it
+ * must not: change --ctl in the stylesheet and a restated copy goes on reporting
+ * a figure about a rule the page no longer has, while the CHANGELOG quotes that
+ * figure as a fact about the page.
+ */
+const style = pageStyle(readFileSync(join(REPO_ROOT, 'index.html'), 'utf8'));
+
+/**
+ * The rules as they stand, and as they stood before the band bounded them.
+ *
+ * The historical pair is written out because it has to be - those two lengths
+ * are gone from the stylesheet and this file is the only remaining record of
+ * them. The current pair is read, which is the difference the two comments are
+ * here to keep visible.
+ */
 const RULES = {
-  'before the band': (w, h, play) => ({
-    stick: Math.min(34 * w / 100, 170),
-    ctl: Math.min(24 * w / 100, 118),
-  }),
-  'bounded by the band': (w, h, play) => ({
-    stick: Math.min(34 * w / 100, 170, play - h / 100 - 8),
-    ctl: Math.min(24 * w / 100, 118, (play - h / 100 - 2 * w / 100 - 8) / 2),
-  }),
+  'before the band': { stick: 'min(34vw,170px)', ctl: 'min(24vw,118px)' },
+  'bounded by the band': {
+    stick: style.properties['--stick'],
+    ctl: style.properties['--ctl'],
+  },
 };
 
 export async function run() {
@@ -66,7 +89,7 @@ export async function run() {
     `or the last ${b.FOOTER_ROWS} (the footer), or leaves the viewport`
   );
 
-  for (const [name, sizes] of Object.entries(RULES)) {
+  for (const [name, lengths] of Object.entries(RULES)) {
     let playable = 0;
     let failing = 0;
     const perControl = new Map();
@@ -78,8 +101,12 @@ export async function run() {
         if (!grid.fits) continue;
         playable++;
 
-        const play = b.playBandPx(grid);
-        const { stick, ctl } = sizes(w, h, play);
+        // The viewport the lengths resolve against, carrying the two properties
+        // the page publishes at runtime. Read back by name off the page's own
+        // map, so a probe cannot disagree with the page about which is which.
+        const vp = { w, h, vars: b.overlayVars(grid, h) };
+        const stick = style.lengthPx(lengths.stick, vp, `${name} --stick`);
+        const ctl = style.lengthPx(lengths.ctl, vp, `${name} --ctl`);
         smallest = Math.min(smallest, stick, ctl);
 
         // The bottom offsets the rules declare, in the order they stack.

@@ -2097,6 +2097,26 @@ function playBandPx(grid){
   return (grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH;
 }
 
+/**
+ * The two custom properties the overlay's rules read, as a map of property name
+ * to CSS length. handleResize hands this to the root element's style and works
+ * out nothing of its own.
+ *
+ * The pairing is the point. Both figures are lengths in pixels off the same
+ * grid, so handing the footer's band to --playpx and the play band to
+ * --footerpx is a swap nothing reports: every arithmetic check still passes and
+ * the page draws every control as a dot near the top of the screen. Naming each
+ * figure here, above the DOM marker, is what puts the pairing where the suite
+ * can read it - a setProperty call below the marker can only be checked for
+ * being present, which is not the same as being right.
+ */
+function overlayVars(grid,viewportH){
+  return {
+    '--footerpx':footerBandPx(grid,viewportH)+'px',
+    '--playpx':playBandPx(grid)+'px',
+  };
+}
+
 // ===== Touch controls =====
 // A phone has no keyboard, so the browser build grows a thumbstick and two
 // buttons when it finds itself on one. The stick reading is arithmetic and
@@ -2307,12 +2327,12 @@ function handleResize(){
   game.initStars(termWidth,termHeight);
   game.state.screenWidth=termWidth;
   game.state.screenHeight=termHeight;
-  // What the touch overlay anchors to. The figure itself is footerBandPx,
-  // above the DOM marker where the suite can reach it; this line only hands
-  // it to the CSS, which cannot work it out in viewport units.
+  // What the touch overlay anchors to and is sized against. Both figures, and
+  // which property each belongs to, are overlayVars above the DOM marker where
+  // the suite can reach them; these lines only hand the map to the CSS, which
+  // cannot work either out in viewport units.
   const root=document.documentElement.style;
-  root.setProperty('--footerpx',footerBandPx(grid,canvas.height)+'px');
-  root.setProperty('--playpx',playBandPx(grid)+'px');
+  for(const [name,value] of Object.entries(overlayVars(grid,canvas.height)))root.setProperty(name,value);
 }
 
 window.addEventListener('resize',handleResize);

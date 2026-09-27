@@ -988,3 +988,111 @@ still be found by name.
     on the site. Leave `QUICKSTART.md` and `CHEATSHEET.md` absolute: they are
     read on GitHub, where relative would be wrong.
   - From: Create and Deploy GitHub Pages Override
+
+## Archived 09-27-26
+
+- [x] Palette Ledger 1
+  - **Issue**: `docs/assets/style.css` opens by saying "Every value here comes
+    from DESIGN_LANGUAGE.md ... Change the two together or they stop agreeing",
+    and the two have stopped agreeing in three places. The light block declares
+    `--warn: #8f7300` (`LIGHT_INK[11]`) and the design file's light table has no
+    row for it, though the dark table lists its counterpart. The light block
+    splits `--rule: #00757f` from `--edge: #8a8a94` while the design file's
+    light table gives one "Rules, borders" row at `#8a8a94`, so the file names
+    the decoration value for the role the stylesheet gives to the link colour.
+    And `--good`, `--bad` and `--warp` are declared in both schemes and
+    referenced nowhere in the stylesheet or in any page, so three of the rows
+    the design file measures describe nothing on the site. Separately the
+    stylesheet carries three sizes off the declared scales: `.lede` at 18px and
+    the dropdown caret at 10px, against a type scale the file gives as 14, 16,
+    20, 25 and 31; and `max-height: calc(100vh - 56px)` on the narrow menu,
+    against a spacing scale of 4, 8, 12, 16, 24, 32, 48, 64. Nothing renders
+    wrong today - every measured ratio in the design file is correct, and the
+    two sub-4.5:1 values carry no text - but the file is the site's record of
+    why each value is what it is, and it no longer matches.
+  - **Goal**: Bring the two back together, deciding each way round rather than
+    editing one to match the other: give the light table a "Accent, warn" row
+    and a "Decoration only" row the way the dark table has, drop the three
+    unused properties or use them, and either add 18px and 10px to the type
+    scale or move `.lede` and the caret onto it. The `56px` is the fixed bar's
+    own height written twice - tie it to the bar or put it on the scale.
+  - From: Create and Deploy GitHub Pages Override
+- [x] Overlay Anchoring 2
+  - **Issue**: The anchoring holds at the eight shapes the new tests walk and
+    comes apart below about 340px of viewport height, where BOOST is back on the
+    HUD. `#boost` stacks four terms on the footer band - `var(--footerpx) + 1vh
+    + min(24vw,118px) + 2vw` - and then stands its own `min(24vw,118px)` of
+    height on top of them, so what the offset costs is driven by the viewport's
+    width while the room for it is driven by the viewport's height, and nothing
+    bounds the total against the playable band. Resolved through the repository's
+    own resolver in `test/browser-shell.test.mjs`, BOOST covers rows 0-8 at
+    1180x300 and 820x300, rows 1-9 at 932x330 and 667x300, and rows 2-9 at
+    740x330 and 740x320. Rows 0 to 2 are the SCORE / DIST / SHIELD row and the
+    shield bar, which is the failure `Overlay Anchoring 1` was opened for. The
+    stick and FIRE stay inside rows 3 to `rows - 3` at every one of those shapes
+    - BOOST is the only one that fails - and `fitGrid` reports `fits: true` at
+    all of them, so the game draws normally and the overlay is live as soon as a
+    touch arrives.
+  - **Goal**: Bound the stack rather than lengthening the shape list. Three ways
+    round it, and the choice is a layout decision rather than an arithmetic one:
+    publish the HUD's own band the way `handleResize` now publishes the footer's
+    and clamp BOOST against it; cap the control size by height as well as width
+    so the whole stack shrinks with the viewport; or place BOOST beside FIRE
+    under a height media query. Each of the three changes how the controls look
+    at six of the eight shapes a browser measured this run, so this wants the
+    UI/UX tester on it. Add the short shapes to `SHAPES` in
+    `test/browser-shell.test.mjs` either way, so the bound is pinned rather than
+    argued.
+  - From: Medium Effort
+- [x] **Published Figure**: Nothing reads the figure the overlay fix hangs on
+  - **Issue**: `--footerpx` is the whole of this run's fix, and its value is
+    asserted nowhere. `index.html:2253` publishes
+    `canvas.height-(termHeight-FOOTER_ROWS)*cellH`, and the only assertion that
+    reaches that line is `assert.match(html, /setProperty\(\s*'--footerpx'/)` -
+    the call has to be present, not correct. The four new tests then compute the
+    figure for themselves in `viewport()`, out of `browser.fitGrid` and
+    `browser.FOOTER_ROWS`, so they agree with a second implementation rather
+    than with the page. Verified by mutation: substituting `HUD_ROWS` for
+    `FOOTER_ROWS` at `index.html:2254` leaves all 452 tests green, while on a
+    915x412 phone `--footerpx` would resolve to 70px instead of 52px and every
+    control would sit 18px too high. `handleResize` is below the
+    `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at,
+    which is why nothing executes it.
+  - **Goal**: Lift the figure out of `handleResize` into a pure function of a
+    fitted grid and a viewport height, export it through `test/helpers.mjs`, and
+    have `viewport()` call it instead of restating the arithmetic. The
+    `## Current` item *The page's use of the fitted grid has no check* proposes
+    the same lift for the `ScreenBuffer` re-seating in the same function, so the
+    two are one piece of work if they land together.
+  - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads
+- [x] The changelog describes a README sentence the same release rewrote
+  - **Issue**: `CHANGELOG.md:95-98`, inside `## [0.7.1-alpha] - 2026-09-25`,
+    closes "the README claims only what the page holds: every file under `src/`
+    and `test/`". That bullet came from the run before this one. This run changed
+    `README.md:68` to read "Every file under `src/`, `test/` and `docs/` is
+    listed on the Project Structure page, with the root files the game and the
+    site are built from", and left the bullet alone, so one release section both
+    quotes the old sentence as its end state and ships the new one. A reader
+    checking the bullet against the file finds three directories claimed where
+    the changelog says two. This run's own project-structure bullet never
+    mentions the README edit either, so the change is recorded nowhere.
+  - **Goal**: Bring the bullet to what `README.md` now says, in the same
+    release section rather than a new one - the sentence it describes shipped in
+    this version. Do not restate the version or re-cut the release.
+  - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads
+- [x] The widened README claim still overshoots by six files
+  - **Issue**: `README.md:68` now claims every file under `src/`, `test/` and
+    `docs/` is listed on the Project Structure page. `docs/` is listed in full -
+    ten pages and three assets, which is every tracked file under it - and
+    `src/` is too. `test/` is not: `docs/project-structure.html` gives
+    `probes/` a line and a comment but never opens it, so `column.mjs`,
+    `frame-rate.mjs`, `free-flight.mjs`, `run.mjs`, `seen-versus-kill.mjs` and
+    `suite-replay.mjs` appear nowhere on the page. The `test/` half of the
+    overclaim predates this run - the sentence said `src/` and `test/` before it
+    - but this run rewrote the sentence and carried it forward, and the earlier
+    review that narrowed this same sentence narrowed it for exactly this reason.
+  - **Goal**: Settle it either way round, not both: open `probes/` on the page
+    with the one-line comment its siblings carry, or narrow the sentence to what
+    the page holds. If the sentence narrows, say which directory it stops at
+    rather than dropping the claim.
+  - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads

@@ -16,7 +16,6 @@
   --muted:       #8a8a8a;  /* grey ramp 245,      6.08:1   */
   --rule:        #00aaaa;  /* CYAN (6)                     */
   --edge:        #5555ff;  /* BRIGHT_BLUE (12), decoration */
-  --warn:        #ffff55;  /* BRIGHT_YELLOW (11)           */
 
   /* The brand ship, from icon.svg: nose and hull, wings, engine bells. */
   --ship-hull:   #55ffff;  /* BRIGHT_CYAN (14)             */
@@ -48,7 +47,6 @@
     --muted:       #5f5f68;  /* compliant tone,     5.65:1   */
     --rule:        #00757f;  /* LIGHT_INK[14]                */
     --edge:        #8a8a94;  /* LIGHT_INK[8], decoration     */
-    --warn:        #8f7300;  /* LIGHT_INK[11], decoration    */
 
     /* Re-inked through the same indices the game re-inks: 14, 12 and 6. */
     --ship-hull:   #00757f;  /* LIGHT_INK[14]                */
@@ -120,7 +118,14 @@ body {
 .menu a:hover, .menu a:focus-visible { color: var(--heading); border-color: var(--rule); }
 .menu a[aria-current="page"] { color: var(--heading); border-bottom-color: var(--heading); }
 
-/* Dropdowns carry the in-page anchors of the longer pages. */
+/* Dropdowns carry the in-page anchors of the longer pages.
+
+   Three of the four groups are a page as well as a group, so their link stays
+   at the top level and a caret button beside it opens the list - the page is
+   one click away and its sections are two. The reveal rule at the foot of this
+   block matches `> button + .sub`, so the button has to be the element
+   immediately before the list, which orders the children a, button, ul. */
+.has-sub { display: flex; align-items: center; }
 .has-sub > button {
   display: flex; align-items: center; gap: var(--s1);
   background: transparent; color: var(--text);
@@ -129,6 +134,10 @@ body {
   padding: var(--s2) var(--s3); cursor: pointer; white-space: nowrap;
 }
 .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--heading); border-color: var(--rule); }
+/* Carried on the child form rather than on the class alone: `.has-sub >
+   button` above is a class and a type, which outranks a lone class however the
+   two are ordered, and the padding would go nowhere. */
+.has-sub > .sub-toggle { padding-left: var(--s1); padding-right: var(--s2); }
 .has-sub > button::after { content: "v"; font-size: 10px; }
 .has-sub > button[aria-expanded="true"]::after { content: "^"; }
 .sub {
@@ -149,7 +158,7 @@ h2 { font-size: 25px; line-height: 1.25; margin: var(--s7) 0 var(--s3); padding-
 h3 { font-size: 20px; line-height: 1.3;  margin: var(--s6) 0 var(--s3); }
 h4 { font-size: 16px; line-height: 1.3;  margin: var(--s5) 0 var(--s2); color: var(--text-strong); }
 
-p, ul, ol, table, pre, blockquote { margin-bottom: var(--s4); }
+p, ul, ol, table, pre { margin-bottom: var(--s4); }
 ul, ol { padding-left: var(--s5); }
 li { margin-bottom: var(--s2); }
 strong, b { color: var(--text-strong); font-weight: 700; }
@@ -188,9 +197,6 @@ a.card { text-decoration: none; display: block; }
 a.card:hover, a.card:focus-visible { border-color: var(--heading); }
 a.card:hover p, a.card:focus-visible p { color: var(--text); }
 
-blockquote { border-left: 4px solid var(--warn); background: var(--surface); padding: var(--s3) var(--s4); }
-blockquote p:last-child { margin-bottom: 0; }
-
 /* ===== Prev / next ===== */
 .pager { display: flex; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s7); padding-top: var(--s4); border-top: 1px solid var(--rule); }
 .pager a { text-decoration: none; font-size: 14px; }
@@ -212,9 +218,13 @@ footer a { color: var(--link); }
   .nav[data-open="true"] .menu { display: flex; }
   .menu a, .has-sub > button { width: 100%; font-size: 16px; }
   /* There is room to open every group at once here, so the dropdowns stop
-     collapsing and the button becomes the group's label rather than a control.
-     The caret goes with the behaviour it described. */
+     collapsing and Reference's button becomes that group's label rather than a
+     control. The caret goes with the behaviour it described, and the three
+     caret-only buttons go entirely: there is nothing left for them to toggle.
+     The group's children stack rather than sitting on one line. */
   .sub { position: static; display: block; border: 0; border-left: 2px solid var(--rule); margin-left: var(--s3); }
+  .has-sub { display: block; }
+  .has-sub > .sub-toggle { display: none; }
   .has-sub > button { color: var(--muted); cursor: default; font-size: 14px; }
   .has-sub > button::after { content: ""; }
   .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--muted); border-color: transparent; }

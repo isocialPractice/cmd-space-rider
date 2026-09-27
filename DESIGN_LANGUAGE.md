@@ -42,7 +42,6 @@ colour was picked against.
 | Muted text | `#8a8a8a` | grey ramp index 245 | 6.08:1 | passes |
 | Rules, borders | `#00aaaa` | `CYAN` (6) | 7.33:1 | passes |
 | Decoration only | `#5555ff` | `BRIGHT_BLUE` (12) | 4.13:1 | accents only |
-| Accent, warn | `#ffff55` | `BRIGHT_YELLOW` (11) | 19.69:1 | passes |
 
 Two exclusions, both measured rather than assumed:
 
@@ -69,9 +68,9 @@ colour `#f2f2f4`.
 | Muted text | `#5f5f68` | compliant tone, see below | 5.65:1 | passes |
 | Rules, borders | `#00757f` | `LIGHT_INK[14]` | 4.88:1 | passes |
 | Decoration only | `#8a8a94` | `LIGHT_INK[8]` | 3.06:1 | accents only |
-| Accent, warn | `#8f7300` | `LIGHT_INK[11]` | 4.07:1 | accents only |
 
-One substitution and one exclusion, on the same footing as the dark theme's:
+One substitution, measured rather than assumed the way the dark theme's two
+exclusions are:
 
 - **`LIGHT_INK[8]`, `#8a8a94`, reaches only 3.06:1 on paper.** It is the light
   theme's grey and it cannot carry muted text, so it is kept for decoration -
@@ -79,11 +78,6 @@ One substitution and one exclusion, on the same footing as the dark theme's:
   muted text uses `#5f5f68`, which is the same hue taken down until it passes.
   This is the one value on the site not quoted from the game, and it exists
   because compliance wins over fidelity.
-- **`LIGHT_INK[11]`, `#8f7300`, reaches only 4.07:1.** It is the one accent the
-  site uses, down the left edge of a blockquote, where it is a 4px rule and
-  carries no text. Its dark counterpart clears 4.5:1 comfortably and this one
-  does not, so the role is held to the stricter of the two: decoration in both
-  schemes.
 
 Unlike the dark theme, light splits the rule colour from the decoration colour
 the other way round: `LIGHT_INK[14]` is both the link and the rule, because the
@@ -93,12 +87,20 @@ Body text on a raised surface is checked separately, since the surface is not
 the page: `#aaaaaa` on `#0a0a0c` is 8.51:1, and `#4a4a52` on `#ffffff` is
 8.78:1. Links on the light surface are 5.45:1.
 
-The game's remaining accents - `BRIGHT_GREEN`, `BRIGHT_RED` and
-`BRIGHT_MAGENTA`, with their `LIGHT_INK` counterparts - are deliberately not
-listed. Ten pages of prose have no success state, no error state and no warp
-transition to colour, so the stylesheet declares no property for them and these
-tables measure nothing that does not appear on a page. They are earning their
-keep in the game's own palette, which is where `index.html` records them.
+The game's remaining accents - `BRIGHT_YELLOW`, `BRIGHT_GREEN`, `BRIGHT_RED`
+and `BRIGHT_MAGENTA`, with their `LIGHT_INK` counterparts - are deliberately not
+listed. Ten pages of prose have no warning, no success state, no error state and
+no warp transition to colour, so the stylesheet declares no property for them and
+these tables measure nothing that does not appear on a page. They are earning
+their keep in the game's own palette, which is where `index.html` records them.
+
+`BRIGHT_YELLOW` is the one of the four that was listed here once, and how it came
+off is the rule the sentence above states. It was declared as `--warn` in both
+schemes and read by exactly one rule, the 4px left edge of a blockquote, and no
+page under `docs/` has a blockquote - so the value resolved correctly and reached
+no reader. The property went with the rule rather than being kept as an accent
+the site has available and does not use, which is the state `--good`, `--bad` and
+`--warp` were dropped to end.
 
 ## Geometry
 
@@ -146,17 +148,23 @@ the README rather than code.
 
 One size on the site is off this scale, and it is the only one:
 
-- **The dropdown caret is 10px.** It is the `v` and `^` the menu buttons draw
-  after their label, and it is decoration rather than text - at the scale's 14px
-  floor it reads as one more character of the label instead of as a caret. It
-  carries nothing the button's `aria-expanded` does not already carry, so no
-  reader depends on its size.
+- **The dropdown caret is 10px.** It is the `v` and `^` the menu's dropdown
+  buttons draw - after Reference's own label, and on its own for the three
+  groups whose label is the page link beside it - and it is decoration rather
+  than text: at the scale's 14px floor it reads as one more character of the
+  label instead of as a caret. It carries nothing the button's `aria-expanded`
+  does not already carry, so no reader depends on its size.
 
 ## Layout
 
 - **Fixed top menu**, so it stays reachable while reading. The site has ten
   pages, which is the "few pages" case: a top bar with dropdowns onto the
   in-page anchors of the longer pages, rather than a side menu.
+- **A group that is also a page keeps its link at the top level.** Three of the
+  four dropdown groups have a page of their own, and those three are a link plus
+  a caret button that opens the list, so the page stays one click away and its
+  sections are two. Reference has no page of its own and is a button alone,
+  which is why the shapes differ.
 - **The bar's height is declared once**, as `--bar`: `--s7` of content box plus
   its own 2px border, so it stays on the spacing scale. The collapsed menu hangs
   off the bottom of the bar and caps itself at `calc(100vh - var(--bar))`, so a

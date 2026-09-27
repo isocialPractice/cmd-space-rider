@@ -60,7 +60,7 @@ The [Usage page](https://isocialpractice.github.io/cmd-space-rider/docs/usage.ht
 cmd-space-rider/
   index.html        # Browser version (canvas terminal emulator, zero dependencies)
   src/              # CLI entry point, input, engine, renderer, menus, screen buffer
-  test/             # Both builds, the agreement between them, and the probes
+  test/             # Both builds, the agreement between them, the site, and the probes
   docs/             # This project's documentation site
   icon.svg          # Ship icon, inlined into index.html as the favicon
   package.json      # CLI tool manifest and dependencies
