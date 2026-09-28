@@ -42,148 +42,31 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the caret's box, and the bar the anchors land under
-
-#### Resolve Issues
-
-- [ ] Caret Box 1 - the caret button's box is shorter than the link beside it
-  - **Issue**: The dropdowns themselves work. Measured in chromium at 1280x900
-    on `docs/index.html` and `docs/usage.html`, all four groups draw a caret,
-    each caret opens its own list and closes whichever other was open, the glyph
-    flips `v` to `^`, Escape and an outside click both close, the link and the
-    caret are consecutive separate tab stops, the caret takes the 2px
-    `:focus-visible` ring, Enter and Space both open it, and the three page
-    links still navigate on one click. What does not hold is the last of the
-    item's own criteria: the caret's border box is 34.50px against the link's
-    41.09px, a 6.59px difference, and `.has-sub`'s `align-items: center` centres
-    the shorter box so it sits 3.30px inside the link's at the top and 3.29px
-    inside it at the bottom. `.menu a:hover` and `.has-sub > button:hover` draw
-    the same `var(--rule)` border, so moving the pointer or the focus from a
-    page link onto its caret shrinks and re-centres the outlined box. On
-    `docs/usage.html` it needs no interaction at all: the Usage link's
-    `aria-current="page"` border is painted at y 49.09 and a hover on the caret
-    beside it draws its bottom border at y 45.80. The cause is that the three
-    caret-only buttons are flex containers whose only item is the 10px `::after`
-    at `docs/assets/style.css:141`, giving a 16.50px line box where the link has
-    23.10px. Reference is unaffected, because it has text. The narrow layout is
-    clean: at 375x667 every group's list is open, the three `.sub-toggle`
-    buttons are `display: none` with a zero box, no empty bordered box is drawn
-    anywhere in the menu, and all eight anchors still close the menu behind
-    them.
-  - **Goal**: Resolve to [caret-box-height.prompt.md](.claude/prompts/caret-box-height.prompt.md)
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+### UI/UX Override - the width the wide nav switches on at
 
 #### Found Issues
 
-- [ ] The fixed bar is 83px on a desktop, not the 50px `--bar` declares
-  - **Issue**: `docs/assets/style.css:31` declares the bar's height once as
-    `--bar: calc(var(--s7) + 2px)`, 50px, and `DESIGN_LANGUAGE.md:168-173`
-    records that as the figure the site reads rather than repeats. Measured in
-    chromium, the drawn bar is 83.09px at every width from 861px to 1920px and
-    50px at 860px and below. `.menu` is a `ul` and its entries are `li`, so
-    `docs/assets/style.css:161` gives the menu a 16px bottom margin and `:163`
-    gives each entry 8px, neither of which `.menu`'s own `padding: 0` at `:111`
-    touches. The consequence is that `scroll-padding-top: var(--s8)` at `:64`,
-    64px, is 19px short of the bar it was chosen to clear, and seven of the
-    eight in-page anchors the nav carries park their heading underneath it at
-    1280x900 - `usage.html#controls` by 19.15px, `development.html#tests` by
-    19.06px, `getting-started.html#play-in-terminal` by 13.75px, and so on.
-    `usage.html#debug-modes` is clear only because the scroll runs out of
-    document first. Roughly the top half of each `h2` is behind the bar. This
-    predates the caret work: the same measurement against `HEAD` gives an
-    identical 83.09px bar and an identical 19.15px of `usage.html#controls`
-    behind it. What changed is that three of the four groups could not be opened
-    on a desktop until this run, so seven of these eight anchors were
-    unreachable from the wide nav and nobody arrived at them by clicking.
-  - **Goal**: Resolve to [nav-bar-height.prompt.md](.claude/prompts/nav-bar-height.prompt.md)
-  - From: UI/UX Override - the caret's box, and the bar the anchors land under
-- [ ] The Reference button announces the caret glyph as part of its name
-  - **Issue**: The item's request records that each caret button's `aria-label`
-    "is the only name it has, since the caret glyph comes from CSS `content` and
-    is not in the DOM". The glyph is not in the DOM, but it is in the accessible
-    name: CSS generated content takes part in the name computation. For the
-    three new caret buttons this is harmless, because their `aria-label`
-    outranks their contents. Reference has no `aria-label` - it is the one group
-    whose button carries its own text - so its name is computed from contents
-    and picks up the `::after`. Read out of the accessibility tree in chromium
-    at 1280x900, the button is named `"Reference v"` closed and `"Reference ^"`
-    open, so `getByRole('button', { name: 'Reference', exact: true })` matches
-    nothing and a screen reader reads the decoration aloud and re-reads the name
-    on every toggle, which `aria-expanded` already conveys. Reference is
-    unchanged by this run; the `::after` at `docs/assets/style.css:141` has been
-    there since the nav landed in `c36ae4c`.
-  - **Goal**: Give the Reference button `aria-label="Reference"`, the same
-    mechanism the three caret-only buttons already use, so its name is its
-    visible label and nothing else. Keep the label equal to the visible text
-    rather than expanding it, since the visible label has to be contained in the
-    accessible name. Worth an assertion in `test/docs-site.test.mjs`: every
-    `.has-sub > button` carries an `aria-label`, which is checkable as text.
-  - From: UI/UX Override - the caret's box, and the bar the anchors land under
-
-### Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
-
-#### Resolve Issues
-
-- [ ] Probe Flags 1 - the rig's flag table is the new contract and nothing checks it
-  - **Issue**: The settlement works when run by hand - `npm run probe` prints the
-    table, `npm run probe -- overlay-anchor --grid 80x24` prints "overlay-anchor
-    does not take --grid" and exits 1, and each `flags` list matches the
-    parameters its probe's `run()` destructures today. Nothing in `test/` reaches
-    any of that, and the table's own comment at `test/probes/run.mjs:42-46` says
-    "a probe gaining or losing an argument is a line changed here rather than a
-    flag silently ignored", which is the thing no longer true the moment the two
-    fall out of step. The failing direction is the one the completed item was
-    opened to end. Verified by mutation: drop `count` from the destructuring at
-    `test/probes/column.mjs:47` so the probe stops reading it, and
-    `npm run probe -- column --grid 80x24 --build browser --count 6` is still
-    accepted, still prints "contact: 24 placements" and still reports a figure a
-    caller will read as a narrowed walk - with all 460 tests green, because the
-    table still lists the flag. `CHEATSHEET.md:101-103`,
-    `docs/cheatsheet.html:53` and `docs/development.html:30` all promise the
-    non-zero exit as well, so three documents now rest on behaviour nothing
-    exercises.
-  - **Goal**: Pin the table against the probes rather than against itself.
-    `run.mjs` executes a probe at import - top-level `await` on
-    `process.argv` - so the suite cannot import it as it stands: either move
-    `PROBES` into a module `run.mjs` imports and a test can too, or read both
-    files as text the way `test/browser-shell.test.mjs` reads `index.html`.
-    Then assert, for every probe, that its `flags` list is exactly the parameter
-    names its `run()` destructures - so a probe losing `count` fails here rather
-    than going quiet - and assert the refusal end to end with one `spawnSync` of
-    `node test/probes/run.mjs overlay-anchor --grid 80x24`, checking the exit
-    code and the message naming the flag it refused. Browser and terminal both: the rig
-    is neither, so `test/parity.test.mjs` has nothing to pair this with.
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-
-#### Found Issues
-
-- [ ] The new resolver collects at-rule context and then ignores it
-  - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
-    preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
-    naming a selector regardless of that context. On `index.html` this cannot
-    show: the page has one `:root` and no `@media` at all. On
-    `docs/assets/style.css`, which `test/docs-site.test.mjs:26` already points
-    the same module at, it does. `:root` is declared twice - the dark block at
-    `:9` and the light block inside `@media (prefers-color-scheme: light)` at
-    `:39` - so `styleSheet(css).properties` comes back as the light scheme:
-    `--page` is `#f2f2f4` where the base block declares `#000000`, and `--text`,
-    `--heading` and `--rule` likewise. The doc comment at `:102` says these are
-    "the custom properties the sheet declares on `:root`", which is the dark
-    scheme, so the function and its own description disagree. Nothing reads
-    `properties` or `declarationsFor` for the docs sheet yet, which is the only
-    reason the suite is green - `test/docs-site.test.mjs` walks `style.rules`
-    directly and filters on `rule.at.length` itself.
-  - **Goal**: Decide what the two folding functions mean by a sheet with a media
-    query in it, and say it in one place rather than leaving each caller to
-    remember. Either `declarationsFor` takes the top-level cascade only and a
-    caller asking for a media block's rules goes through `rules`, or it takes a
-    condition and folds what matches - the first is the smaller change and is
-    what both current callers want. Correct the `properties` comment to whichever
-    it becomes. Worth an assertion in `test/docs-site.test.mjs` either way, since
-    the site's stylesheet is the repository's only sheet that declares `:root`
-    twice and is therefore the only thing that can catch this: resolve `--page`
-    off `docs/assets/style.css` and pin which scheme answers.
-  - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
+- [ ] **The Reference group sits off the right edge between 861px and 950px** -
+  The wide nav lays its eight entries on one unwrapped row, and that row is
+  wider than the width it switches on at, so the last group is painted past the
+  right edge of the screen across the first 90px of the wide range.
+  - **Issue**: Measured in chromium on `docs/index.html`, identical in both
+    colour schemes. At 861px the Reference group's box runs 841.47px to
+    951.16px in an 861px viewport, so 17.8% of the control is on screen;
+    `.nav-bar` overflows by 90px, by 51px at 900px, and first fits at 951px.
+    Opening it is worse than leaving it shut - the list runs to 1049.73px, 9.4%
+    visible, with `Project Structure`, `Terminal Requirements`, `How It Works`
+    and `Cheatsheet` all laid out between 846px and 1045px. Nothing can scroll
+    to them: `.nav` is `position: fixed`, so the overflow never reaches the
+    document and `scrollWidth` stays equal to `clientWidth` at every one of
+    these widths. Keyboard focus does land on the button, but a fixed ancestor
+    cannot be scrolled, so `window.scrollX` stays 0 and the focused control
+    stays invisible. Between 861px and 950px the nav offers no usable route to
+    four of the site's ten pages. Not this turn's doing: the same figures come
+    back from `git show HEAD:docs/assets/style.css` served in place of the
+    working tree's, so the defect predates the bar fix it was found beside.
+  - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
+  - From: UI/UX Override - the width the wide nav switches on at
 
 ## Quick Wins
 
@@ -266,109 +149,132 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 74 earlier items in `TODO-archive.md`, newest last.
+> 79 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Caret Box**: Three of the nav's four dropdown groups cannot be opened on a desktop
-  - **Issue**: `docs/assets/style.css:139` is the only rule that reveals a
-    dropdown - `.has-sub > button[aria-expanded="true"] + .sub` - and three of
-    the four `.has-sub` groups label themselves with an `<a>` rather than a
-    `<button>`, so it never matches them. `docs/assets/docs.js:12` binds the
-    same selector, so there is no handler on those three either. Measured in
-    chromium at 1280x900 on every page under `docs/`: Getting Started (2
-    anchors), Usage (3) and Development (3) keep `display: none` with no
-    control that changes it, while Reference, whose label is a `<button>`,
-    opens and carries no in-page anchors at all. The caret is scoped to
-    `> button` too, so the three dead labels advertise nothing and the failure
-    is silent. Below the 860px breakpoint `docs/assets/style.css:217` opens
-    every group and all eight anchors work - each scrolls its heading to 64px,
-    clear of the 50px bar, and closes the menu behind it - so they are
-    reachable on a phone and unreachable on a desktop. The nav predates this
-    run: it landed whole in `c36ae4c` and no item since has touched it.
-  - **Goal**: Resolve to [nav-dropdown-anchors.prompt.md](.claude/prompts/nav-dropdown-anchors.prompt.md)
+- [x] Caret Box 1 - the caret button's box is shorter than the link beside it
+  - **Issue**: The dropdowns themselves work. Measured in chromium at 1280x900
+    on `docs/index.html` and `docs/usage.html`, all four groups draw a caret,
+    each caret opens its own list and closes whichever other was open, the glyph
+    flips `v` to `^`, Escape and an outside click both close, the link and the
+    caret are consecutive separate tab stops, the caret takes the 2px
+    `:focus-visible` ring, Enter and Space both open it, and the three page
+    links still navigate on one click. What does not hold is the last of the
+    item's own criteria: the caret's border box is 34.50px against the link's
+    41.09px, a 6.59px difference, and `.has-sub`'s `align-items: center` centres
+    the shorter box so it sits 3.30px inside the link's at the top and 3.29px
+    inside it at the bottom. `.menu a:hover` and `.has-sub > button:hover` draw
+    the same `var(--rule)` border, so moving the pointer or the focus from a
+    page link onto its caret shrinks and re-centres the outlined box. On
+    `docs/usage.html` it needs no interaction at all: the Usage link's
+    `aria-current="page"` border is painted at y 49.09 and a hover on the caret
+    beside it draws its bottom border at y 45.80. The cause is that the three
+    caret-only buttons are flex containers whose only item is the 10px `::after`
+    at `docs/assets/style.css:141`, giving a 16.50px line box where the link has
+    23.10px. Reference is unaffected, because it has text. The narrow layout is
+    clean: at 375x667 every group's list is open, the three `.sub-toggle`
+    buttons are `display: none` with a zero box, no empty bordered box is drawn
+    anywhere in the menu, and all eight anchors still close the menu behind
+    them.
+  - **Goal**: Resolve to [caret-box-height.prompt.md](.claude/prompts/caret-box-height.prompt.md)
   - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] The one accent the design file says the site uses is on nothing the site has
-  - **Issue**: `DESIGN_LANGUAGE.md:82` says `LIGHT_INK[11]`, `#8f7300`, "is the
-    one accent the site uses, down the left edge of a blockquote", and the two
-    `Accent, warn` rows at `DESIGN_LANGUAGE.md:45` and `:72` measure it. No page
-    under `docs/` has a blockquote. `--warn` is read by exactly one rule,
-    `docs/assets/style.css:191`, and that rule matches nothing on any of the ten
-    pages, so neither scheme's `--warn` ever reaches a reader. The value itself
-    is intact - a blockquote placed into `docs/index.html` at runtime resolves
-    to `4px solid rgb(255, 255, 85)` in dark and `4px solid rgb(143, 115, 0)` in
-    light - so this is absent markup rather than a broken property. It is the
-    condition `Palette Ledger 1` deleted `--good`, `--bad` and `--warp` for, one
-    level up: the property is referenced, but the rule referencing it describes
-    nothing on the site.
-  - **Goal**: Settle it one way, as `Palette Ledger 1` settled the other three:
-    either give the site the blockquote the rule was written for, or drop the
-    rule, `--warn` from both schemes, and the three places in
-    `DESIGN_LANGUAGE.md` that measure it. Do not leave the rule and rewrite the
-    claim to say the accent is available but unused - that is the state the
-    ledger item was opened to end.
+- [x] The fixed bar is 83px on a desktop, not the 50px `--bar` declares
+  - **Issue**: `docs/assets/style.css:31` declares the bar's height once as
+    `--bar: calc(var(--s7) + 2px)`, 50px, and `DESIGN_LANGUAGE.md:168-173`
+    records that as the figure the site reads rather than repeats. Measured in
+    chromium, the drawn bar is 83.09px at every width from 861px to 1920px and
+    50px at 860px and below. `.menu` is a `ul` and its entries are `li`, so
+    `docs/assets/style.css:161` gives the menu a 16px bottom margin and `:163`
+    gives each entry 8px, neither of which `.menu`'s own `padding: 0` at `:111`
+    touches. The consequence is that `scroll-padding-top: var(--s8)` at `:64`,
+    64px, is 19px short of the bar it was chosen to clear, and seven of the
+    eight in-page anchors the nav carries park their heading underneath it at
+    1280x900 - `usage.html#controls` by 19.15px, `development.html#tests` by
+    19.06px, `getting-started.html#play-in-terminal` by 13.75px, and so on.
+    `usage.html#debug-modes` is clear only because the scroll runs out of
+    document first. Roughly the top half of each `h2` is behind the bar. This
+    predates the caret work: the same measurement against `HEAD` gives an
+    identical 83.09px bar and an identical 19.15px of `usage.html#controls`
+    behind it. What changed is that three of the four groups could not be opened
+    on a desktop until this run, so seven of these eight anchors were
+    unreachable from the wide nav and nobody arrived at them by clicking.
+  - **Goal**: Resolve to [nav-bar-height.prompt.md](.claude/prompts/nav-bar-height.prompt.md)
+  - From: UI/UX Override - the caret's box, and the bar the anchors land under
+- [x] The Reference button announces the caret glyph as part of its name
+  - **Issue**: The item's request records that each caret button's `aria-label`
+    "is the only name it has, since the caret glyph comes from CSS `content` and
+    is not in the DOM". The glyph is not in the DOM, but it is in the accessible
+    name: CSS generated content takes part in the name computation. For the
+    three new caret buttons this is harmless, because their `aria-label`
+    outranks their contents. Reference has no `aria-label` - it is the one group
+    whose button carries its own text - so its name is computed from contents
+    and picks up the `::after`. Read out of the accessibility tree in chromium
+    at 1280x900, the button is named `"Reference v"` closed and `"Reference ^"`
+    open, so `getByRole('button', { name: 'Reference', exact: true })` matches
+    nothing and a screen reader reads the decoration aloud and re-reads the name
+    on every toggle, which `aria-expanded` already conveys. Reference is
+    unchanged by this run; the `::after` at `docs/assets/style.css:141` has been
+    there since the nav landed in `c36ae4c`.
+  - **Goal**: Give the Reference button `aria-label="Reference"`, the same
+    mechanism the three caret-only buttons already use, so its name is its
+    visible label and nothing else. Keep the label equal to the visible text
+    rather than expanding it, since the visible label has to be contained in the
+    accessible name. Worth an assertion in `test/docs-site.test.mjs`: every
+    `.has-sub > button` carries an `aria-label`, which is checkable as text.
+  - From: UI/UX Override - the caret's box, and the bar the anchors land under
+- [x] Probe Flags 1 - the rig's flag table is the new contract and nothing checks it
+  - **Issue**: The settlement works when run by hand - `npm run probe` prints the
+    table, `npm run probe -- overlay-anchor --grid 80x24` prints "overlay-anchor
+    does not take --grid" and exits 1, and each `flags` list matches the
+    parameters its probe's `run()` destructures today. Nothing in `test/` reaches
+    any of that, and the table's own comment at `test/probes/run.mjs:42-46` says
+    "a probe gaining or losing an argument is a line changed here rather than a
+    flag silently ignored", which is the thing no longer true the moment the two
+    fall out of step. The failing direction is the one the completed item was
+    opened to end. Verified by mutation: drop `count` from the destructuring at
+    `test/probes/column.mjs:47` so the probe stops reading it, and
+    `npm run probe -- column --grid 80x24 --build browser --count 6` is still
+    accepted, still prints "contact: 24 placements" and still reports a figure a
+    caller will read as a narrowed walk - with all 460 tests green, because the
+    table still lists the flag. `CHEATSHEET.md:101-103`,
+    `docs/cheatsheet.html:53` and `docs/development.html:30` all promise the
+    non-zero exit as well, so three documents now rest on behaviour nothing
+    exercises.
+  - **Goal**: Pin the table against the probes rather than against itself.
+    `run.mjs` executes a probe at import - top-level `await` on
+    `process.argv` - so the suite cannot import it as it stands: either move
+    `PROBES` into a module `run.mjs` imports and a test can too, or read both
+    files as text the way `test/browser-shell.test.mjs` reads `index.html`.
+    Then assert, for every probe, that its `flags` list is exactly the parameter
+    names its `run()` destructures - so a probe losing `count` fails here rather
+    than going quiet - and assert the refusal end to end with one `spawnSync` of
+    `node test/probes/run.mjs overlay-anchor --grid 80x24`, checking the exit
+    code and the message naming the flag it refused. Browser and terminal both: the rig
+    is neither, so `test/parity.test.mjs` has nothing to pair this with.
   - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] **Probe Flags**: The probe rig's own header still says every probe takes a grid and a build
-  - **Issue**: `test/probes/run.mjs:8` reads "Every probe runs against both real
-    engines, loaded through the same module the tests use. That is the point of
-    the rig", and `:17` reads "With no --grid the probe runs at every grid in
-    GRIDS. With no --build it runs both." Neither is true of `overlay-anchor`,
-    which the same run registered eleven lines below the first of them at `:42`:
-    it loads `loadBrowserEngine()` alone and its `run()` takes no parameters, so
-    the `args` the rig hands it are discarded. The run corrected exactly this
-    sentence in `CHEATSHEET.md`, `docs/cheatsheet.html` and
-    `docs/development.html` and left the rig's own header, so the three
-    documents about the rig now disagree with the rig. The usage line at `:70`
-    advertises `--grid` and `--build` unconditionally too, and
-    `npm run probe -- overlay-anchor --grid 80x24` is accepted and silently
-    ignored rather than refused.
-  - **Goal**: Bring the header to what the three documents now say - the probes
-    that fly a shot take a grid and a build, and `overlay-anchor` takes neither.
-    Then settle what the rig does with a flag the named probe does not take:
-    either refuse it, or say in the usage line which flags apply to which probe.
-    Silently ignoring it is the one option to rule out, since a figure quoted
-    from `--grid 80x24` would then be a figure from a walk that never happened.
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] The new probe restates the rule it measures instead of reading it
-  - **Issue**: `test/probes/overlay-anchor.mjs:40-50` writes both sizing rules
-    out in JavaScript. The `'before the band'` half has to be written out - the
-    rule is gone from the stylesheet - but `'bounded by the band'` is the rule
-    that is in `index.html:81-82` right now, restated rather than read, so the
-    two can come apart with nothing saying so: change `--ctl` in the stylesheet
-    and the probe goes on reporting "0 of 682,500" for a rule the page no longer
-    has, while the CHANGELOG quotes that 0 as a fact about the page. This is the
-    fault the same run fixed one file over - `test/browser-shell.test.mjs:259`
-    now reads the `:root` block out of the stylesheet into `ROOT_VARS` instead
-    of restating it - so the repository has a resolver for this and the probe
-    does not use it.
-  - **Goal**: Give the two one resolver. Lift `declarationsFor` and `lengthPx`
-    out of `test/browser-shell.test.mjs` into `test/helpers.mjs`, or into a
-    small module beside it, and have the test and the probe both resolve `--ctl`
-    and `--stick` through it. The probe then states only the historical rule,
-    which is the one figure it has no other source for.
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] Published Figure 1
-  - **Issue**: The arithmetic moved above the marker and the suite executes it
-    now, but the line that binds each figure to its property name did not, and
-    that line is still checked only by `assert.match(html,
-    /setProperty\(\s*'--footerpx'/)` and its twin for `--playpx`
-    (`test/browser-shell.test.mjs:485-486`) - the calls have to be present, not
-    correct. Verified by mutation: swapping the two arguments at
-    `index.html:2314-2315`, so `--footerpx` is given `playBandPx(grid)` and
-    `--playpx` is given `footerBandPx(grid,canvas.height)`, leaves all 454 tests
-    green. In a browser that is not a near miss. At 375x667 it publishes
-    `--footerpx: 600px` and `--playpx: 31px`, so FIRE is drawn 4.4px across and
-    sits 607px up a 667px viewport instead of 90px across and 38px up; at
-    932x430 it is 10.5px across and 328px up instead of 118px and 56px. Every
-    control is a dot near the top of the screen and none of them is reachable by
-    a thumb. `handleResize` is still below the
-    `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at,
-    so nothing in the suite executes the call itself.
-  - **Goal**: Pin the pairing rather than the presence. Either lift the
-    publishing above the marker as well - a pure function of a fitted grid and a
-    viewport height returning the two properties as a map, which `handleResize`
-    then only hands to the style - and assert the map; or parse the two
-    `setProperty` lines out of the file and assert each names the function that
-    belongs to it. The first is the same lift the `## Current` item *The page's
-    use of the fitted grid has no check* proposes for the `ScreenBuffer`
-    re-seating in that function, so the two are one piece of work if they land
-    together.
-  - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads
+- [x] The new resolver collects at-rule context and then ignores it
+  - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
+    preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
+    naming a selector regardless of that context. On `index.html` this cannot
+    show: the page has one `:root` and no `@media` at all. On
+    `docs/assets/style.css`, which `test/docs-site.test.mjs:26` already points
+    the same module at, it does. `:root` is declared twice - the dark block at
+    `:9` and the light block inside `@media (prefers-color-scheme: light)` at
+    `:39` - so `styleSheet(css).properties` comes back as the light scheme:
+    `--page` is `#f2f2f4` where the base block declares `#000000`, and `--text`,
+    `--heading` and `--rule` likewise. The doc comment at `:102` says these are
+    "the custom properties the sheet declares on `:root`", which is the dark
+    scheme, so the function and its own description disagree. Nothing reads
+    `properties` or `declarationsFor` for the docs sheet yet, which is the only
+    reason the suite is green - `test/docs-site.test.mjs` walks `style.rules`
+    directly and filters on `rule.at.length` itself.
+  - **Goal**: Decide what the two folding functions mean by a sheet with a media
+    query in it, and say it in one place rather than leaving each caller to
+    remember. Either `declarationsFor` takes the top-level cascade only and a
+    caller asking for a media block's rules goes through `rules`, or it takes a
+    condition and folds what matches - the first is the smaller change and is
+    what both current callers want. Correct the `properties` comment to whichever
+    it becomes. Worth an assertion in `test/docs-site.test.mjs` either way, since
+    the site's stylesheet is the repository's only sheet that declares `:root`
+    twice and is therefore the only thing that can catch this: resolve `--page`
+    off `docs/assets/style.css` and pin which scheme answers.
+  - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
