@@ -1,5 +1,122 @@
 # Changelog
 
+## [0.7.4-alpha] - 2026-09-28
+
+### Added
+
+- `test/probes.test.mjs`, the first coverage the measurement rig has. Four
+  checks: every probe takes exactly the flags `test/probes/probes.mjs` lists for
+  it, read off the parameters its own `run()` destructures; the table names
+  every flag the rig parses and no others; a refused flag exits non-zero with a
+  message naming it; and naming no probe prints the table. The last two are
+  spawned end to end, because a non-zero exit is what `CHEATSHEET.md`,
+  `docs/cheatsheet.html` and `docs/development.html` all promise a caller.
+- `test/probes/probes.mjs`, the probe table in a module something can import.
+  `test/probes/run.mjs` reads `process.argv` at the top level and awaits the
+  probe it names, so nothing could read the table without running a probe -
+  which is why the table went unchecked for as long as it did.
+- Four checks in `test/docs-site.test.mjs`, all decided from the stylesheet as
+  text and none needing a browser: the caret button draws the same border box as
+  the link beside it, the bar draws the height `--bar` declares and the scroll
+  offset clears it, every dropdown button is named by an `aria-label`, and the
+  sheet resolves to the scheme it is written in. A browser was the only thing
+  that had ever checked the first two, and neither was right.
+- `--clear` in `docs/assets/style.css`: what it takes to clear the fixed bar,
+  as `--bar` plus a `--s2` gap. The scroll offset for an in-page anchor and the
+  page frame's top padding both read it.
+
+### Changed
+
+- `declarationsFor` in `test/page-style.mjs` folds the top-level cascade only.
+  A rule inside an at-rule is left out rather than folded in, because the module
+  has no viewport and no colour scheme to test a prelude against. A caller that
+  wants a conditional block walks `rules` and reads `at` itself, which is what
+  `test/docs-site.test.mjs` already does for the rule that reveals a dropdown.
+- `--bar` is declared once per layout rather than once. Wide it is a menu entry
+  - a `--s5` line box with `--s2` above and below it inside a 1px border - in
+  the bar's own `--s2` padding under its 2px bottom border, which is 60px.
+  Narrow the menu hangs off the bottom of the bar instead of sitting in it, so
+  the bar is the MENU button and stays at `--s7` plus 2px, 50px.
+- The menu's links and its dropdown buttons state their line box as `--s5`
+  rather than inheriting the body's 1.65. That is the one term in the bar's
+  height that was not already a token, and it is what makes the link and the
+  caret beside it the same height.
+- The spacing scale's 64px step is gone from the stylesheet. `--s8` had exactly
+  two readers, the scroll offset and the page frame's top padding, and both read
+  `--clear` now; `DESIGN_LANGUAGE.md` records the scale as `--s1` through
+  `--s7` and says why.
+- `test/probes/run.mjs` imports the table instead of declaring it, and its
+  header says where the table went and what reads it.
+
+### Fixed
+
+- The fixed bar drew 83.09px on a desktop against the 50px `--bar` declared.
+  `.menu` is a `ul` and its entries are `li`, so `p, ul, ol, table, pre` gave
+  the menu a 16px bottom margin and `li` gave each entry 8px, and both landed
+  inside a bar that reasoned about neither. Measured in chromium at every width
+  from 861px to 1920px; 860px and below were correct all along, which is why the
+  one rule that reads `--bar` - the collapsed menu's `max-height` - never looked
+  wrong. The nav's lists state their own spacing now, with the `--s2` between
+  the open phone menu's entries restated as the menu's `gap`. The drawn bar is
+  60.00px at every one of those widths and `--bar` resolves to 60px.
+- Seven of the eight in-page anchors the nav carries parked their heading
+  underneath the bar. `scroll-padding-top` was `--s8`, 64px, picked to clear a
+  50px bar and 19px short of the 83px one: at 1280x900 `usage.html#controls` was
+  19.15px behind it, `development.html#tests` 19.06px, and
+  `getting-started.html#play-in-terminal` 13.75px, with roughly the top half of
+  each `h2` hidden and nothing on screen saying why. All eight clear the bar
+  now, by 7.94px to 9.34px. `.wrap`'s top padding was the same miscalculation
+  and was 2px under the bar on a phone.
+- The caret buttons drew a shorter box than the link beside them. Their only
+  flex item is the 10px `::after`, so the line box came to 16.50px where the
+  link's was 23.10px, and the border boxes to 34.50px against 41.09px -
+  `.has-sub`'s `align-items: center` then centred the shorter one, so moving the
+  pointer or the focus from a page link onto its own caret shrank and re-centred
+  the outlined box. On `docs/usage.html` it showed with no interaction at all:
+  the current page's underline was painted at y 49.09 and the caret's bottom
+  border at y 45.80. Both are 42px now at every wide width measured. The glyph
+  is still 10px - that is its font size, not its box.
+- The Reference button announced the caret glyph as part of its name. CSS
+  generated content is not in the DOM but does take part in the accessible name,
+  and Reference is the one group whose button carries its own text, so its name
+  was computed from contents: read out of the accessibility tree in chromium it
+  was `"Reference v"` closed and `"Reference ^"` open, which reads the
+  decoration aloud and re-reads the name on every toggle that `aria-expanded`
+  already carries. It carries `aria-label="Reference"` now, the same mechanism
+  the three caret-only buttons already used, and
+  `getByRole('button', { name: 'Reference', exact: true })` matches it.
+- `test/page-style.mjs` recorded the at-rule preludes every rule sits inside and
+  then folded rules regardless of them. On `index.html` this could not show -
+  one `:root`, no `@media` - but on `docs/assets/style.css`, which
+  `test/docs-site.test.mjs` points the same module at, `styleSheet(css).properties`
+  came back as the light scheme: `--page` resolved to `#f2f2f4` where the base
+  block declares `#000000`. The doc comment called those "the custom properties
+  the sheet declares on `:root`", which is the dark scheme, so the function and
+  its own description disagreed.
+- The probe rig's flag table was the contract and nothing checked it. Its own
+  comment says "a probe gaining or losing an argument is a line changed here
+  rather than a flag silently ignored", and nothing in `test/` reached it:
+  dropping `count` from the destructuring in `test/probes/column.mjs` left
+  `npm run probe -- column --grid 80x24 --build browser --count 6` accepted,
+  still printing "contact: 24 placements" and still reporting a figure a caller
+  reads as a narrowed walk, with all 460 tests green. That mutation now fails
+  the suite, naming the probe and what it destructures against what the table
+  lists.
+- `docs/cheatsheet.html` is the page `CHEATSHEET.md` is published as, and it was
+  two edits behind it. This release's paragraph naming `test/probes/probes.mjs`
+  and `test/probes.test.mjs` was missing from the page entirely, and 0.7.3's
+  "and which flags each probe takes" was missing from the sentence above it, so
+  the site's Probes section had said neither. Both are on the page now, and
+  every prose paragraph of `CHEATSHEET.md` and of `QUICKSTART.md` is carried by
+  the page it is published as. Nothing in the suite compares the two, which is
+  why it went twice.
+
+### Notes
+
+- 468 tests, from 460. All eight new ones were checked by mutation: each fix was
+  reverted in turn and the assertion written for it failed, including the two
+  that only a browser had ever caught.
+
 ## [0.7.3-alpha] - 2026-09-27
 
 ### Added
