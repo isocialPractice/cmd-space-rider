@@ -23,12 +23,24 @@
   --ship-engine: #00aaaa;  /* CYAN (6)                     */
 
   --s1: 4px; --s2: 8px;  --s3: 12px; --s4: 16px;
-  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --s5: 24px; --s6: 32px; --s7: 48px;
 
-  /* The fixed bar's own height: --s7 of content box plus its 2px border. The
-     narrow menu hangs off the bottom of the bar and caps its height against
-     this, so the figure is declared here rather than restated as a literal. */
-  --bar: calc(var(--s7) + 2px);
+  /* The fixed bar's own height, which is two figures rather than one: the wide
+     bar is built around the menu and the narrow one around the MENU button, so
+     the narrow block at the foot of this file redeclares it. Wide is one menu
+     entry - a --s5 line box with --s2 above and below it inside a 1px border -
+     sitting in .nav-bar's own --s2 padding, under the nav's 2px bottom border.
+     Every term is a token the entry itself uses, so the declared height and the
+     drawn one move together rather than drifting: the drawn bar was 83px here
+     against the 50px this line used to declare, and the scroll offset chosen to
+     clear it parked seven of the nav's eight in-page anchors underneath it. */
+  --bar: calc(var(--s5) + 4 * var(--s2) + 4px);
+
+  /* What it takes to clear the bar: its height and a gap under it. The scroll
+     offset and the page frame's top padding are the two things that land
+     underneath a fixed bar when they carry a figure of their own, so both read
+     this rather than naming a length that agrees with the bar only by luck. */
+  --clear: calc(var(--bar) + var(--s2));
 
   --mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
 }
@@ -61,7 +73,7 @@
 *, *::before, *::after { box-sizing: border-box; border-radius: 0; }
 body, h1, h2, h3, h4, p, ul, ol, figure, table, pre { margin: 0; }
 
-html { scroll-behavior: smooth; scroll-padding-top: var(--s8); }
+html { scroll-behavior: smooth; scroll-padding-top: var(--clear); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 body {
@@ -114,6 +126,10 @@ body {
   display: block; color: var(--text); text-decoration: none;
   padding: var(--s2) var(--s3); font-size: 14px; white-space: nowrap;
   border: 1px solid transparent;
+  /* The entry's line box, stated rather than inherited. It is the one term in
+     --bar that is not already a token, and it is what the caret button beside
+     this link has to match to draw the same box. */
+  line-height: var(--s5);
 }
 .menu a:hover, .menu a:focus-visible { color: var(--heading); border-color: var(--rule); }
 .menu a[aria-current="page"] { color: var(--heading); border-bottom-color: var(--heading); }
@@ -130,7 +146,15 @@ body {
   display: flex; align-items: center; gap: var(--s1);
   background: transparent; color: var(--text);
   border: 1px solid transparent;
-  font: 400 14px/1.65 var(--mono);
+  /* No line-height in the shorthand: the next line carries it, and it is the
+     same one .menu a carries. Inheriting 1.65 instead gave the three
+     caret-only buttons a 16.50px line box against the link's 23.10px, so their
+     border box came out 34.50px against 41.09px and align-items centred the
+     shorter one - a hover moving from a page link onto its own caret shrank
+     and re-centred the outlined box. The glyph's own 10px is untouched: this
+     is the box it sits in, not the mark. */
+  font: 400 14px var(--mono);
+  line-height: var(--s5);
   padding: var(--s2) var(--s3); cursor: pointer; white-space: nowrap;
 }
 .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--heading); border-color: var(--rule); }
@@ -147,8 +171,17 @@ body {
 }
 .has-sub > button[aria-expanded="true"] + .sub { display: block; }
 
+/* The nav's lists are lists, so the prose rhythm at the foot of the type block
+   reaches them: every ul takes a --s4 bottom margin and every li a --s2 one.
+   Inside a fixed bar those land in its height, which is how the bar came to
+   draw 83px while --bar declared 50px. The nav states its own spacing instead -
+   gap between the top-level entries, one explicit margin between the dropdown's
+   - so nothing about the bar arrives by accident from a rule about paragraphs. */
+.menu, .sub, .menu li { margin: 0; }
+.sub > li + li { margin-top: var(--s2); }
+
 /* ===== Page frame ===== */
-.wrap { max-width: 1100px; margin: 0 auto; padding: var(--s8) var(--s4) var(--s7); }
+.wrap { max-width: 1100px; margin: 0 auto; padding: var(--clear) var(--s4) var(--s7); }
 main { max-width: 80ch; }
 
 /* ===== Type ===== */
@@ -208,10 +241,20 @@ footer a { color: var(--link); }
 
 /* ===== Narrow screens ===== */
 @media (max-width: 860px) {
+  /* The menu is not in the bar here - it hangs off the bottom of it - so the
+     bar is the brand beside the MENU button: a 14px/1 line box with --s2 above
+     and below it inside a 1px border, in .nav-bar's --s2 padding, under the
+     nav's 2px border. That is --s7 plus 2px, which is what this property has
+     always said; the wide layout is the one it was never true of. --clear
+     follows it down, so the scroll offset and the page frame's top padding are
+     right here too without either naming a second figure. */
+  :root { --bar: calc(var(--s7) + 2px); }
   .nav-toggle { display: block; }
   .menu {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
-    flex-direction: column; align-items: stretch; gap: 0;
+    /* The --s2 the li margin used to give each entry, restated as the gap
+       between them so it spaces the open menu without adding to the bar. */
+    flex-direction: column; align-items: stretch; gap: var(--s2);
     background: var(--surface); border-bottom: 2px solid var(--rule);
     padding: var(--s2); max-height: calc(100vh - var(--bar)); overflow-y: auto;
   }
@@ -228,5 +271,4 @@ footer a { color: var(--link); }
   .has-sub > button { color: var(--muted); cursor: default; font-size: 14px; }
   .has-sub > button::after { content: ""; }
   .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--muted); border-color: transparent; }
-  .wrap { padding-top: var(--s7); }
 }

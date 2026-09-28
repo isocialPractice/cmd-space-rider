@@ -102,6 +102,11 @@ A flag the named probe does not read is refused rather than discarded, so
 `npm run probe -- overlay-anchor --grid 80x24` exits non-zero instead of
 reporting a figure from a walk that never used the grid.
 
+The table the rig checks against lives in `test/probes/probes.mjs`, and
+`test/probes.test.mjs` reads it against the probes themselves: every probe takes
+exactly the flags listed for it, so a probe that stops reading an argument fails
+the suite rather than going on accepting the flag in silence.
+
 A probe reports; it never asserts. Every walk is seeded, so the same command
 gives the same numbers every time.
 

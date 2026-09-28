@@ -192,3 +192,165 @@ test('docs: every custom property the stylesheet declares reaches a reader', () 
     );
   }
 });
+
+/* ===== The nav's own geometry =====
+   Everything below is decided by the stylesheet as text, so it runs without a
+   browser - which is the point. A browser was the only thing that had ever
+   checked the bar's height or the caret's box, and neither was right. */
+
+const VIEWPORT = { w: 1280, h: 900 };
+const px = (value, what) => style.lengthPx(value, VIEWPORT, what);
+
+/** One side of a box shorthand, by CSS's own one-to-four value order. */
+function side(shorthand, which) {
+  const parts = String(shorthand).trim().split(/\s+/);
+  const [top, right = top, bottom = top, left = right] = parts;
+  return { top, right, bottom, left }[which];
+}
+
+/** The width out of a border shorthand, which leads with it. */
+const borderWidth = (shorthand) => String(shorthand).trim().split(/\s+/)[0];
+
+/**
+ * The border-box height one of the menu's controls draws, from the three things
+ * that decide it for a single line: the line box, the padding above and below
+ * it, and the border.
+ *
+ * Several selectors fold in cascade order, so the caret button is read as the
+ * button rule plus the `.sub-toggle` rule that narrows it, the way a browser
+ * reads it.
+ */
+function controlHeight(...selectors) {
+  const decl = {};
+  for (const selector of selectors) Object.assign(decl, style.declarationsFor(selector));
+  const named = selectors.join(' + ');
+
+  // A control with no line box of its own inherits one from the body, in a unit
+  // this resolver has no font size to turn into pixels. That is not a gap in
+  // the resolver - it is the fault itself, and it is why the caret button drew
+  // a 34.50px box beside a 41.09px link.
+  assert.ok(decl['line-height'], `${named} states no line box of its own`);
+
+  const pad = (which) => px(decl[`padding-${which}`] ?? side(decl.padding ?? '0', which), `${named} padding-${which}`);
+  return px(decl['line-height'], `${named} line-height`)
+    + pad('top') + pad('bottom')
+    + px(borderWidth(decl.border ?? '0'), `${named} border width`) * 2;
+}
+
+test('docs: the caret button draws the same box as the link beside it', () => {
+  // Three of the four groups are a link and a caret button side by side, and
+  // both take the same hover border, so a box that does not match is a box that
+  // shrinks and re-centres as the pointer crosses between them. On usage.html
+  // it showed without any interaction at all: the current page's underline and
+  // the caret's bottom border were painted 3.29px apart.
+  const link = controlHeight('.menu a');
+
+  assert.equal(
+    controlHeight('.has-sub > button', '.has-sub > .sub-toggle'), link,
+    'the caret-only button and the link beside it draw the same border box'
+  );
+  // Reference is the one group whose button carries its own text, so it is
+  // read without the .sub-toggle rule and still has to match its neighbours.
+  assert.equal(
+    controlHeight('.has-sub > button'), link,
+    'the Reference button and the menu links draw the same border box'
+  );
+});
+
+test('docs: the bar draws the height --bar declares, and the offsets clear it', () => {
+  // The nav's lists are lists, so `ul { margin-bottom }` and `li { margin-bottom }`
+  // reach them unless something stops it. Inside a fixed bar those land in its
+  // height: the bar drew 83.09px against the 50px --bar declared, and the
+  // scroll offset picked to clear 50px parked seven of the nav's eight in-page
+  // anchors underneath it.
+  for (const selector of ['.menu', '.sub', '.menu li']) {
+    const decl = style.declarationsFor(selector);
+    assert.ok(
+      'margin' in decl,
+      `${selector} declares no margin of its own, so it takes the prose rhythm meant for body text`
+    );
+    assert.equal(px(decl.margin, `${selector} margin`), 0, `${selector} carries a margin into the bar`);
+  }
+
+  const navBar = style.declarationsFor('.nav-bar');
+  const drawn = controlHeight('.menu a')
+    + px(side(navBar.padding, 'top'), '.nav-bar padding-top')
+    + px(side(navBar.padding, 'bottom'), '.nav-bar padding-bottom')
+    + px(borderWidth(style.declarationsFor('.nav')['border-bottom']), '.nav border-bottom width');
+
+  assert.equal(drawn, px('var(--bar)', '--bar'), 'the wide bar draws the height --bar declares');
+
+  // And the two things that land underneath a fixed bar read that height rather
+  // than a figure of their own. --s8 was that figure, and it was 19px short.
+  assert.match(style.properties['--clear'], /var\(\s*--bar\s*[,)]/, '--clear is derived from --bar');
+  const clear = px(style.properties['--clear'], '--clear');
+  assert.ok(clear > drawn, `--clear is ${clear}px against a ${drawn}px bar, so it does not clear it`);
+
+  assert.equal(
+    px(style.declarationsFor('html')['scroll-padding-top'], 'scroll-padding-top'), clear,
+    'an in-page anchor scrolls its heading clear of the bar'
+  );
+  assert.equal(
+    px(side(style.declarationsFor('.wrap').padding, 'top'), '.wrap padding-top'), clear,
+    'the page frame starts clear of the bar'
+  );
+});
+
+test('docs: every dropdown control is named by an aria-label and nothing else', () => {
+  // The caret glyph comes from CSS `content`, which is not in the DOM but is in
+  // the accessible name: generated content takes part in the name computation.
+  // The three caret-only buttons have an aria-label that outranks it. Reference
+  // had none, so its name was computed from contents and came out "Reference v"
+  // closed and "Reference ^" open - the decoration read aloud, and the state
+  // re-read on every toggle, which aria-expanded already carries.
+  for (const name of PAGES) {
+    for (const group of groupsOf(navOf(name))) {
+      const button = group.match(/<button\b[^>]*>(.*?)<\/button>/s);
+      assert.ok(button, `${name}: a .has-sub group with no button to label`);
+
+      const labelled = button[0].match(/aria-label="([^"]*)"/);
+      assert.ok(labelled, `${name}: ${button[0]} carries no aria-label, so its name is its contents and the caret`);
+      assert.ok(labelled[1].trim(), `${name}: ${button[0]} carries an empty aria-label`);
+
+      // A visible label has to be contained in the accessible name, so a button
+      // that shows text is labelled with that text rather than around it.
+      const visible = button[1].replace(/<[^>]*>/g, '').trim();
+      if (visible) {
+        assert.ok(
+          labelled[1].includes(visible),
+          `${name}: the button reads "${visible}" and is named "${labelled[1]}"`
+        );
+      }
+    }
+  }
+});
+
+test('docs: the sheet resolves to the scheme it is written in', () => {
+  // This stylesheet is the repository's only one that declares :root twice - the
+  // dark block it is written in, and the light re-inking inside
+  // @media (prefers-color-scheme: light) - so it is the only thing that can
+  // catch a resolver folding a conditional block into the top-level cascade.
+  // Folded, `styleSheet(css).properties` came back as the light scheme for a
+  // sheet whose base scheme is dark, and said so nowhere.
+  const light = style.rules.find((rule) => rule.selectors.includes(':root')
+    && rule.at.some((prelude) => prelude.includes('prefers-color-scheme: light')));
+  assert.ok(light, 'the sheet re-inks :root for a light scheme');
+  assert.ok(light.declarations['--page'], 'the light block re-inks --page');
+
+  assert.equal(style.properties['--page'], '#000000', 'the resolved --page is the base scheme, which is dark');
+  assert.notEqual(
+    style.properties['--page'], light.declarations['--page'],
+    'the resolved --page is not the light block value, which is the answer a folded resolver gives'
+  );
+
+  // The bar is the other property this sheet declares twice, and the same rule
+  // decides it: --bar is the wide layout's, and the narrow block's own figure
+  // belongs to a caller that asks the narrow block for it.
+  const narrow = style.rules.find((rule) => rule.selectors.includes(':root')
+    && rule.at.some((prelude) => prelude.includes('max-width')));
+  assert.ok(narrow, 'the narrow block redeclares --bar, because the bar is a different height there');
+  assert.notEqual(
+    px(style.properties['--bar'], '--bar'), px(narrow.declarations['--bar'], 'narrow --bar'),
+    'the two blocks declare two different bars, which is the whole reason they are two blocks'
+  );
+});

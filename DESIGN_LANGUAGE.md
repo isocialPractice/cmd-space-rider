@@ -112,7 +112,11 @@ There is not a curve or a corner radius in the file. The site follows it:
   single strongest thing the artwork says.
 - **Spacing runs on a 4px base**, which is the smallest dimension in the mark:
   the engine bells are 4 wide, and 32 divides into eights of 4. The scale is
-  4, 8, 12, 16, 24, 32, 48, 64.
+  4, 8, 12, 16, 24, 32, 48, and the stylesheet declares it as `--s1` through
+  `--s7`. A 64px step was declared too, and the only thing that read it was the
+  offset that holds content clear of the fixed bar. That offset is derived from
+  the bar's own height now, so the step had no reader left and went: the
+  stylesheet declares the part of the scale something uses.
 - **Borders are 1px and 2px**, solid. The mark has no strokes at all, so weight
   on the site comes from fill and from the rule under a heading rather than
   from outlines.
@@ -155,6 +159,17 @@ One size on the site is off this scale, and it is the only one:
   label instead of as a caret. It carries nothing the button's `aria-expanded`
   does not already carry, so no reader depends on its size.
 
+  It is decoration to the eye and not to the accessibility tree, which is the
+  trap in drawing it with CSS `content`: generated content is not in the DOM
+  but does take part in the accessible name. A button that computes its name
+  from its contents picks the glyph up, so Reference - the one group whose
+  button carries its own text - announced as "Reference v" closed and
+  "Reference ^" open, reading the decoration aloud and re-reading the name on
+  every toggle. Every dropdown button carries an `aria-label` for that reason,
+  and the three caret-only buttons always did. The glyph's own 10px is its font
+  size and not its box: the button takes the same line box as the link beside
+  it, so the two draw the same height.
+
 ## Layout
 
 - **Fixed top menu**, so it stays reachable while reading. The site has ten
@@ -165,12 +180,27 @@ One size on the site is off this scale, and it is the only one:
   a caret button that opens the list, so the page stays one click away and its
   sections are two. Reference has no page of its own and is a button alone,
   which is why the shapes differ.
-- **The bar's height is declared once**, as `--bar`: `--s7` of content box plus
-  its own 2px border, so it stays on the spacing scale. The collapsed menu hangs
-  off the bottom of the bar and caps itself at `calc(100vh - var(--bar))`, so a
-  ten-page menu on a short phone scrolls inside the viewport rather than running
-  off the end of it. Reading the bar rather than repeating its height is what
-  keeps the two from drifting apart.
+- **The bar's height is declared as `--bar`, once per layout**, because it is
+  two heights. Wide, the bar is built around a menu entry: a `--s5` line box
+  with `--s2` above and below it inside a 1px border, sitting in the bar's own
+  `--s2` padding, under its 2px bottom border - 60px. Narrow the menu is not in
+  the bar at all but hangs off the bottom of it, so the bar is the MENU button
+  instead and comes to `--s7` plus 2px, 50px. Every term is a token the thing
+  itself uses, so the declared height and the drawn one move together.
+
+  It was one figure for a while, and the wide layout was never that figure: the
+  nav's lists are lists, so the prose rhythm meant for body paragraphs reached
+  them and put 24px of margin inside a bar that declared 50px and drew 83px.
+  The nav states its own spacing now.
+
+- **What has to clear the bar reads the bar.** `--clear` is `--bar` plus a
+  `--s2` gap, and both the scroll offset for an in-page anchor and the page
+  frame's top padding are set from it. Picking a figure that merely looked
+  right is what put seven of the nav's eight in-page anchors under the bar, with
+  about the top half of each heading hidden and nothing on screen saying why.
+  The collapsed menu reads `--bar` the same way, capping itself at
+  `calc(100vh - var(--bar))` so a ten-page menu on a short phone scrolls inside
+  the viewport rather than running off the end of it.
 - **Responsive from a phone to a wide desktop.** The menu collapses behind a
   button under 860px, and the content column is capped at 80ch so a line of
   monospace text stays readable on a wide screen.

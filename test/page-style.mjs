@@ -85,13 +85,27 @@ export function styleSheet(css) {
   const rules = parseRules(text);
 
   /**
-   * The declarations that apply to a bare selector, later rules winning as the
-   * cascade has them. Selectors are matched whole, so `#fire.on` and
-   * `body.light #fire` - which carry only colours - are correctly left out.
+   * The declarations that apply to a bare selector in the top-level cascade,
+   * later rules winning as the cascade has them.
+   *
+   * A rule inside an at-rule is left out rather than folded in. This module has
+   * no viewport and no colour scheme to test a prelude against, so folding a
+   * conditional block would answer for a layout the caller never asked about -
+   * and silently, since the value that comes back is a real value from the
+   * sheet. `docs/assets/style.css` declares `:root` twice, the base block and
+   * again inside `@media (prefers-color-scheme: light)`, so the folded answer
+   * for `--page` was the light scheme's `#f2f2f4` for a sheet whose base
+   * scheme is dark. A caller that wants a conditional block walks `rules` and
+   * reads `at` itself, which is what test/docs-site.test.mjs already does for
+   * the rule that reveals a dropdown.
+   *
+   * Selectors are matched whole, so `#fire.on` and `body.light #fire` - which
+   * carry only colours - are correctly left out.
    */
   function declarationsFor(selector) {
     const out = {};
     for (const rule of rules) {
+      if (rule.at.length) continue;
       if (!rule.selectors.includes(selector)) continue;
       Object.assign(out, rule.declarations);
     }
@@ -99,8 +113,14 @@ export function styleSheet(css) {
   }
 
   /**
-   * The custom properties the sheet declares on `:root`, read here rather than
-   * restated by a caller. `--ctl` is the size the touch controls are drawn at
+   * The custom properties the sheet declares on `:root` at the top level, read
+   * here rather than restated by a caller. Top level because `declarationsFor`
+   * is: a property redeclared under a media query - the docs sheet re-inks the
+   * palette for a light scheme, and gives the bar a second height for the
+   * narrow layout - answers with the base block's value, which is the one the
+   * page carries until a condition takes it away.
+   *
+   * `--ctl` is the size the touch controls are drawn at
    * and the height BOOST's offset stands on, and a caller carrying its own copy
    * of that figure would agree with itself rather than with the page.
    *

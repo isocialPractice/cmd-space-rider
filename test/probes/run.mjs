@@ -38,20 +38,10 @@
 // is rebuilt by running the probe again rather than by averaging it.
 
 import { GRIDS, BUILDS, parseGrid } from '../engagement.mjs';
-
-/**
- * Every probe, with the flags its own `run()` actually reads. The flag list is
- * what the rig checks a command line against, so a probe gaining or losing an
- * argument is a line changed here rather than a flag silently ignored.
- */
-const PROBES = {
-  'seen-versus-kill': { load: () => import('./seen-versus-kill.mjs'), flags: ['grid', 'build', 'count'] },
-  'suite-replay': { load: () => import('./suite-replay.mjs'), flags: ['grid', 'build'] },
-  'frame-rate': { load: () => import('./frame-rate.mjs'), flags: ['grid', 'build', 'count'] },
-  'column': { load: () => import('./column.mjs'), flags: ['grid', 'build', 'count'] },
-  'free-flight': { load: () => import('./free-flight.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
-  'overlay-anchor': { load: () => import('./overlay-anchor.mjs'), flags: [] },
-};
+// The table lives in its own module because this one runs a probe at import, so
+// a test that wants to read the table cannot import this file to get it.
+// test/probes.test.mjs checks each probe's flags against its own run().
+import { PROBES } from './probes.mjs';
 
 function parseArgs(argv) {
   // `given` is the flags the command line carried, kept apart from the values
