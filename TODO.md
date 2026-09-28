@@ -68,6 +68,80 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
   - From: UI/UX Override - the width the wide nav switches on at
 
+### Code Review Override - the bar check that reads one column, and the step with two readers
+
+- [ ] **The bar check reads one column of the bar and calls it the bar** -
+  `test/docs-site.test.mjs:275-281` builds the drawn height out of `.menu a`
+  alone: the link's box, `.nav-bar`'s padding, and `.nav`'s bottom border. The
+  bar is a flex row and its height is the tallest of its children, and `.brand`
+  and `.nav-toggle` are children too.
+  - **Issue**: The check is named "the bar draws the height `--bar` declares"
+    and answers for the menu column only, so the fault it was written to end
+    comes back through any other child with all 468 tests green. Verified by
+    mutation: add `padding: var(--s3) 0` to `.brand` at
+    `docs/assets/style.css:104` and the brand's 26.4px line box becomes 50.4px,
+    taller than the link's 42px, so the bar draws 68.4px against the 60px
+    `--bar` declares - and `node --test test/docs-site.test.mjs` reports 8 of 8
+    passing. That is the same shape as the defect just fixed: something inside
+    the bar grew, the bar grew with it, and `--bar` went on declaring a figure
+    nothing drew. `.brand` is the child that can do it, because it states no
+    line box of its own and takes the body's 1.65 off a 16px base.
+  - **Goal**: Have the check take the tallest child rather than an assumed one.
+    That needs `controlHeight` to resolve a control with no `line-height` of its
+    own, which it deliberately refuses today - the refusal is what caught the
+    caret button - so the decision is either to give `test/page-style.mjs` an
+    inherited font size and line height to resolve a unitless ratio against, or
+    to have `.brand` and `.nav-toggle` state their own line box the way
+    `.menu a` and `.has-sub > button` now do and keep the refusal as it is. The
+    second is the smaller change and keeps every term in `--bar` a token. Either
+    way the check should fold every direct child of `.nav-bar` the layout shows
+    and assert the maximum, so the narrow layout's `--bar` is covered by the
+    same walk against the MENU button.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [ ] **Two documents in one commit disagree on how many rules read `--s8`** -
+  `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
+  holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
+  commit says "`--s8` had exactly two readers, the scroll offset and the page
+  frame's top padding".
+  - **Issue**: The changelog is the accurate one. `git show HEAD:docs/assets/style.css`
+    carries `var(--s8)` twice - `scroll-padding-top` at `:64` and `.wrap`'s top
+    padding at `:151` - so the design file undercounts by one and the two
+    records of the same removal cannot both be read as written. Nothing is
+    broken by it; the cost is that `DESIGN_LANGUAGE.md` is the file the
+    stylesheet's own header points at as the record of where each value came
+    from, so a reader checking why the step went is told one rule read it and
+    finds two.
+  - **Goal**: Say two in `DESIGN_LANGUAGE.md`, naming both the way the changelog
+    does, or drop the count and say only that the step's readers now derive from
+    the bar's own height. Either agrees with the stylesheet; the present wording
+    does not.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [ ] **Nothing checks that a page and the file it is published from agree** -
+  `docs/project-structure.html` calls `cheatsheet.html` "CHEATSHEET.md as a
+  page" and `quickstart.html` "QUICKSTART.md as a page", and no test compares
+  either pair. An edit to the file that misses the page is silent.
+  - **Issue**: It has now been missed on two consecutive runs, in the same
+    paragraph. 0.7.3 added ", and which flags each probe takes" to
+    `CHEATSHEET.md` and left it off the page; 0.7.4 added the paragraph naming
+    `test/probes/probes.mjs` and `test/probes.test.mjs` and left that off too.
+    Both were found by reading the two files side by side, which is the only
+    thing that has ever checked them. Normalizing away the markup on both sides
+    and asking which of `CHEATSHEET.md`'s prose paragraphs the page carries
+    answered it in one pass, and answered 2 before this review's fix and 0
+    after.
+  - **Goal**: Assert it in `test/docs-site.test.mjs`, which already reads the
+    pages as text. Strip the tags out of the page's `<main>`, unescape the
+    entities, take the prose paragraphs out of the markdown with the fenced
+    blocks and tables removed, collapse whitespace and inline code markers on
+    both sides, and assert every paragraph of the file is on the page. Pin both
+    pairs the site names - `CHEATSHEET.md` and `QUICKSTART.md` - and read the
+    pairing off `docs/project-structure.html`'s own "X.md as a page" lines
+    rather than listing it here, so a third page added later is covered without
+    a second edit. One direction only: the pages carry a pager and a nav the
+    files have no equivalent of, so the page holding more than the file is not
+    the fault.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
