@@ -42,105 +42,84 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the width the wide nav switches on at
+### Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+
+- [ ] **The layout resolver reads any width query as the narrow one** -
+  `test/docs-site.test.mjs:349-352` decides a rule applies to the narrow layout
+  when every at-rule prelude around it matches `/\bwidth:/`, and to the wide
+  layout only when the rule sits at the top level with no prelude at all.
+  - **Issue**: Nothing fails today, because `docs/assets/style.css` carries
+    exactly one width query. A `@media (min-width: ...)` block added later is
+    folded into the narrow layout and left out of the wide one, which is
+    backwards in both directions, and the breakpoint check beside it collects
+    `max-width` preludes only - `assert.equal(widths.size, 1, ...)` at `:604` -
+    so nothing names the new query either. The bar walk would then report a
+    height for a layout the stylesheet does not have, silently and with the
+    suite green, which is the exact failure this file was written to end.
+  - **Goal**: Read the bound as well as the property, so a `max-width` prelude
+    applies to the narrow layout and a `min-width` one to the wide, and have the
+    breakpoint check assert the sheet names no width query it did not account
+    for - the way it already asserts there is exactly one `max-width`.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
 
 #### Found Issues
 
-- [ ] **The Reference group sits off the right edge between 861px and 950px** -
-  The wide nav lays its eight entries on one unwrapped row, and that row is
-  wider than the width it switches on at, so the last group is painted past the
-  right edge of the screen across the first 90px of the wide range.
-  - **Issue**: Measured in chromium on `docs/index.html`, identical in both
-    colour schemes. At 861px the Reference group's box runs 841.47px to
-    951.16px in an 861px viewport, so 17.8% of the control is on screen;
-    `.nav-bar` overflows by 90px, by 51px at 900px, and first fits at 951px.
-    Opening it is worse than leaving it shut - the list runs to 1049.73px, 9.4%
-    visible, with `Project Structure`, `Terminal Requirements`, `How It Works`
-    and `Cheatsheet` all laid out between 846px and 1045px. Nothing can scroll
-    to them: `.nav` is `position: fixed`, so the overflow never reaches the
-    document and `scrollWidth` stays equal to `clientWidth` at every one of
-    these widths. Keyboard focus does land on the button, but a fixed ancestor
-    cannot be scrolled, so `window.scrollX` stays 0 and the focused control
-    stays invisible. Between 861px and 950px the nav offers no usable route to
-    four of the site's ten pages. Not this turn's doing: the same figures come
-    back from `git show HEAD:docs/assets/style.css` served in place of the
-    working tree's, so the defect predates the bar fix it was found beside.
-  - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
-  - From: UI/UX Override - the width the wide nav switches on at
-
-### Code Review Override - the bar check that reads one column, and the step with two readers
-
-- [ ] **The bar check reads one column of the bar and calls it the bar** -
-  `test/docs-site.test.mjs:275-281` builds the drawn height out of `.menu a`
-  alone: the link's box, `.nav-bar`'s padding, and `.nav`'s bottom border. The
-  bar is a flex row and its height is the tallest of its children, and `.brand`
-  and `.nav-toggle` are children too.
-  - **Issue**: The check is named "the bar draws the height `--bar` declares"
-    and answers for the menu column only, so the fault it was written to end
-    comes back through any other child with all 468 tests green. Verified by
-    mutation: add `padding: var(--s3) 0` to `.brand` at
-    `docs/assets/style.css:104` and the brand's 26.4px line box becomes 50.4px,
-    taller than the link's 42px, so the bar draws 68.4px against the 60px
-    `--bar` declares - and `node --test test/docs-site.test.mjs` reports 8 of 8
-    passing. That is the same shape as the defect just fixed: something inside
-    the bar grew, the bar grew with it, and `--bar` went on declaring a figure
-    nothing drew. `.brand` is the child that can do it, because it states no
-    line box of its own and takes the body's 1.65 off a 16px base.
-  - **Goal**: Have the check take the tallest child rather than an assumed one.
-    That needs `controlHeight` to resolve a control with no `line-height` of its
-    own, which it deliberately refuses today - the refusal is what caught the
-    caret button - so the decision is either to give `test/page-style.mjs` an
-    inherited font size and line height to resolve a unitless ratio against, or
-    to have `.brand` and `.nav-toggle` state their own line box the way
-    `.menu a` and `.has-sub > button` now do and keep the refusal as it is. The
-    second is the smaller change and keeps every term in `--bar` a token. Either
-    way the check should fold every direct child of `.nav-bar` the layout shows
-    and assert the maximum, so the narrow layout's `--bar` is covered by the
-    same walk against the MENU button.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
-- [ ] **Two documents in one commit disagree on how many rules read `--s8`** -
-  `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
-  holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
-  commit says "`--s8` had exactly two readers, the scroll offset and the page
-  frame's top padding".
-  - **Issue**: The changelog is the accurate one. `git show HEAD:docs/assets/style.css`
-    carries `var(--s8)` twice - `scroll-padding-top` at `:64` and `.wrap`'s top
-    padding at `:151` - so the design file undercounts by one and the two
-    records of the same removal cannot both be read as written. Nothing is
-    broken by it; the cost is that `DESIGN_LANGUAGE.md` is the file the
-    stylesheet's own header points at as the record of where each value came
-    from, so a reader checking why the step went is told one rule read it and
-    finds two.
-  - **Goal**: Say two in `DESIGN_LANGUAGE.md`, naming both the way the changelog
-    does, or drop the count and say only that the step's readers now derive from
-    the bar's own height. Either agrees with the stylesheet; the present wording
-    does not.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
-- [ ] **Nothing checks that a page and the file it is published from agree** -
-  `docs/project-structure.html` calls `cheatsheet.html` "CHEATSHEET.md as a
-  page" and `quickstart.html` "QUICKSTART.md as a page", and no test compares
-  either pair. An edit to the file that misses the page is silent.
-  - **Issue**: It has now been missed on two consecutive runs, in the same
-    paragraph. 0.7.3 added ", and which flags each probe takes" to
-    `CHEATSHEET.md` and left it off the page; 0.7.4 added the paragraph naming
-    `test/probes/probes.mjs` and `test/probes.test.mjs` and left that off too.
-    Both were found by reading the two files side by side, which is the only
-    thing that has ever checked them. Normalizing away the markup on both sides
-    and asking which of `CHEATSHEET.md`'s prose paragraphs the page carries
-    answered it in one pass, and answered 2 before this review's fix and 0
-    after.
-  - **Goal**: Assert it in `test/docs-site.test.mjs`, which already reads the
-    pages as text. Strip the tags out of the page's `<main>`, unescape the
-    entities, take the prose paragraphs out of the markdown with the fenced
-    blocks and tables removed, collapse whitespace and inline code markers on
-    both sides, and assert every paragraph of the file is on the page. Pin both
-    pairs the site names - `CHEATSHEET.md` and `QUICKSTART.md` - and read the
-    pairing off `docs/project-structure.html`'s own "X.md as a page" lines
-    rather than listing it here, so a third page added later is covered without
-    a second edit. One direction only: the pages carry a pager and a nav the
-    files have no equivalent of, so the page holding more than the file is not
-    the fault.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [ ] **A group left open on the wide layout keeps its caret on the narrow one** -
+  `docs/assets/style.css:181` declares
+  `.has-sub > button[aria-expanded="true"]::after { content: "^"; }` at the top
+  level, and the narrow block's `.has-sub > button::after { content: ""; }` at
+  `:309` is the rule meant to take that glyph away. A media query contributes no
+  specificity, so (0,2,2) beats (0,1,2) whichever comes later in the file, and
+  the narrow layout cannot blank the caret of a button that is expanded.
+  - **Issue**: `docs/assets/docs.js:38-42` sets `aria-expanded="true"` only
+    while `wide.matches`, and nothing ever resets it - there is no `change`
+    listener on the `wide` MediaQueryList and no resize handler - so the
+    attribute survives a layout change. The failing sequence: open
+    `docs/index.html` at 1280px, click the Reference caret, then narrow the
+    window to 900px. Reference is the one `.has-sub > button` the narrow layout
+    still shows, because the three `.sub-toggle` buttons are `display: none` at
+    `:307`, and it reads `Reference ^` as a static label with `cursor: default`,
+    advertising a control that no longer toggles anything. The stale
+    `aria-expanded="true"` rides along on that same label. Not introduced this
+    turn - the two rules are byte-identical at `HEAD` - but newly reachable
+    across the 90px this turn moved into the narrow layout, since at 900px the
+    old 861px boundary still gave the wide layout, where the caret was correct.
+  - **Goal**: Either blank the glyph in the narrow block at a specificity that
+    wins, `.has-sub > button[aria-expanded="true"]::after { content: ""; }`
+    beside the rule already there, or reset the attribute from `docs.js` on the
+    `wide` MediaQueryList's `change` event, which clears the stale
+    `aria-expanded` as well as the caret. Verifying either from text needs
+    something the rig does not have: `test/page-style.mjs` folds rules in
+    document order and models no specificity at all, which is the same blind
+    spot that let this sit unseen while the bar walk was being built on top of
+    it. Give the resolver a specificity ordering, then assert which `content`
+    wins for `.has-sub > button::after` in each layout and each `aria-expanded`
+    state. A browser is not needed for any of it.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [ ] **The new page-against-file check compares prose and skips every list item** -
+  `prose()` at `test/docs-site.test.mjs:254-282` drops list items and the
+  indented lines that continue them, so the check added this turn compares 6 of
+  QUICKSTART.md's 15 blocks and 9 of CHEATSHEET.md's 13.
+  - **Issue**: The gameplay list at `QUICKSTART.md:44-53` and the terminal floor
+    list at `CHEATSHEET.md:126-129` are not compared against their pages at all,
+    which is the same silent drift the item was opened to end. Verified by
+    mutation: delete the whole `<li>Kills inside two seconds of each other
+    chain, up to <code>COMBO x8</code>.</li>` from `docs/quickstart.html` and
+    `node --test test/docs-site.test.mjs` reports 10 of 10 passing. The comment
+    at `:246-252` justifies the exclusion by reformatting - "a table or a fenced
+    block is reformatted on its way to the page" - which holds for those two and
+    not for a bullet list, which becomes `<ul><li>` and survives the normalizing
+    the function already does.
+  - **Goal**: Take list items as well as paragraphs - marker stripped, indented
+    continuations joined onto their item, through the same link-stripping and
+    `flatten` - and keep the fenced-block and table exclusions, for which the
+    reformatting argument does hold. Measured before queuing this: pulling all
+    13 list items out of both files that way, every one is already on its page,
+    so the gap closes with nothing else to fix. While in that function,
+    `flatten` at `:226` drops backticks but not `**` or `_`, so the first prose
+    paragraph to gain emphasis is reported as missing from a page that carries
+    it; strip the emphasis markers on the file side too.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
 
 ## Quick Wins
 
@@ -223,108 +202,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 79 earlier items in `TODO-archive.md`, newest last.
+> 83 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Caret Box 1 - the caret button's box is shorter than the link beside it
-  - **Issue**: The dropdowns themselves work. Measured in chromium at 1280x900
-    on `docs/index.html` and `docs/usage.html`, all four groups draw a caret,
-    each caret opens its own list and closes whichever other was open, the glyph
-    flips `v` to `^`, Escape and an outside click both close, the link and the
-    caret are consecutive separate tab stops, the caret takes the 2px
-    `:focus-visible` ring, Enter and Space both open it, and the three page
-    links still navigate on one click. What does not hold is the last of the
-    item's own criteria: the caret's border box is 34.50px against the link's
-    41.09px, a 6.59px difference, and `.has-sub`'s `align-items: center` centres
-    the shorter box so it sits 3.30px inside the link's at the top and 3.29px
-    inside it at the bottom. `.menu a:hover` and `.has-sub > button:hover` draw
-    the same `var(--rule)` border, so moving the pointer or the focus from a
-    page link onto its caret shrinks and re-centres the outlined box. On
-    `docs/usage.html` it needs no interaction at all: the Usage link's
-    `aria-current="page"` border is painted at y 49.09 and a hover on the caret
-    beside it draws its bottom border at y 45.80. The cause is that the three
-    caret-only buttons are flex containers whose only item is the 10px `::after`
-    at `docs/assets/style.css:141`, giving a 16.50px line box where the link has
-    23.10px. Reference is unaffected, because it has text. The narrow layout is
-    clean: at 375x667 every group's list is open, the three `.sub-toggle`
-    buttons are `display: none` with a zero box, no empty bordered box is drawn
-    anywhere in the menu, and all eight anchors still close the menu behind
-    them.
-  - **Goal**: Resolve to [caret-box-height.prompt.md](.claude/prompts/caret-box-height.prompt.md)
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
-- [x] The fixed bar is 83px on a desktop, not the 50px `--bar` declares
-  - **Issue**: `docs/assets/style.css:31` declares the bar's height once as
-    `--bar: calc(var(--s7) + 2px)`, 50px, and `DESIGN_LANGUAGE.md:168-173`
-    records that as the figure the site reads rather than repeats. Measured in
-    chromium, the drawn bar is 83.09px at every width from 861px to 1920px and
-    50px at 860px and below. `.menu` is a `ul` and its entries are `li`, so
-    `docs/assets/style.css:161` gives the menu a 16px bottom margin and `:163`
-    gives each entry 8px, neither of which `.menu`'s own `padding: 0` at `:111`
-    touches. The consequence is that `scroll-padding-top: var(--s8)` at `:64`,
-    64px, is 19px short of the bar it was chosen to clear, and seven of the
-    eight in-page anchors the nav carries park their heading underneath it at
-    1280x900 - `usage.html#controls` by 19.15px, `development.html#tests` by
-    19.06px, `getting-started.html#play-in-terminal` by 13.75px, and so on.
-    `usage.html#debug-modes` is clear only because the scroll runs out of
-    document first. Roughly the top half of each `h2` is behind the bar. This
-    predates the caret work: the same measurement against `HEAD` gives an
-    identical 83.09px bar and an identical 19.15px of `usage.html#controls`
-    behind it. What changed is that three of the four groups could not be opened
-    on a desktop until this run, so seven of these eight anchors were
-    unreachable from the wide nav and nobody arrived at them by clicking.
-  - **Goal**: Resolve to [nav-bar-height.prompt.md](.claude/prompts/nav-bar-height.prompt.md)
-  - From: UI/UX Override - the caret's box, and the bar the anchors land under
-- [x] The Reference button announces the caret glyph as part of its name
-  - **Issue**: The item's request records that each caret button's `aria-label`
-    "is the only name it has, since the caret glyph comes from CSS `content` and
-    is not in the DOM". The glyph is not in the DOM, but it is in the accessible
-    name: CSS generated content takes part in the name computation. For the
-    three new caret buttons this is harmless, because their `aria-label`
-    outranks their contents. Reference has no `aria-label` - it is the one group
-    whose button carries its own text - so its name is computed from contents
-    and picks up the `::after`. Read out of the accessibility tree in chromium
-    at 1280x900, the button is named `"Reference v"` closed and `"Reference ^"`
-    open, so `getByRole('button', { name: 'Reference', exact: true })` matches
-    nothing and a screen reader reads the decoration aloud and re-reads the name
-    on every toggle, which `aria-expanded` already conveys. Reference is
-    unchanged by this run; the `::after` at `docs/assets/style.css:141` has been
-    there since the nav landed in `c36ae4c`.
-  - **Goal**: Give the Reference button `aria-label="Reference"`, the same
-    mechanism the three caret-only buttons already use, so its name is its
-    visible label and nothing else. Keep the label equal to the visible text
-    rather than expanding it, since the visible label has to be contained in the
-    accessible name. Worth an assertion in `test/docs-site.test.mjs`: every
-    `.has-sub > button` carries an `aria-label`, which is checkable as text.
-  - From: UI/UX Override - the caret's box, and the bar the anchors land under
-- [x] Probe Flags 1 - the rig's flag table is the new contract and nothing checks it
-  - **Issue**: The settlement works when run by hand - `npm run probe` prints the
-    table, `npm run probe -- overlay-anchor --grid 80x24` prints "overlay-anchor
-    does not take --grid" and exits 1, and each `flags` list matches the
-    parameters its probe's `run()` destructures today. Nothing in `test/` reaches
-    any of that, and the table's own comment at `test/probes/run.mjs:42-46` says
-    "a probe gaining or losing an argument is a line changed here rather than a
-    flag silently ignored", which is the thing no longer true the moment the two
-    fall out of step. The failing direction is the one the completed item was
-    opened to end. Verified by mutation: drop `count` from the destructuring at
-    `test/probes/column.mjs:47` so the probe stops reading it, and
-    `npm run probe -- column --grid 80x24 --build browser --count 6` is still
-    accepted, still prints "contact: 24 placements" and still reports a figure a
-    caller will read as a narrowed walk - with all 460 tests green, because the
-    table still lists the flag. `CHEATSHEET.md:101-103`,
-    `docs/cheatsheet.html:53` and `docs/development.html:30` all promise the
-    non-zero exit as well, so three documents now rest on behaviour nothing
-    exercises.
-  - **Goal**: Pin the table against the probes rather than against itself.
-    `run.mjs` executes a probe at import - top-level `await` on
-    `process.argv` - so the suite cannot import it as it stands: either move
-    `PROBES` into a module `run.mjs` imports and a test can too, or read both
-    files as text the way `test/browser-shell.test.mjs` reads `index.html`.
-    Then assert, for every probe, that its `flags` list is exactly the parameter
-    names its `run()` destructures - so a probe losing `count` fails here rather
-    than going quiet - and assert the refusal end to end with one `spawnSync` of
-    `node test/probes/run.mjs overlay-anchor --grid 80x24`, checking the exit
-    code and the message naming the flag it refused. Browser and terminal both: the rig
-    is neither, so `test/parity.test.mjs` has nothing to pair this with.
-  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
 - [x] The new resolver collects at-rule context and then ignores it
   - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
     preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
@@ -352,3 +231,95 @@ the roadmap section each one came from.
     twice and is therefore the only thing that can catch this: resolve `--page`
     off `docs/assets/style.css` and pin which scheme answers.
   - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
+- [x] **The Reference group sits off the right edge between 861px and 950px** -
+  The wide nav lays its eight entries on one unwrapped row, and that row is
+  wider than the width it switches on at, so the last group is painted past the
+  right edge of the screen across the first 90px of the wide range.
+  - **Issue**: Measured in chromium on `docs/index.html`, identical in both
+    colour schemes. At 861px the Reference group's box runs 841.47px to
+    951.16px in an 861px viewport, so 17.8% of the control is on screen;
+    `.nav-bar` overflows by 90px, by 51px at 900px, and first fits at 951px.
+    Opening it is worse than leaving it shut - the list runs to 1049.73px, 9.4%
+    visible, with `Project Structure`, `Terminal Requirements`, `How It Works`
+    and `Cheatsheet` all laid out between 846px and 1045px. Nothing can scroll
+    to them: `.nav` is `position: fixed`, so the overflow never reaches the
+    document and `scrollWidth` stays equal to `clientWidth` at every one of
+    these widths. Keyboard focus does land on the button, but a fixed ancestor
+    cannot be scrolled, so `window.scrollX` stays 0 and the focused control
+    stays invisible. Between 861px and 950px the nav offers no usable route to
+    four of the site's ten pages. Not this turn's doing: the same figures come
+    back from `git show HEAD:docs/assets/style.css` served in place of the
+    working tree's, so the defect predates the bar fix it was found beside.
+  - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
+  - From: UI/UX Override - the width the wide nav switches on at
+- [x] **The bar check reads one column of the bar and calls it the bar** -
+  `test/docs-site.test.mjs:275-281` builds the drawn height out of `.menu a`
+  alone: the link's box, `.nav-bar`'s padding, and `.nav`'s bottom border. The
+  bar is a flex row and its height is the tallest of its children, and `.brand`
+  and `.nav-toggle` are children too.
+  - **Issue**: The check is named "the bar draws the height `--bar` declares"
+    and answers for the menu column only, so the fault it was written to end
+    comes back through any other child with all 468 tests green. Verified by
+    mutation: add `padding: var(--s3) 0` to `.brand` at
+    `docs/assets/style.css:104` and the brand's 26.4px line box becomes 50.4px,
+    taller than the link's 42px, so the bar draws 68.4px against the 60px
+    `--bar` declares - and `node --test test/docs-site.test.mjs` reports 8 of 8
+    passing. That is the same shape as the defect just fixed: something inside
+    the bar grew, the bar grew with it, and `--bar` went on declaring a figure
+    nothing drew. `.brand` is the child that can do it, because it states no
+    line box of its own and takes the body's 1.65 off a 16px base.
+  - **Goal**: Have the check take the tallest child rather than an assumed one.
+    That needs `controlHeight` to resolve a control with no `line-height` of its
+    own, which it deliberately refuses today - the refusal is what caught the
+    caret button - so the decision is either to give `test/page-style.mjs` an
+    inherited font size and line height to resolve a unitless ratio against, or
+    to have `.brand` and `.nav-toggle` state their own line box the way
+    `.menu a` and `.has-sub > button` now do and keep the refusal as it is. The
+    second is the smaller change and keeps every term in `--bar` a token. Either
+    way the check should fold every direct child of `.nav-bar` the layout shows
+    and assert the maximum, so the narrow layout's `--bar` is covered by the
+    same walk against the MENU button.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [x] **Two documents in one commit disagree on how many rules read `--s8`** -
+  `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
+  holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
+  commit says "`--s8` had exactly two readers, the scroll offset and the page
+  frame's top padding".
+  - **Issue**: The changelog is the accurate one. `git show HEAD:docs/assets/style.css`
+    carries `var(--s8)` twice - `scroll-padding-top` at `:64` and `.wrap`'s top
+    padding at `:151` - so the design file undercounts by one and the two
+    records of the same removal cannot both be read as written. Nothing is
+    broken by it; the cost is that `DESIGN_LANGUAGE.md` is the file the
+    stylesheet's own header points at as the record of where each value came
+    from, so a reader checking why the step went is told one rule read it and
+    finds two.
+  - **Goal**: Say two in `DESIGN_LANGUAGE.md`, naming both the way the changelog
+    does, or drop the count and say only that the step's readers now derive from
+    the bar's own height. Either agrees with the stylesheet; the present wording
+    does not.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [x] **Nothing checks that a page and the file it is published from agree** -
+  `docs/project-structure.html` calls `cheatsheet.html` "CHEATSHEET.md as a
+  page" and `quickstart.html` "QUICKSTART.md as a page", and no test compares
+  either pair. An edit to the file that misses the page is silent.
+  - **Issue**: It has now been missed on two consecutive runs, in the same
+    paragraph. 0.7.3 added ", and which flags each probe takes" to
+    `CHEATSHEET.md` and left it off the page; 0.7.4 added the paragraph naming
+    `test/probes/probes.mjs` and `test/probes.test.mjs` and left that off too.
+    Both were found by reading the two files side by side, which is the only
+    thing that has ever checked them. Normalizing away the markup on both sides
+    and asking which of `CHEATSHEET.md`'s prose paragraphs the page carries
+    answered it in one pass, and answered 2 before this review's fix and 0
+    after.
+  - **Goal**: Assert it in `test/docs-site.test.mjs`, which already reads the
+    pages as text. Strip the tags out of the page's `<main>`, unescape the
+    entities, take the prose paragraphs out of the markdown with the fenced
+    blocks and tables removed, collapse whitespace and inline code markers on
+    both sides, and assert every paragraph of the file is on the page. Pin both
+    pairs the site names - `CHEATSHEET.md` and `QUICKSTART.md` - and read the
+    pairing off `docs/project-structure.html`'s own "X.md as a page" lines
+    rather than listing it here, so a third page added later is covered without
+    a second edit. One direction only: the pages carry a pager and a nav the
+    files have no equivalent of, so the page holding more than the file is not
+    the fault.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
