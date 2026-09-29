@@ -1203,3 +1203,106 @@ still be found by name.
     re-seating in that function, so the two are one piece of work if they land
     together.
   - From: Code Review Override - the offset that outgrows a short viewport, and a figure nothing reads
+
+## Archived 09-29-26
+
+- [x] Caret Box 1 - the caret button's box is shorter than the link beside it
+  - **Issue**: The dropdowns themselves work. Measured in chromium at 1280x900
+    on `docs/index.html` and `docs/usage.html`, all four groups draw a caret,
+    each caret opens its own list and closes whichever other was open, the glyph
+    flips `v` to `^`, Escape and an outside click both close, the link and the
+    caret are consecutive separate tab stops, the caret takes the 2px
+    `:focus-visible` ring, Enter and Space both open it, and the three page
+    links still navigate on one click. What does not hold is the last of the
+    item's own criteria: the caret's border box is 34.50px against the link's
+    41.09px, a 6.59px difference, and `.has-sub`'s `align-items: center` centres
+    the shorter box so it sits 3.30px inside the link's at the top and 3.29px
+    inside it at the bottom. `.menu a:hover` and `.has-sub > button:hover` draw
+    the same `var(--rule)` border, so moving the pointer or the focus from a
+    page link onto its caret shrinks and re-centres the outlined box. On
+    `docs/usage.html` it needs no interaction at all: the Usage link's
+    `aria-current="page"` border is painted at y 49.09 and a hover on the caret
+    beside it draws its bottom border at y 45.80. The cause is that the three
+    caret-only buttons are flex containers whose only item is the 10px `::after`
+    at `docs/assets/style.css:141`, giving a 16.50px line box where the link has
+    23.10px. Reference is unaffected, because it has text. The narrow layout is
+    clean: at 375x667 every group's list is open, the three `.sub-toggle`
+    buttons are `display: none` with a zero box, no empty bordered box is drawn
+    anywhere in the menu, and all eight anchors still close the menu behind
+    them.
+  - **Goal**: Resolve to [caret-box-height.prompt.md](.claude/prompts/caret-box-height.prompt.md)
+  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+- [x] The fixed bar is 83px on a desktop, not the 50px `--bar` declares
+  - **Issue**: `docs/assets/style.css:31` declares the bar's height once as
+    `--bar: calc(var(--s7) + 2px)`, 50px, and `DESIGN_LANGUAGE.md:168-173`
+    records that as the figure the site reads rather than repeats. Measured in
+    chromium, the drawn bar is 83.09px at every width from 861px to 1920px and
+    50px at 860px and below. `.menu` is a `ul` and its entries are `li`, so
+    `docs/assets/style.css:161` gives the menu a 16px bottom margin and `:163`
+    gives each entry 8px, neither of which `.menu`'s own `padding: 0` at `:111`
+    touches. The consequence is that `scroll-padding-top: var(--s8)` at `:64`,
+    64px, is 19px short of the bar it was chosen to clear, and seven of the
+    eight in-page anchors the nav carries park their heading underneath it at
+    1280x900 - `usage.html#controls` by 19.15px, `development.html#tests` by
+    19.06px, `getting-started.html#play-in-terminal` by 13.75px, and so on.
+    `usage.html#debug-modes` is clear only because the scroll runs out of
+    document first. Roughly the top half of each `h2` is behind the bar. This
+    predates the caret work: the same measurement against `HEAD` gives an
+    identical 83.09px bar and an identical 19.15px of `usage.html#controls`
+    behind it. What changed is that three of the four groups could not be opened
+    on a desktop until this run, so seven of these eight anchors were
+    unreachable from the wide nav and nobody arrived at them by clicking.
+  - **Goal**: Resolve to [nav-bar-height.prompt.md](.claude/prompts/nav-bar-height.prompt.md)
+  - From: UI/UX Override - the caret's box, and the bar the anchors land under
+- [x] The Reference button announces the caret glyph as part of its name
+  - **Issue**: The item's request records that each caret button's `aria-label`
+    "is the only name it has, since the caret glyph comes from CSS `content` and
+    is not in the DOM". The glyph is not in the DOM, but it is in the accessible
+    name: CSS generated content takes part in the name computation. For the
+    three new caret buttons this is harmless, because their `aria-label`
+    outranks their contents. Reference has no `aria-label` - it is the one group
+    whose button carries its own text - so its name is computed from contents
+    and picks up the `::after`. Read out of the accessibility tree in chromium
+    at 1280x900, the button is named `"Reference v"` closed and `"Reference ^"`
+    open, so `getByRole('button', { name: 'Reference', exact: true })` matches
+    nothing and a screen reader reads the decoration aloud and re-reads the name
+    on every toggle, which `aria-expanded` already conveys. Reference is
+    unchanged by this run; the `::after` at `docs/assets/style.css:141` has been
+    there since the nav landed in `c36ae4c`.
+  - **Goal**: Give the Reference button `aria-label="Reference"`, the same
+    mechanism the three caret-only buttons already use, so its name is its
+    visible label and nothing else. Keep the label equal to the visible text
+    rather than expanding it, since the visible label has to be contained in the
+    accessible name. Worth an assertion in `test/docs-site.test.mjs`: every
+    `.has-sub > button` carries an `aria-label`, which is checkable as text.
+  - From: UI/UX Override - the caret's box, and the bar the anchors land under
+- [x] Probe Flags 1 - the rig's flag table is the new contract and nothing checks it
+  - **Issue**: The settlement works when run by hand - `npm run probe` prints the
+    table, `npm run probe -- overlay-anchor --grid 80x24` prints "overlay-anchor
+    does not take --grid" and exits 1, and each `flags` list matches the
+    parameters its probe's `run()` destructures today. Nothing in `test/` reaches
+    any of that, and the table's own comment at `test/probes/run.mjs:42-46` says
+    "a probe gaining or losing an argument is a line changed here rather than a
+    flag silently ignored", which is the thing no longer true the moment the two
+    fall out of step. The failing direction is the one the completed item was
+    opened to end. Verified by mutation: drop `count` from the destructuring at
+    `test/probes/column.mjs:47` so the probe stops reading it, and
+    `npm run probe -- column --grid 80x24 --build browser --count 6` is still
+    accepted, still prints "contact: 24 placements" and still reports a figure a
+    caller will read as a narrowed walk - with all 460 tests green, because the
+    table still lists the flag. `CHEATSHEET.md:101-103`,
+    `docs/cheatsheet.html:53` and `docs/development.html:30` all promise the
+    non-zero exit as well, so three documents now rest on behaviour nothing
+    exercises.
+  - **Goal**: Pin the table against the probes rather than against itself.
+    `run.mjs` executes a probe at import - top-level `await` on
+    `process.argv` - so the suite cannot import it as it stands: either move
+    `PROBES` into a module `run.mjs` imports and a test can too, or read both
+    files as text the way `test/browser-shell.test.mjs` reads `index.html`.
+    Then assert, for every probe, that its `flags` list is exactly the parameter
+    names its `run()` destructures - so a probe losing `count` fails here rather
+    than going quiet - and assert the refusal end to end with one `spawnSync` of
+    `node test/probes/run.mjs overlay-anchor --grid 80x24`, checking the exit
+    code and the message naming the flag it refused. Browser and terminal both: the rig
+    is neither, so `test/parity.test.mjs` has nothing to pair this with.
+  - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing

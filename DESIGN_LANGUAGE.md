@@ -113,10 +113,11 @@ There is not a curve or a corner radius in the file. The site follows it:
 - **Spacing runs on a 4px base**, which is the smallest dimension in the mark:
   the engine bells are 4 wide, and 32 divides into eights of 4. The scale is
   4, 8, 12, 16, 24, 32, 48, and the stylesheet declares it as `--s1` through
-  `--s7`. A 64px step was declared too, and the only thing that read it was the
-  offset that holds content clear of the fixed bar. That offset is derived from
-  the bar's own height now, so the step had no reader left and went: the
-  stylesheet declares the part of the scale something uses.
+  `--s7`. A 64px step was declared too, and it had exactly two readers: the
+  scroll offset that brings an in-page anchor clear of the fixed bar, and the
+  page frame's own top padding. Both are derived from the bar's height now, so
+  the step had no reader left and went: the stylesheet declares the part of the
+  scale something uses.
 - **Borders are 1px and 2px**, solid. The mark has no strokes at all, so weight
   on the site comes from fill and from the rule under a heading rather than
   from outlines.
@@ -202,8 +203,14 @@ One size on the site is off this scale, and it is the only one:
   `calc(100vh - var(--bar))` so a ten-page menu on a short phone scrolls inside
   the viewport rather than running off the end of it.
 - **Responsive from a phone to a wide desktop.** The menu collapses behind a
-  button under 860px, and the content column is capped at 80ch so a line of
-  monospace text stays readable on a wide screen.
+  button at 950px and below, and the content column is capped at 80ch so a line
+  of monospace text stays readable on a wide screen. The breakpoint is the width
+  the wide row actually fits in rather than a round number: the eight entries do
+  not wrap, and measured in chromium the row ends at 951.16px, so anything lower
+  paints the last group off the right edge of a fixed bar that cannot scroll.
+  The figure is written twice - `max-width: 950px` in the stylesheet and
+  `min-width: 951px` in `docs.js`, which collapses the dropdowns only on the
+  wide layout - and `test/docs-site.test.mjs` asserts the two stay adjacent.
 - **Relative links throughout.** The site is served from
   `/cmd-space-rider/docs/` rather than from a domain root, so absolute paths
   would break. Relative links also mean the pages open correctly straight off

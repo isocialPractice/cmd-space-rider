@@ -106,8 +106,17 @@ body {
   display: flex; align-items: center; gap: var(--s2);
   color: var(--text-strong); text-decoration: none;
   font-weight: 700; white-space: nowrap;
+  /* The brand's line box, stated for the same reason .menu a states its own:
+     it is a child of .nav-bar, so it is one of the boxes the bar's height is
+     the tallest of, and inheriting the body's 1.65 left it deciding that
+     height off a ratio against a 16px base - 26.40px that no token names.
+     --s5 is the ship's own 24px and the menu entry's line box, so the two
+     children of the bar that carry text now measure themselves the same way. */
+  line-height: var(--s5);
 }
-.brand svg { display: block; width: 24px; height: 24px; }
+/* 24px is --s5, which is the line box above: the mark and the text it sits
+   beside are one height, so neither decides the brand's box alone. */
+.brand svg { display: block; width: var(--s5); height: var(--s5); }
 .brand:hover, .brand:focus-visible { color: var(--heading); }
 
 .nav-toggle {
@@ -115,7 +124,13 @@ body {
   display: none;
   background: transparent; color: var(--link);
   border: 1px solid var(--rule);
-  font: 700 14px/1 var(--mono);
+  /* Line box on its own line rather than in the shorthand's `14px/1`, the way
+     .has-sub > button already carries it. It is the same figure either way, but
+     the narrow bar is this button, so this is the term the narrow --bar is
+     built out of - and a term folded into a font shorthand is a term the
+     stylesheet-reading check cannot see. */
+  font: 700 14px var(--mono);
+  line-height: 14px;
   padding: var(--s2) var(--s3); cursor: pointer;
 }
 .nav-toggle:hover { color: var(--text-strong); border-color: var(--edge); }
@@ -239,16 +254,38 @@ footer a { color: var(--link); }
 
 :focus-visible { outline: 2px solid var(--heading); outline-offset: 2px; }
 
-/* ===== Narrow screens ===== */
-@media (max-width: 860px) {
-  /* The menu is not in the bar here - it hangs off the bottom of it - so the
-     bar is the brand beside the MENU button: a 14px/1 line box with --s2 above
-     and below it inside a 1px border, in .nav-bar's --s2 padding, under the
-     nav's 2px border. That is --s7 plus 2px, which is what this property has
-     always said; the wide layout is the one it was never true of. --clear
-     follows it down, so the scroll offset and the page frame's top padding are
-     right here too without either naming a second figure. */
-  :root { --bar: calc(var(--s7) + 2px); }
+/* ===== Narrow screens =====
+
+   950px, not the 860px this used to say. The wide layout lays its eight entries
+   on one unwrapped row, and that row is 951px wide: measured in chromium, the
+   Reference group's box ended at 951.16px at every viewport width, so between
+   861px and 950px the last group was painted past the right edge with no way to
+   reach it. `.nav` is fixed, so the overflow never reached the document and
+   there was nothing to scroll; keyboard focus landed on a control the browser
+   could not bring into view. The switch now happens where the row fits, and the
+   90px band it used to fall into goes to the narrow layout, which stacks the
+   entries and has always handled it.
+
+   `docs.js` reads the other side of this boundary as `(min-width: 951px)`. The
+   two are adjacent pixel values so the layouts meet without a gap or an
+   overlap, and `test/docs-site.test.mjs` asserts that they stay adjacent - they
+   have to move together, or the script collapses dropdowns the stylesheet has
+   already opened. */
+@media (max-width: 950px) {
+  /* The menu is not in the bar here - it hangs off the bottom of it, out of flow -
+     so the bar is the brand beside the MENU button, and the button is the taller
+     of the two: a 14px line box with --s2 above and below it inside a 1px
+     border, in .nav-bar's --s2 padding, under the nav's 2px border.
+
+     Written in those terms rather than as the --s7 plus 2px it used to say. The
+     sum is the same 50px, but --s7 folded the button's own box together with the
+     bar's padding into one token that named neither, so a change to --s2 moved
+     the wide --bar above and left this one declaring a height nothing drew. Now
+     both layouts state their bar the same way, and the walk in
+     test/docs-site.test.mjs measures each against the children it actually
+     shows. --clear follows it down, so the scroll offset and the page frame's
+     top padding are right here too without either naming a second figure. */
+  :root { --bar: calc(14px + 4 * var(--s2) + 4px); }
   .nav-toggle { display: block; }
   .menu {
     display: none; position: absolute; top: 100%; left: 0; right: 0;

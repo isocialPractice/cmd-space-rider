@@ -193,6 +193,131 @@ test('docs: every custom property the stylesheet declares reaches a reader', () 
   }
 });
 
+/* ===== A page against the file it is published from ===== */
+
+/**
+ * The named entities and numeric references these pages actually carry.
+ *
+ * The four the site uses today are `lt`, `gt`, `mdash` and `middot`; the rest are
+ * here because a page that gains one should not fail this as though a paragraph
+ * had gone missing. The non-ASCII values are written as escapes rather than as
+ * the characters themselves, so the repository's own rule against an em dash in
+ * its text holds for this file too - these are what an entity decodes to, not
+ * punctuation anybody wrote.
+ */
+const ENTITY = {
+  lt: '<', gt: '>', amp: '&', quot: '"', apos: "'",
+  nbsp: '\u00a0', mdash: '\u2014', ndash: '\u2013', middot: '\u00b7', hellip: '\u2026',
+};
+const unescapeEntities = (text) => text.replace(
+  /&(#x?[0-9a-f]+|[a-z]+);/gi,
+  (whole, name) => {
+    if (name[0] !== '#') return ENTITY[name.toLowerCase()] ?? whole;
+    const code = name[1].toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+  }
+);
+
+/**
+ * One string to compare both sides as: whitespace collapsed and the inline code
+ * markers dropped, so a hard wrap in one and not the other is not a difference
+ * and `` `x` `` in the file matches `<code>x</code>` on the page.
+ */
+const flatten = (text) => text.replace(/`/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * A page's `<main>` as the text a reader sees.
+ *
+ * Tags are removed rather than replaced with a space: the pages put each block
+ * element on its own line, so the newlines already separate them, while an
+ * inserted space would put one either side of every `<code>` and stop
+ * `<code>P</code>,` matching the file's `` `P`, ``.
+ */
+function mainText(name) {
+  const html = pageText(name);
+  const open = html.indexOf('<main');
+  const close = html.indexOf('</main>');
+  assert.ok(open >= 0 && close > open, `${name} carries no <main>`);
+  return flatten(unescapeEntities(html.slice(open, close).replace(/<[^>]*>/g, '')));
+}
+
+/**
+ * The prose paragraphs of a markdown file, with everything that is not prose
+ * left out: fenced blocks, headings, tables, blockquotes, and list items with
+ * whatever indented lines continue them.
+ *
+ * Prose is the part worth comparing. A table or a fenced block is reformatted on
+ * its way to the page - the tables gain a scroll wrapper, the blocks become
+ * `<pre><code>` - so comparing those would report the publishing rather than a
+ * difference, and the two edits this missed were both prose.
+ */
+function prose(markdown) {
+  const paragraphs = [];
+  let lines = [];
+  let fenced = false;
+  let listing = false;
+  const flush = () => { if (lines.length) paragraphs.push(lines.join(' ')); lines = []; };
+
+  for (const raw of markdown.split(/\r?\n/)) {
+    if (/^\s*```/.test(raw)) { fenced = !fenced; flush(); continue; }
+    if (fenced) continue;
+
+    const text = raw.trim();
+    // A blank line ends a paragraph but leaves a list open: a list item wrapped
+    // over two lines with a blank line after it is still that item's text.
+    if (!text) { flush(); continue; }
+
+    if (/^([-*+]|\d+\.)\s/.test(text)) { flush(); listing = true; continue; }
+    if (listing && /^\s{2,}/.test(raw)) continue;
+    listing = false;
+
+    if (/^#{1,6}\s/.test(text) || text.startsWith('|') || text.startsWith('>')) { flush(); continue; }
+    lines.push(text);
+  }
+  flush();
+
+  // A link reads as its own text on the page, where the target is an attribute.
+  return paragraphs.map((text) => flatten(text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')));
+}
+
+test('docs: a page published from a repository file carries all of that file', () => {
+  // docs/project-structure.html calls two of its pages "X.md as a page", and
+  // until now nothing compared either pair - so an edit to the file that missed
+  // the page was silent, and it was missed on two consecutive runs in the same
+  // paragraph of CHEATSHEET.md: 0.7.3 added ", and which flags each probe takes"
+  // and 0.7.4 added the paragraph naming test/probes/probes.mjs, neither
+  // reaching the page.
+  //
+  // The pairing is read off that page's own listing rather than named here, so a
+  // third file published as a page is covered without a second edit.
+  //
+  // One direction only. The pages carry a nav and a pager the files have no
+  // equivalent of, and their headings gain ids, so a page holding more than its
+  // file is the publishing working rather than a fault.
+  const pairs = [...pageText('project-structure.html')
+    .matchAll(/([\w.-]+\.html)\s+#\s+([\w.-]+\.md) as a page/g)]
+    .map((found) => ({ page: found[1], file: found[2] }));
+  assert.ok(pairs.length, 'project-structure.html names no page as a published file');
+
+  for (const { page, file } of pairs) {
+    assert.ok(PAGES.includes(page), `project-structure.html names ${page}, which is not a page`);
+
+    const paragraphs = prose(readFileSync(join(REPO_ROOT, file), 'utf8'));
+    assert.ok(paragraphs.length, `${file} has no prose paragraphs, so this compares nothing`);
+
+    // Every missing paragraph rather than the first: both times this was missed
+    // it was one paragraph of a pair, and a report that stops at the first turns
+    // one edit into two runs.
+    const published = mainText(page);
+    const missing = paragraphs.filter((paragraph) => !published.includes(paragraph));
+    assert.deepEqual(
+      missing, [],
+      `${file} says ${missing.length} thing(s) ${page} does not carry:\n`
+      + missing.map((paragraph) => `  ${paragraph}`).join('\n')
+    );
+  }
+});
+
 /* ===== The nav's own geometry =====
    Everything below is decided by the stylesheet as text, so it runs without a
    browser - which is the point. A browser was the only thing that had ever
@@ -212,29 +337,134 @@ function side(shorthand, which) {
 const borderWidth = (shorthand) => String(shorthand).trim().split(/\s+/)[0];
 
 /**
- * The border-box height one of the menu's controls draws, from the three things
- * that decide it for a single line: the line box, the padding above and below
- * it, and the border.
+ * Whether a rule applies in one of the site's two layouts.
  *
- * Several selectors fold in cascade order, so the caret button is read as the
+ * The sheet has one width query, so the two layouts are the top-level cascade
+ * and that cascade plus the query. Blocks keyed on anything other than width -
+ * the colour re-inking, the reduced-motion rule - are in neither: they carry no
+ * geometry, and folding them in would answer for a condition nothing here asked
+ * about. That is the same reason page-style.mjs leaves every at-rule out of its
+ * own `declarationsFor`, which is the wide answer.
+ */
+function appliesIn(rule, layout) {
+  if (!rule.at.length) return true;
+  return layout === 'narrow' && rule.at.every((prelude) => /\bwidth:/.test(prelude));
+}
+
+/**
+ * The declarations that apply to a selector in one layout, folded in cascade
+ * order. Several selectors fold together, so the caret button is read as the
  * button rule plus the `.sub-toggle` rule that narrows it, the way a browser
  * reads it.
  */
-function controlHeight(...selectors) {
+function declIn(layout, ...selectors) {
   const decl = {};
-  for (const selector of selectors) Object.assign(decl, style.declarationsFor(selector));
-  const named = selectors.join(' + ');
+  for (const rule of style.rules) {
+    if (!appliesIn(rule, layout)) continue;
+    if (!rule.selectors.some((sel) => selectors.includes(sel))) continue;
+    Object.assign(decl, rule.declarations);
+  }
+  return decl;
+}
 
-  // A control with no line box of its own inherits one from the body, in a unit
-  // this resolver has no font size to turn into pixels. That is not a gap in
-  // the resolver - it is the fault itself, and it is why the caret button drew
-  // a 34.50px box beside a 41.09px link.
-  assert.ok(decl['line-height'], `${named} states no line box of its own`);
-
+/** The padding and border a box adds around its own content, top and bottom. */
+function framing(decl, named) {
   const pad = (which) => px(decl[`padding-${which}`] ?? side(decl.padding ?? '0', which), `${named} padding-${which}`);
-  return px(decl['line-height'], `${named} line-height`)
-    + pad('top') + pad('bottom')
+  return pad('top') + pad('bottom')
     + px(borderWidth(decl.border ?? '0'), `${named} border width`) * 2;
+}
+
+/**
+ * The line box a control states for itself.
+ *
+ * A control with no line box of its own inherits one from the body, in a unit
+ * this resolver has no font size to turn into pixels. That is not a gap in the
+ * resolver - it is the fault itself, and it is why the caret button drew a
+ * 34.50px box beside a 41.09px link. It is also why `.brand` and `.nav-toggle`
+ * now state theirs: both are children of the bar, so both decide its height.
+ */
+function lineBox(layout, ...selectors) {
+  const decl = declIn(layout, ...selectors);
+  const named = selectors.join(' + ');
+  assert.ok(decl['line-height'], `${named} states no line box of its own`);
+  return px(decl['line-height'], `${named} line-height`);
+}
+
+/**
+ * The border-box height one of the menu's controls draws, from the three things
+ * that decide it for a single line: the line box, the padding above and below
+ * it, and the border.
+ */
+function controlHeight(layout, ...selectors) {
+  return lineBox(layout, ...selectors) + framing(declIn(layout, ...selectors), selectors.join(' + '));
+}
+
+/**
+ * The direct children of an element, each as its own opening tag.
+ *
+ * Depth-tracked rather than matched, so the svg's seven shapes inside the brand
+ * are not read as children of the bar. A self-closing tag opens nothing.
+ */
+function childTags(markup, openTag) {
+  const at = markup.indexOf(openTag);
+  assert.ok(at >= 0, `the markup carries no ${openTag}`);
+
+  const tags = [];
+  let depth = 0;
+  for (const found of markup.slice(at + openTag.length).matchAll(/<(\/?)[a-z][\w-]*\b([^>]*)>/gi)) {
+    if (found[1] === '/') {
+      if (depth === 0) break;  // the container's own closing tag
+      depth--;
+      continue;
+    }
+    if (depth === 0) tags.push(found[0]);
+    if (!found[2].trimEnd().endsWith('/')) depth++;
+  }
+  return tags;
+}
+
+/** The single class on a tag, which is the selector the stylesheet reaches it by. */
+function classOf(tag) {
+  const named = tag.match(/class="([^"]*)"/);
+  assert.ok(named, `a child of the bar carries no class, so no rule here names it: ${tag}`);
+  const classes = named[1].trim().split(/\s+/);
+  assert.equal(classes.length, 1, `a child of the bar carries ${classes.length} classes: ${tag}`);
+  return `.${classes[0]}`;
+}
+
+/**
+ * How each direct child of `.nav-bar` decides its own content height, before its
+ * own padding and border are added around it.
+ *
+ * A stylesheet read as text cannot work this out: it would have to know that the
+ * brand holds a sized mark beside its text and that the menu is a row of
+ * controls. So it is stated here - and the walk below asserts this table names
+ * exactly the children the markup holds, so a fourth child added to the bar
+ * fails rather than being quietly left out of the maximum.
+ */
+const BAR_CHILDREN = {
+  // The mark and the text beside it, whichever is taller. Both are --s5 today,
+  // which is the point of stating the brand's line box at all.
+  '.brand': (layout) => Math.max(
+    lineBox(layout, '.brand'),
+    px(declIn(layout, '.brand svg').height, '.brand svg height'),
+  ),
+  '.nav-toggle': (layout) => lineBox(layout, '.nav-toggle'),
+  // The menu's own box adds nothing - its margin and padding are both asserted
+  // at zero below - so its height is the tallest entry in it. The three shapes
+  // an entry can take are folded rather than assumed equal; the caret test above
+  // asserts two of them match, and this does not rest on that holding.
+  '.menu': (layout) => Math.max(
+    controlHeight(layout, '.menu a'),
+    controlHeight(layout, '.has-sub > button'),
+    controlHeight(layout, '.has-sub > button', '.has-sub > .sub-toggle'),
+  ),
+};
+
+/** Whether a child of the bar is drawn, and drawn in the bar's own flow. */
+function inFlow(decl) {
+  return (decl.display ?? 'inline') !== 'none'
+    && !['absolute', 'fixed'].includes(decl.position ?? 'static');
 }
 
 test('docs: the caret button draws the same box as the link beside it', () => {
@@ -243,16 +473,18 @@ test('docs: the caret button draws the same box as the link beside it', () => {
   // shrinks and re-centres as the pointer crosses between them. On usage.html
   // it showed without any interaction at all: the current page's underline and
   // the caret's bottom border were painted 3.29px apart.
-  const link = controlHeight('.menu a');
+  // The wide layout, which is the one that draws the caret at all: the narrow
+  // block hides the three caret-only buttons and blanks the glyph on the fourth.
+  const link = controlHeight('wide', '.menu a');
 
   assert.equal(
-    controlHeight('.has-sub > button', '.has-sub > .sub-toggle'), link,
+    controlHeight('wide', '.has-sub > button', '.has-sub > .sub-toggle'), link,
     'the caret-only button and the link beside it draw the same border box'
   );
   // Reference is the one group whose button carries its own text, so it is
   // read without the .sub-toggle rule and still has to match its neighbours.
   assert.equal(
-    controlHeight('.has-sub > button'), link,
+    controlHeight('wide', '.has-sub > button'), link,
     'the Reference button and the menu links draw the same border box'
   );
 });
@@ -272,17 +504,60 @@ test('docs: the bar draws the height --bar declares, and the offsets clear it', 
     assert.equal(px(decl.margin, `${selector} margin`), 0, `${selector} carries a margin into the bar`);
   }
 
+  // The bar is a flex row, so its height is the tallest of its children, and
+  // every child is one of them. Reading the menu column alone answered the
+  // question the test's own name asks for one child out of three: `.brand` and
+  // `.nav-toggle` are children too, and `.brand` states no line box, so adding
+  // `padding: var(--s3) 0` to it took its 26.40px box to 50.40px, past the
+  // link's 42px, and drew a 68.40px bar against the 60px --bar declared with the
+  // whole suite green. So the children are walked and the maximum taken, and the
+  // walk is checked against the markup rather than listed here.
+  const barChildren = childTags(navOf(PAGES[0]), '<div class="nav-bar">').map(classOf);
+  assert.deepEqual(
+    [...barChildren].sort(), Object.keys(BAR_CHILDREN).sort(),
+    'every child the bar holds has a stated content height, and none is stated that the bar does not hold'
+  );
+
   const navBar = style.declarationsFor('.nav-bar');
-  const drawn = controlHeight('.menu a')
-    + px(side(navBar.padding, 'top'), '.nav-bar padding-top')
+  const around = px(side(navBar.padding, 'top'), '.nav-bar padding-top')
     + px(side(navBar.padding, 'bottom'), '.nav-bar padding-bottom')
     + px(borderWidth(style.declarationsFor('.nav')['border-bottom']), '.nav border-bottom width');
 
-  assert.equal(drawn, px('var(--bar)', '--bar'), 'the wide bar draws the height --bar declares');
+  /** What the bar draws in a layout, and which child decided it. */
+  function barIn(layout) {
+    let tallest = { selector: null, height: 0 };
+    for (const selector of barChildren) {
+      const decl = declIn(layout, selector);
+      if (!inFlow(decl)) continue;
+      const height = BAR_CHILDREN[selector](layout) + framing(decl, selector);
+      if (height > tallest.height) tallest = { selector, height };
+    }
+    assert.ok(tallest.selector, `the ${layout} bar shows none of its children`);
+    return { ...tallest, drawn: tallest.height + around };
+  }
+
+  // Both layouts, against the --bar each declares. The wide bar is the menu; the
+  // narrow one is the MENU button, with the menu hanging off the bottom of the
+  // bar out of flow, so the same walk covers a figure a browser was the only
+  // thing that had ever seen.
+  const bar = {};
+  for (const layout of ['wide', 'narrow']) {
+    bar[layout] = barIn(layout);
+    assert.equal(
+      bar[layout].drawn, px(declIn(layout, ':root')['--bar'], `${layout} --bar`),
+      `the ${layout} bar draws the height --bar declares, `
+      + `and its tallest child is ${bar[layout].selector} at ${bar[layout].height}px`
+    );
+  }
+  assert.equal(bar.wide.selector, '.menu', 'the wide bar is decided by the menu');
+  assert.equal(bar.narrow.selector, '.nav-toggle', 'the narrow bar is decided by the MENU button');
 
   // And the two things that land underneath a fixed bar read that height rather
   // than a figure of their own. --s8 was that figure, and it was 19px short.
+  // Both read --clear, which reads --bar, so both follow it down to the narrow
+  // layout's shorter bar without either naming a second figure.
   assert.match(style.properties['--clear'], /var\(\s*--bar\s*[,)]/, '--clear is derived from --bar');
+  const drawn = bar.wide.drawn;
   const clear = px(style.properties['--clear'], '--clear');
   assert.ok(clear > drawn, `--clear is ${clear}px against a ${drawn}px bar, so it does not clear it`);
 
@@ -293,6 +568,48 @@ test('docs: the bar draws the height --bar declares, and the offsets clear it', 
   assert.equal(
     px(side(style.declarationsFor('.wrap').padding, 'top'), '.wrap padding-top'), clear,
     'the page frame starts clear of the bar'
+  );
+});
+
+test('docs: the two halves of the layout breakpoint name adjacent widths', () => {
+  // The switch between the two layouts is one boundary written twice, in two
+  // files in two syntaxes: `@media (max-width: ...)` in the stylesheet, and the
+  // `matchMedia('(min-width: ...)')` docs.js reads to decide whether to collapse
+  // a dropdown at all. Out of step in one direction the script collapses lists
+  // the stylesheet has already opened and turned into labels; out of step in the
+  // other there is a band where the menu is behind the MENU button and the
+  // script still will not open a group inside it. Neither shows up in any single
+  // file, which is why it is checked across the pair.
+  //
+  // The pair moved this turn - 860/861 to 950/951 - because the wide row of
+  // eight entries does not wrap and is 951px wide, so the old breakpoint painted
+  // the last group off the right edge of a bar that, being fixed, could not
+  // scroll to it.
+  //
+  // What this does not catch: the row outgrowing the breakpoint again. That
+  // needs the drawn width of eight entries of text, so it needs font metrics,
+  // and the suite has no browser and must not gain one. A browser is still the
+  // only thing that measures the row itself; this only holds the two halves of
+  // the boundary together once a measurement has set them.
+  const widths = new Set();
+  for (const rule of style.rules) {
+    for (const prelude of rule.at) {
+      const named = prelude.match(/\(\s*max-width:\s*(\d+)px\s*\)/);
+      if (named) widths.add(Number(named[1]));
+    }
+  }
+  assert.equal(widths.size, 1, `the stylesheet names one narrow breakpoint, not ${[...widths].join(', ')}`);
+  const narrow = [...widths][0];
+
+  const script = readFileSync(join(DOCS, 'assets', 'docs.js'), 'utf8');
+  const queried = [...script.matchAll(/matchMedia\(\s*'\(\s*min-width:\s*(\d+)px\s*\)'\s*\)/g)];
+  assert.equal(queried.length, 1, `docs.js names one wide breakpoint, not ${queried.length}`);
+  const wide = Number(queried[0][1]);
+
+  assert.equal(
+    wide, narrow + 1,
+    `the stylesheet goes narrow at ${narrow}px and docs.js goes wide at ${wide}px, `
+    + 'so the two layouts do not meet'
   );
 });
 

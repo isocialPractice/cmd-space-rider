@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.7.5-alpha] - 2026-09-29
+
+### Fixed
+
+- The documentation site's nav switched to its wide layout 90px before that
+  layout fitted. The wide row of eight entries does not wrap and is 951px wide,
+  measured in chromium, but the switch happened at 861px - so between 861px and
+  950px the Reference group was painted past the right edge of the screen, 17.8%
+  of it visible at 861px and 9.4% with the list open. Nothing could reach it:
+  `.nav` is `position: fixed`, so the overflow never reached the document and
+  there was no horizontal scrollbar at any of those widths, and keyboard focus
+  landed on a control the browser cannot scroll into view. Four of the site's ten
+  pages had no usable route in that band. The breakpoint now sits where the row
+  fits - `max-width: 950px` in the stylesheet, `min-width: 951px` in
+  `docs/assets/docs.js` - and the 90px band goes to the narrow layout, which
+  stacks the entries and was already verified across it.
+- `DESIGN_LANGUAGE.md` said one rule read the spacing scale's 64px step. Two did:
+  the scroll offset for an in-page anchor at `:64` of the stylesheet as it stood,
+  and the page frame's top padding at `:151`. The changelog entry for the same
+  removal said two, so the two records of it could not both be read as written,
+  and the design file is the one the stylesheet's own header points at as the
+  record of where each value came from. It now names both.
+
+### Added
+
+- A check in `test/docs-site.test.mjs` that the two halves of the layout
+  breakpoint name adjacent pixel values. It is carried in two files in two
+  syntaxes - a `max-width` media query and a `matchMedia('(min-width: ...)')` -
+  and out of step in either direction the script and the stylesheet disagree
+  about which layout is showing. It does not catch the row outgrowing the
+  breakpoint, which needs font metrics; that limit is recorded in the test, and a
+  browser is still the only thing that measures the row.
+- A check that a page published from a repository file carries every prose
+  paragraph of that file. `docs/project-structure.html` calls two of its pages
+  "X.md as a page" and nothing compared either pair, so an edit to the file that
+  missed the page was silent - and it was missed on two consecutive runs in the
+  same paragraph of `CHEATSHEET.md`. The pairing is read off that listing rather
+  than named in the test, so a third file published as a page is covered without
+  a second edit. Prose only, and one direction only: tables and fenced blocks are
+  reformatted on their way to a page, and the pages carry a nav and a pager the
+  files have no equivalent of.
+
+### Changed
+
+- The bar's height check walks every direct child of `.nav-bar` and takes the
+  tallest, in both layouts, rather than reading the menu column and calling it
+  the bar. The check was named for the bar and answered for one child out of
+  three: adding `padding: var(--s3) 0` to `.brand` took its box to 50.40px, past
+  the menu link's 42px, and drew a 68.40px bar against the 60px `--bar` declared
+  with the whole suite green. The walk is checked against the markup, so a fourth
+  child added to the bar fails rather than being left out of the maximum, and the
+  narrow layout's `--bar` is now covered by the same walk against the MENU
+  button - a figure a browser had been the only thing to see.
+- `.brand` and `.nav-toggle` state their own line box, the way `.menu a` and
+  `.has-sub > button` already do. Both are children of the bar, so both decide
+  its height, and `.brand` was deciding it off the body's 1.65 ratio against a
+  16px base - 26.40px that no token named. The brand's ship is sized from `--s5`
+  for the same reason, so the mark and the text beside it are one height.
+- The narrow layout's `--bar` is written as the terms it is made of rather than as
+  `--s7` plus 2px. The sum is the same 50px, but `--s7` folded the MENU button's
+  own box together with the bar's padding into one token that named neither, so a
+  change to `--s2` moved the wide `--bar` and left the narrow one declaring a
+  height nothing drew.
+
 ## [0.7.4-alpha] - 2026-09-28
 
 ### Added

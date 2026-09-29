@@ -14,7 +14,10 @@
   // The dropdowns collapse only on the wide layout. Below the breakpoint the
   // stylesheet opens every group and turns the button into a label, so the
   // script leaves them alone rather than toggling something already shown.
-  var wide = window.matchMedia('(min-width: 861px)');
+  // 951px is where the unwrapped row of entries first fits; the stylesheet's
+  // narrow query is the adjacent `max-width: 950px`. The two are one boundary
+  // written twice, so neither moves without the other.
+  var wide = window.matchMedia('(min-width: 951px)');
 
   function closeSubs(except) {
     subButtons.forEach(function (button) {
