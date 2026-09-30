@@ -18,7 +18,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { REPO_ROOT } from './helpers.mjs';
-import { styleSheet } from './page-style.mjs';
+import { styleSheet, specificity, compareSpecificity } from './page-style.mjs';
 
 const DOCS = join(REPO_ROOT, 'docs');
 const PAGES = readdirSync(DOCS).filter((name) => name.endsWith('.html')).sort();
@@ -242,33 +242,57 @@ function mainText(name) {
 }
 
 /**
- * The prose paragraphs of a markdown file, with everything that is not prose
- * left out: fenced blocks, headings, tables, blockquotes, and list items with
- * whatever indented lines continue them.
+ * The emphasis markers taken off, leaving the words. `**x**` becomes
+ * `<strong>x</strong>` on the page and the tags are already gone from that side,
+ * so the file has to shed its own markers or the first paragraph to gain one is
+ * reported as missing from a page that carries it.
  *
- * Prose is the part worth comparing. A table or a fenced block is reformatted on
- * its way to the page - the tables gain a scroll wrapper, the blocks become
- * `<pre><code>` - so comparing those would report the publishing rather than a
- * difference, and the two edits this missed were both prose.
+ * The guards either side of the single-marker forms are what keep `THEME_BG` and
+ * `snake_case` whole: a marker only opens emphasis where a word character does
+ * not run into it.
  */
-function prose(markdown) {
-  const paragraphs = [];
+const emphasis = (text) => text
+  .replace(/\*\*([^*]+)\*\*/g, '$1')
+  .replace(/__([^_]+)__/g, '$1')
+  .replace(/(^|[^\w*])\*(?!\s)([^*]+?)\*(?!\w)/g, '$1$2')
+  .replace(/(^|[^\w_])_(?!\s)([^_]+?)_(?!\w)/g, '$1$2');
+
+/**
+ * The blocks of a markdown file worth comparing against its page: paragraphs and
+ * list items, with the fenced blocks, headings, tables and blockquotes left out.
+ *
+ * A fenced block or a table is reformatted on its way to the page - the tables
+ * gain a scroll wrapper, the blocks become `<pre><code>` - so comparing those
+ * would report the publishing rather than a difference. A bullet list is not:
+ * `- text` becomes `<li>text</li>`, and the tag stripping on the page side
+ * leaves exactly the words the file holds. Leaving list items out anyway skipped
+ * 9 of QUICKSTART.md's 15 blocks and 4 of CHEATSHEET.md's 13, which is the same
+ * silent drift this check was written to end: the whole gameplay list could be
+ * deleted from quickstart.html with every test here green.
+ *
+ * An item's indented continuation lines join the item, because the page joins
+ * them - they are one `<li>`.
+ */
+function blocks(markdown) {
+  const found = [];
   let lines = [];
   let fenced = false;
   let listing = false;
-  const flush = () => { if (lines.length) paragraphs.push(lines.join(' ')); lines = []; };
+  const flush = () => { if (lines.length) found.push(lines.join(' ')); lines = []; };
 
   for (const raw of markdown.split(/\r?\n/)) {
-    if (/^\s*```/.test(raw)) { fenced = !fenced; flush(); continue; }
+    if (/^\s*```/.test(raw)) { fenced = !fenced; flush(); listing = false; continue; }
     if (fenced) continue;
 
     const text = raw.trim();
-    // A blank line ends a paragraph but leaves a list open: a list item wrapped
-    // over two lines with a blank line after it is still that item's text.
     if (!text) { flush(); continue; }
 
-    if (/^([-*+]|\d+\.)\s/.test(text)) { flush(); listing = true; continue; }
-    if (listing && /^\s{2,}/.test(raw)) continue;
+    // A list item opens a block of its own, without its marker. The marker is
+    // the page's `<li>`, not part of what the item says.
+    const item = text.match(/^(?:[-*+]|\d+\.)\s+(.*)$/);
+    if (item) { flush(); lines.push(item[1]); listing = true; continue; }
+    // An indented line under one continues it rather than starting a paragraph.
+    if (listing && /^\s{2,}/.test(raw)) { lines.push(text); continue; }
     listing = false;
 
     if (/^#{1,6}\s/.test(text) || text.startsWith('|') || text.startsWith('>')) { flush(); continue; }
@@ -277,7 +301,7 @@ function prose(markdown) {
   flush();
 
   // A link reads as its own text on the page, where the target is an attribute.
-  return paragraphs.map((text) => flatten(text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')));
+  return found.map((text) => flatten(emphasis(text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))));
 }
 
 test('docs: a page published from a repository file carries all of that file', () => {
@@ -302,18 +326,18 @@ test('docs: a page published from a repository file carries all of that file', (
   for (const { page, file } of pairs) {
     assert.ok(PAGES.includes(page), `project-structure.html names ${page}, which is not a page`);
 
-    const paragraphs = prose(readFileSync(join(REPO_ROOT, file), 'utf8'));
-    assert.ok(paragraphs.length, `${file} has no prose paragraphs, so this compares nothing`);
+    const said = blocks(readFileSync(join(REPO_ROOT, file), 'utf8'));
+    assert.ok(said.length, `${file} has nothing to compare against ${page}`);
 
-    // Every missing paragraph rather than the first: both times this was missed
-    // it was one paragraph of a pair, and a report that stops at the first turns
+    // Every missing block rather than the first: both times this was missed it
+    // was one paragraph of a pair, and a report that stops at the first turns
     // one edit into two runs.
     const published = mainText(page);
-    const missing = paragraphs.filter((paragraph) => !published.includes(paragraph));
+    const missing = said.filter((block) => !published.includes(block));
     assert.deepEqual(
       missing, [],
       `${file} says ${missing.length} thing(s) ${page} does not carry:\n`
-      + missing.map((paragraph) => `  ${paragraph}`).join('\n')
+      + missing.map((block) => `  ${block}`).join('\n')
     );
   }
 });
@@ -337,33 +361,70 @@ function side(shorthand, which) {
 const borderWidth = (shorthand) => String(shorthand).trim().split(/\s+/)[0];
 
 /**
- * Whether a rule applies in one of the site's two layouts.
+ * Which layout a width query selects, or null for a prelude that is not one.
  *
- * The sheet has one width query, so the two layouts are the top-level cascade
- * and that cascade plus the query. Blocks keyed on anything other than width -
- * the colour re-inking, the reduced-motion rule - are in neither: they carry no
- * geometry, and folding them in would answer for a condition nothing here asked
- * about. That is the same reason page-style.mjs leaves every at-rule out of its
- * own `declarationsFor`, which is the wide answer.
+ * `max-width` is the narrow layout's half of the boundary and `min-width` is the
+ * wide layout's, so the bound decides which side a block belongs to and the
+ * property alone does not. Reading `width:` and stopping there put every width
+ * block in the narrow layout, which is backwards in both directions at once for
+ * a `min-width` one: folded into the layout it is switched off in, and left out
+ * of the layout it is switched on in. Nothing showed it while the sheet carried
+ * exactly one query.
  */
-function appliesIn(rule, layout) {
-  if (!rule.at.length) return true;
-  return layout === 'narrow' && rule.at.every((prelude) => /\bwidth:/.test(prelude));
+function widthBound(prelude) {
+  if (/\bmax-width\s*:/.test(prelude)) return 'narrow';
+  if (/\bmin-width\s*:/.test(prelude)) return 'wide';
+  return null;
 }
 
 /**
- * The declarations that apply to a selector in one layout, folded in cascade
- * order. Several selectors fold together, so the caret button is read as the
- * button rule plus the `.sub-toggle` rule that narrows it, the way a browser
- * reads it.
+ * Whether a rule applies in one of the site's two layouts.
+ *
+ * The two layouts are the top-level cascade, and that cascade plus whichever
+ * width blocks that side of the boundary turns on. Blocks keyed on anything
+ * other than width - the colour re-inking, the reduced-motion rule - are in
+ * neither: they carry no geometry, and folding them in would answer for a
+ * condition nothing here asked about. That is the same reason page-style.mjs
+ * leaves every at-rule out of its own `declarationsFor`, which is the wide
+ * answer.
+ *
+ * The breakpoint test below asserts the sheet names no width query this cannot
+ * place, so a query written in some third form fails there rather than being
+ * sorted into a layout by default.
+ */
+function appliesIn(rule, layout) {
+  if (!rule.at.length) return true;
+  return rule.at.every((prelude) => widthBound(prelude) === layout);
+}
+
+/**
+ * The declarations that apply to a selector in one layout, folded as the
+ * cascade folds them: specificity first, document order breaking a tie. Several
+ * selectors fold together, so the caret button is read as the button rule plus
+ * the `.sub-toggle` rule that narrows it, the way a browser reads it.
+ *
+ * Document order alone is not enough, and the caret is why. A media query
+ * contributes no specificity, so the narrow block's `.has-sub > button::after`
+ * at (0,1,2) loses to the top-level `[aria-expanded="true"]` rule at (0,2,2)
+ * however the file is ordered - a rule the narrow layout appears to override and
+ * does not.
  */
 function declIn(layout, ...selectors) {
+  const matched = [];
+  style.rules.forEach((rule, order) => {
+    if (!appliesIn(rule, layout)) return;
+    const named = rule.selectors.filter((sel) => selectors.includes(sel));
+    if (!named.length) return;
+    // A rule's selector list is several rules as far as the cascade is
+    // concerned, so the most specific of the ones the caller named is the one
+    // that weighs.
+    const [spec] = named.map(specificity).sort(compareSpecificity).reverse();
+    matched.push({ rule, spec, order });
+  });
+  matched.sort((a, b) => compareSpecificity(a.spec, b.spec) || a.order - b.order);
+
   const decl = {};
-  for (const rule of style.rules) {
-    if (!appliesIn(rule, layout)) continue;
-    if (!rule.selectors.some((sel) => selectors.includes(sel))) continue;
-    Object.assign(decl, rule.declarations);
-  }
+  for (const { rule } of matched) Object.assign(decl, rule.declarations);
   return decl;
 }
 
@@ -489,6 +550,57 @@ test('docs: the caret button draws the same box as the link beside it', () => {
   );
 });
 
+/** A `content` value as the glyph it draws, with the quotes CSS writes it in off. */
+const glyph = (value) => String(value ?? '').replace(/^(["'])(.*)\1$/, '$2');
+
+test('docs: the caret glyph follows the layout and the state it describes', () => {
+  // The caret says what the button does, so a layout where the button does
+  // nothing has to draw no caret - and the narrow layout is exactly that: it
+  // opens every group, hides the three caret-only buttons and turns Reference's
+  // into a label with `cursor: default`.
+  //
+  // Blanking it took two rules rather than one. A media query contributes no
+  // specificity, so the narrow block's `.has-sub > button::after` at (0,1,2)
+  // could not reach the top-level `[aria-expanded="true"]` rule at (0,2,2), and
+  // a group opened on the wide layout carried its `^` across the breakpoint onto
+  // a label - `Reference ^`, advertising a control that no longer toggles
+  // anything. Nothing in the suite could see it: the resolver folded rules in
+  // document order and modelled no specificity at all.
+  //
+  // Both states are reachable on both layouts, because the attribute survives a
+  // resize on its own; docs.js now clears it as well, which the test below pins.
+  const caret = (layout, expanded) => glyph(declIn(
+    layout,
+    '.has-sub > button::after',
+    ...(expanded ? ['.has-sub > button[aria-expanded="true"]::after'] : []),
+  ).content);
+
+  assert.equal(caret('wide', false), 'v', 'a closed group points down on the wide layout');
+  assert.equal(caret('wide', true), '^', 'an open group points up on the wide layout');
+  assert.equal(caret('narrow', false), '', 'the narrow layout draws no caret on a closed group');
+  assert.equal(
+    caret('narrow', true), '',
+    'the narrow layout draws no caret on a group left open across the breakpoint'
+  );
+});
+
+test('docs: a group left open on the wide layout does not stay open across the breakpoint', () => {
+  // The stylesheet takes the glyph away, but the attribute underneath it is the
+  // DOM's and only the script can clear it: `aria-expanded="true"` on a button
+  // the narrow layout has made a static label announces a state the page cannot
+  // change. docs.js sets the attribute only while `wide.matches`, so without a
+  // listener on that same MediaQueryList nothing ever put it back.
+  const script = readFileSync(join(DOCS, 'assets', 'docs.js'), 'utf8');
+  assert.match(
+    script, /wide\.add(EventListener\(\s*'change'|Listener\()/,
+    'docs.js listens for the layout changing under it'
+  );
+  assert.match(
+    script, /if\s*\(!wide\.matches\)\s*closeSubs\(null\)/,
+    'crossing into the narrow layout closes every group, so no button is left announcing one'
+  );
+});
+
 test('docs: the bar draws the height --bar declares, and the offsets clear it', () => {
   // The nav's lists are lists, so `ul { margin-bottom }` and `li { margin-bottom }`
   // reach them unless something stops it. Inside a fixed bar those land in its
@@ -586,20 +698,59 @@ test('docs: the two halves of the layout breakpoint name adjacent widths', () =>
   // the last group off the right edge of a bar that, being fixed, could not
   // scroll to it.
   //
+  // It also holds the boundary to being one boundary. `appliesIn` above sorts a
+  // rule into a layout by the bound its query names, and the whole geometry walk
+  // rests on there being two layouts to sort into, so this is where a query that
+  // fits neither half is caught - while it is still a stylesheet edit rather
+  // than a figure reported for a layout the site does not have.
+  //
   // What this does not catch: the row outgrowing the breakpoint again. That
   // needs the drawn width of eight entries of text, so it needs font metrics,
   // and the suite has no browser and must not gain one. A browser is still the
   // only thing that measures the row itself; this only holds the two halves of
   // the boundary together once a measurement has set them.
-  const widths = new Set();
+  // Every width query the sheet carries, sorted by the bound it names rather
+  // than filtered down to max-width. `appliesIn` above places a rule in a layout
+  // by that bound, so a query it cannot place is a block of rules silently in
+  // neither layout - and a second bound at some other width is a third layout
+  // the two-layout model does not have. Both are faults here, where the figure
+  // is being read, rather than surprises in whatever reads the resolver next.
+  const widths = { narrow: new Set(), wide: new Set() };
+  const unplaceable = new Set();
   for (const rule of style.rules) {
     for (const prelude of rule.at) {
-      const named = prelude.match(/\(\s*max-width:\s*(\d+)px\s*\)/);
-      if (named) widths.add(Number(named[1]));
+      const rest = prelude.replace(
+        /\(\s*(min|max)-width:\s*(\d+)px\s*\)/g,
+        (whole, bound, value) => {
+          widths[bound === 'max' ? 'narrow' : 'wide'].add(Number(value));
+          return '';
+        }
+      );
+      // Any mention of a width left over, not just a `width:` one. Range syntax
+      // writes the bound as a comparison - `(width <= 950px)` - so a guard
+      // keyed on the colon reads it as naming no width at all, and the block
+      // goes into neither layout with nothing said. `prefers-color-scheme` and
+      // `prefers-reduced-motion`, the sheet's other two preludes, carry no
+      // `width` to trip on.
+      if (/\bwidth\b/.test(rest)) unplaceable.add(prelude);
     }
   }
-  assert.equal(widths.size, 1, `the stylesheet names one narrow breakpoint, not ${[...widths].join(', ')}`);
-  const narrow = [...widths][0];
+  assert.deepEqual(
+    [...unplaceable], [],
+    'every width query in the stylesheet names a min-width or a max-width in px, '
+    + 'which is what sorts the rules inside it into one of the two layouts'
+  );
+
+  assert.equal(
+    widths.narrow.size, 1,
+    `the stylesheet names one narrow breakpoint, not ${[...widths.narrow].join(', ')}`
+  );
+  const narrow = [...widths.narrow][0];
+  assert.deepEqual(
+    [...widths.wide].filter((width) => width !== narrow + 1), [],
+    `the stylesheet goes narrow at ${narrow}px, so its only wide side is ${narrow + 1}px; `
+    + 'a min-width query at any other width is a third layout, and there are two'
+  );
 
   const script = readFileSync(join(DOCS, 'assets', 'docs.js'), 'utf8');
   const queried = [...script.matchAll(/matchMedia\(\s*'\(\s*min-width:\s*(\d+)px\s*\)'\s*\)/g)];

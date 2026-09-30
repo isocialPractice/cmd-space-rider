@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.7.6-alpha] - 2026-09-30
+
+### Fixed
+
+- A documentation-site dropdown left open on the wide layout kept its caret
+  after the window narrowed. The narrow block's
+  `.has-sub > button::after { content: "" }` is (0,1,2) and the top-level
+  `.has-sub > button[aria-expanded="true"]::after { content: "^" }` is (0,2,2),
+  and a media query contributes no specificity, so the narrow rule could not
+  reach the open state however the file was ordered. Reference is the one
+  dropdown button the narrow layout still shows, and it shows it as a static
+  label with `cursor: default` - so the label read `Reference ^`, advertising a
+  control that no longer toggles anything. The narrow block now blanks both
+  states.
+- The same sequence left `aria-expanded="true"` on that label. `docs/assets/docs.js`
+  set the attribute only while the wide query matched and had no listener to put
+  it back, so the state survived a resize onto a layout that cannot change it.
+  The script now closes every group when the layout changes under it.
+- The site's layout resolver in `test/docs-site.test.mjs` read any width query as
+  the narrow layout's. It matched on the property and not the bound, so a
+  `min-width` block would have been folded into the layout it is switched off in
+  and left out of the one it is switched on in - wrong in both directions at
+  once, and invisible while the stylesheet carried exactly one query. The bound
+  now decides: `max-width` is the narrow layout's half of the boundary and
+  `min-width` is the wide layout's.
+- The check that a page carries all of the file it is published from compared
+  prose and dropped every list item, so it read 6 of `QUICKSTART.md`'s 15 blocks
+  and 9 of `CHEATSHEET.md`'s 13. The gameplay list and the terminal-requirements
+  list were not compared against their pages at all: deleting a whole `<li>` from
+  `docs/quickstart.html` left the suite green. A bullet becomes `<li>` and
+  survives the normalizing the check already does, unlike a table or a fenced
+  block, so list items are now compared too - marker off, indented continuations
+  joined onto their item. Every one of the 13 was already on its page.
+
+### Added
+
+- Specificity to `test/page-style.mjs`, as the three counts CSS orders by. The
+  resolver folded rules in document order and modelled no specificity at all,
+  which is why the caret above could sit unseen while the bar-height walk was
+  built on top of the same module. `test/docs-site.test.mjs` now folds a
+  selector's rules the way the cascade does - specificity first, document order
+  breaking a tie - and asserts which `content` wins for
+  `.has-sub > button::after` in each layout and each `aria-expanded` state.
+- A check that the stylesheet names no width query the layout resolver cannot
+  place. It already asserted there was exactly one `max-width`; it now accounts
+  for every query naming a width, so a second bound at some other value fails as
+  the third layout it would be rather than being sorted into one of the two by
+  default. The leftover it looks for is any mention of a width rather than a
+  `width:` one, because media range syntax writes the bound as a comparison -
+  `(width <= 950px)` - and a guard keyed on the colon reads that as naming no
+  width at all and lets the block into neither layout.
+- A check that `docs/assets/docs.js` listens for the layout changing under it
+  and closes the groups when it does. The stylesheet can take the caret away,
+  but the attribute underneath it is the DOM's and only the script can clear it.
+
+### Changed
+
+- Emphasis markers are stripped from the file side of the page-against-file
+  check, alongside the inline code markers already dropped. `**x**` reaches the
+  page as `<strong>x</strong>` and the tags are gone from that side, so the first
+  paragraph to gain emphasis would have been reported as missing from a page
+  carrying it. Identifiers survive: a marker only opens emphasis where a word
+  character does not run into it, so `THEME_BG` and `snake_case` are left whole.
+
 ## [0.7.5-alpha] - 2026-09-29
 
 ### Fixed
