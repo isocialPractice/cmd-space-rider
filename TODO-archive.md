@@ -1306,3 +1306,82 @@ still be found by name.
     code and the message naming the flag it refused. Browser and terminal both: the rig
     is neither, so `test/parity.test.mjs` has nothing to pair this with.
   - From: UI/UX Override - the nav's dropdown anchors, and an accent on nothing
+
+## Archived 09-30-26
+
+- [x] The new resolver collects at-rule context and then ignores it
+  - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
+    preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
+    naming a selector regardless of that context. On `index.html` this cannot
+    show: the page has one `:root` and no `@media` at all. On
+    `docs/assets/style.css`, which `test/docs-site.test.mjs:26` already points
+    the same module at, it does. `:root` is declared twice - the dark block at
+    `:9` and the light block inside `@media (prefers-color-scheme: light)` at
+    `:39` - so `styleSheet(css).properties` comes back as the light scheme:
+    `--page` is `#f2f2f4` where the base block declares `#000000`, and `--text`,
+    `--heading` and `--rule` likewise. The doc comment at `:102` says these are
+    "the custom properties the sheet declares on `:root`", which is the dark
+    scheme, so the function and its own description disagree. Nothing reads
+    `properties` or `declarationsFor` for the docs sheet yet, which is the only
+    reason the suite is green - `test/docs-site.test.mjs` walks `style.rules`
+    directly and filters on `rule.at.length` itself.
+  - **Goal**: Decide what the two folding functions mean by a sheet with a media
+    query in it, and say it in one place rather than leaving each caller to
+    remember. Either `declarationsFor` takes the top-level cascade only and a
+    caller asking for a media block's rules goes through `rules`, or it takes a
+    condition and folds what matches - the first is the smaller change and is
+    what both current callers want. Correct the `properties` comment to whichever
+    it becomes. Worth an assertion in `test/docs-site.test.mjs` either way, since
+    the site's stylesheet is the repository's only sheet that declares `:root`
+    twice and is therefore the only thing that can catch this: resolve `--page`
+    off `docs/assets/style.css` and pin which scheme answers.
+  - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
+- [x] **The Reference group sits off the right edge between 861px and 950px** -
+  The wide nav lays its eight entries on one unwrapped row, and that row is
+  wider than the width it switches on at, so the last group is painted past the
+  right edge of the screen across the first 90px of the wide range.
+  - **Issue**: Measured in chromium on `docs/index.html`, identical in both
+    colour schemes. At 861px the Reference group's box runs 841.47px to
+    951.16px in an 861px viewport, so 17.8% of the control is on screen;
+    `.nav-bar` overflows by 90px, by 51px at 900px, and first fits at 951px.
+    Opening it is worse than leaving it shut - the list runs to 1049.73px, 9.4%
+    visible, with `Project Structure`, `Terminal Requirements`, `How It Works`
+    and `Cheatsheet` all laid out between 846px and 1045px. Nothing can scroll
+    to them: `.nav` is `position: fixed`, so the overflow never reaches the
+    document and `scrollWidth` stays equal to `clientWidth` at every one of
+    these widths. Keyboard focus does land on the button, but a fixed ancestor
+    cannot be scrolled, so `window.scrollX` stays 0 and the focused control
+    stays invisible. Between 861px and 950px the nav offers no usable route to
+    four of the site's ten pages. Not this turn's doing: the same figures come
+    back from `git show HEAD:docs/assets/style.css` served in place of the
+    working tree's, so the defect predates the bar fix it was found beside.
+  - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
+  - From: UI/UX Override - the width the wide nav switches on at
+- [x] **The bar check reads one column of the bar and calls it the bar** -
+  `test/docs-site.test.mjs:275-281` builds the drawn height out of `.menu a`
+  alone: the link's box, `.nav-bar`'s padding, and `.nav`'s bottom border. The
+  bar is a flex row and its height is the tallest of its children, and `.brand`
+  and `.nav-toggle` are children too.
+  - **Issue**: The check is named "the bar draws the height `--bar` declares"
+    and answers for the menu column only, so the fault it was written to end
+    comes back through any other child with all 468 tests green. Verified by
+    mutation: add `padding: var(--s3) 0` to `.brand` at
+    `docs/assets/style.css:104` and the brand's 26.4px line box becomes 50.4px,
+    taller than the link's 42px, so the bar draws 68.4px against the 60px
+    `--bar` declares - and `node --test test/docs-site.test.mjs` reports 8 of 8
+    passing. That is the same shape as the defect just fixed: something inside
+    the bar grew, the bar grew with it, and `--bar` went on declaring a figure
+    nothing drew. `.brand` is the child that can do it, because it states no
+    line box of its own and takes the body's 1.65 off a 16px base.
+  - **Goal**: Have the check take the tallest child rather than an assumed one.
+    That needs `controlHeight` to resolve a control with no `line-height` of its
+    own, which it deliberately refuses today - the refusal is what caught the
+    caret button - so the decision is either to give `test/page-style.mjs` an
+    inherited font size and line height to resolve a unitless ratio against, or
+    to have `.brand` and `.nav-toggle` state their own line box the way
+    `.menu a` and `.has-sub > button` now do and keep the refusal as it is. The
+    second is the smaller change and keeps every term in `--bar` a token. Either
+    way the check should fold every direct child of `.nav-bar` the layout shows
+    and assert the maximum, so the narrow layout's `--bar` is covered by the
+    same walk against the MENU button.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers

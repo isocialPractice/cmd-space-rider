@@ -171,6 +171,15 @@ One size on the site is off this scale, and it is the only one:
   size and not its box: the button takes the same line box as the link beside
   it, so the two draw the same height.
 
+  The caret belongs to the wide layout alone, and taking it away on the narrow
+  one needs two rules rather than one. A media query contributes no specificity,
+  so the narrow block's `.has-sub > button::after` at (0,1,2) cannot reach the
+  top-level `.has-sub > button[aria-expanded="true"]::after` at (0,2,2), and a
+  group opened above the breakpoint carried its `^` down onto a button the
+  narrow layout has already turned into a label. The narrow block blanks both
+  states, and `docs.js` clears `aria-expanded` when the layout changes under it,
+  so the label stops announcing a state the page can no longer change.
+
 ## Layout
 
 - **Fixed top menu**, so it stays reachable while reading. The site has ten
@@ -210,7 +219,10 @@ One size on the site is off this scale, and it is the only one:
   paints the last group off the right edge of a fixed bar that cannot scroll.
   The figure is written twice - `max-width: 950px` in the stylesheet and
   `min-width: 951px` in `docs.js`, which collapses the dropdowns only on the
-  wide layout - and `test/docs-site.test.mjs` asserts the two stay adjacent.
+  wide layout - and `test/docs-site.test.mjs` asserts the two stay adjacent. It
+  also asserts the stylesheet names no third width query: the site has two
+  layouts, and the checks that read the bar's geometry sort every rule into one
+  of them by the bound its query names.
 - **Relative links throughout.** The site is served from
   `/cmd-space-rider/docs/` rather than from a domain root, so absolute paths
   would break. Relative links also mean the pages open correctly straight off

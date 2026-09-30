@@ -16,6 +16,12 @@
 // pointed at actually use: custom properties, calc, min, max, px, vw and vh. A
 // length it cannot resolve throws instead of resolving to something plausible,
 // which is the whole reason it is trustworthy at all.
+//
+// `specificity` at the foot of the file is the other half of reading a rule the
+// way a browser does: which of two rules naming the same element wins is decided
+// by specificity first and document order only as a tie, and a media query adds
+// nothing to either. Folding in document order alone is what let a top-level
+// caret rule beat the narrow layout's attempt to blank it.
 
 /**
  * Every rule in a stylesheet, in cascade order, each with its own declarations
@@ -184,3 +190,59 @@ export function pageStyle(html) {
   if (open < 0 || close < 0) throw new Error('the page has no <style> block');
   return styleSheet(html.slice(open + '<style>'.length, close));
 }
+
+/**
+ * The four pseudo-elements CSS2 spelled with one colon. A browser still accepts
+ * that spelling, and it counts as an element either way, so `:after` and
+ * `::after` have to weigh the same here or a sheet written in the older form
+ * resolves to the wrong rule.
+ */
+const PSEUDO_ELEMENTS = /^(before|after|first-line|first-letter)$/;
+
+/**
+ * A selector's specificity, as the three counts CSS orders by: ids, then
+ * classes, attributes and pseudo-classes, then types and pseudo-elements.
+ *
+ * Needed because a media query contributes no specificity of its own. The
+ * narrow block's `.has-sub > button::after` is (0,1,2) and the top-level
+ * `.has-sub > button[aria-expanded="true"]::after` is (0,2,2), so the top-level
+ * rule wins inside the narrow layout however the file is ordered - which is how
+ * an expanded group kept its caret on a layout that has no dropdowns to open.
+ * A resolver that folds in document order alone cannot see that at all.
+ *
+ * What it does not model: the specificity of a `:not()`, `:is()` or `:has()`
+ * argument, which CSS takes from the most specific selector inside the
+ * parentheses. Neither stylesheet this module is pointed at uses one, and a
+ * wrong answer there would be silent, so a caller that adds one should teach
+ * this function about it rather than trusting the count.
+ */
+export function specificity(selector) {
+  let ids = 0;
+  let classes = 0;
+  let types = 0;
+  let rest = String(selector);
+
+  // Attribute selectors first. Their values carry `.`, `#` and `:` freely -
+  // `[href="#play"]` holds what reads as an id - so taking them out ahead of
+  // everything else is what stops the value being counted as a selector.
+  rest = rest.replace(/\[[^\]]*\]/g, () => { classes++; return ' '; });
+
+  rest = rest.replace(/::?[\w-]+(\([^)]*\))?/g, (whole) => {
+    const name = whole.replace(/^::?/, '').replace(/\(.*$/, '');
+    if (whole.startsWith('::') || PSEUDO_ELEMENTS.test(name)) types++;
+    else classes++;
+    return ' ';
+  });
+
+  rest = rest.replace(/#[\w-]+/g, () => { ids++; return ' '; });
+  rest = rest.replace(/\.[\w-]+/g, () => { classes++; return ' '; });
+
+  // Whatever is left is element names and combinators. `*` counts for nothing.
+  for (const part of rest.split(/[\s>+~,]+/)) {
+    if (part && part !== '*') types++;
+  }
+  return [ids, classes, types];
+}
+
+/** Orders two specificities weakest first, for a sort whose ties document order breaks. */
+export const compareSpecificity = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];

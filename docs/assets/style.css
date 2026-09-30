@@ -306,6 +306,15 @@ footer a { color: var(--link); }
   .has-sub { display: block; }
   .has-sub > .sub-toggle { display: none; }
   .has-sub > button { color: var(--muted); cursor: default; font-size: 14px; }
+  /* Both states, because both are reachable here. A group opened on the wide
+     layout keeps its `aria-expanded="true"` when the window narrows, and
+     `.has-sub > button[aria-expanded="true"]::after` is (0,2,2) against this
+     rule's (0,1,2) - a media query contributes no specificity, so the caret
+     rule at the top of the file outranks this one wherever it sits in the file.
+     Blanking the open state as well, at a specificity that matches it, is what
+     takes the glyph away from a button the narrow layout has already turned
+     into a label. */
   .has-sub > button::after { content: ""; }
+  .has-sub > button[aria-expanded="true"]::after { content: ""; }
   .has-sub > button:hover, .has-sub > button:focus-visible { color: var(--muted); border-color: transparent; }
 }

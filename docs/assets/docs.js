@@ -43,6 +43,18 @@
     });
   });
 
+  // Crossing the breakpoint puts every group back. The collapsed state belongs
+  // to the wide layout - the narrow one opens every list and turns the button
+  // into a label - so a group left open above the breakpoint would otherwise
+  // carry aria-expanded="true" on a control that no longer toggles anything,
+  // and announce a state the page cannot change. addListener is the older
+  // spelling of the same event, kept for browsers that have only that one.
+  function closeSubsOnNarrow() {
+    if (!wide.matches) closeSubs(null);
+  }
+  if (wide.addEventListener) wide.addEventListener('change', closeSubsOnNarrow);
+  else if (wide.addListener) wide.addListener(closeSubsOnNarrow);
+
   // A click anywhere else, or Escape, puts the menu back.
   document.addEventListener('click', function (event) {
     if (!nav.contains(event.target)) {
