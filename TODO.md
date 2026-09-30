@@ -42,84 +42,74 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+### Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
 
-- [ ] **The layout resolver reads any width query as the narrow one** -
-  `test/docs-site.test.mjs:349-352` decides a rule applies to the narrow layout
-  when every at-rule prelude around it matches `/\bwidth:/`, and to the wide
-  layout only when the rule sits at the top level with no prelude at all.
-  - **Issue**: Nothing fails today, because `docs/assets/style.css` carries
-    exactly one width query. A `@media (min-width: ...)` block added later is
-    folded into the narrow layout and left out of the wide one, which is
-    backwards in both directions, and the breakpoint check beside it collects
-    `max-width` preludes only - `assert.equal(widths.size, 1, ...)` at `:604` -
-    so nothing names the new query either. The bar walk would then report a
-    height for a layout the stylesheet does not have, silently and with the
-    suite green, which is the exact failure this file was written to end.
-  - **Goal**: Read the bound as well as the property, so a `max-width` prelude
-    applies to the narrow layout and a `min-width` one to the wide, and have the
-    breakpoint check assert the sheet names no width query it did not account
-    for - the way it already asserts there is exactly one `max-width`.
-  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [ ] **Nothing pins that the narrow layout opens every group** -
+  `docs/assets/style.css:305` gives the narrow `.sub` a `display: block`, and
+  that is the only thing showing the four pages under Reference below the
+  breakpoint. It wins over the top-level `.sub { display: none }` at `:182` on
+  document order alone, because both are a lone class at (0,1,0), and nothing in
+  the suite reads either one.
+  - **Issue**: This run's script change made that rule load-bearing.
+    `docs/assets/docs.js:52-56` now sets `aria-expanded="false"` on every group
+    when the layout narrows, so the reveal rule at `:187` no longer applies on
+    the narrow layout either, and the narrow `.sub` rule is the last thing left
+    drawing those pages. Verified by mutation: delete `display: block;` from
+    `:305` and `npm test` reports 472 of 472 passing, with `Project Structure`,
+    `Terminal Requirements`, `How It Works` and `Cheatsheet` unreachable at
+    every narrow width. That is the 0.7.5 defect back, and the script change
+    makes it total rather than partial - before it, a group opened above the
+    breakpoint at least carried its revealed `.sub` down.
+  - **Goal**: Assert in `test/docs-site.test.mjs` that `.sub` resolves to a
+    shown `display` on the narrow layout in both `aria-expanded` states, the way
+    the caret test already reads `content` per layout and state. `declIn` and the
+    new specificity ordering already answer it; the walk at `:610` reads `.sub`
+    for its margins and is the place to read its display beside them.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
+- [ ] **The specificity model has no checks of its own** -
+  `test/page-style.mjs:219` is a new exported function that three test files now
+  resolve rules through, and its only exercise is the two selectors the caret
+  test names. Nothing reads the counts it returns.
+  - **Issue**: The answers are not obvious enough to leave unpinned - `a:before`
+    and `a::before` both weigh (0,0,2) because the legacy spelling is still a
+    pseudo-element, while `a:hover` weighs (0,1,1). The doc comment at `:206-218`
+    names its own blind spots, `:not()`, `:is()` and `:has()`, whose argument
+    specificity it does not model, and asks a caller who adds one to teach the
+    function rather than trust it. Nothing enforces that: neither stylesheet uses
+    one today, so the first `:not()` added gets a silently wrong count and the
+    rule it decides folds in the wrong order.
+  - **Goal**: Pin a table of selectors against their expected triples, covering
+    the id, class, attribute, pseudo-class, pseudo-element and `*` cases and both
+    colon spellings. Then make the blind spot loud rather than silent: throw on a
+    selector carrying `:not(`, `:is(`, `:where(` or `:has(`, so a sheet that
+    gains one fails in the resolver instead of resolving to a plausible count.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
 
 #### Found Issues
 
-- [ ] **A group left open on the wide layout keeps its caret on the narrow one** -
-  `docs/assets/style.css:181` declares
-  `.has-sub > button[aria-expanded="true"]::after { content: "^"; }` at the top
-  level, and the narrow block's `.has-sub > button::after { content: ""; }` at
-  `:309` is the rule meant to take that glyph away. A media query contributes no
-  specificity, so (0,2,2) beats (0,1,2) whichever comes later in the file, and
-  the narrow layout cannot blank the caret of a button that is expanded.
-  - **Issue**: `docs/assets/docs.js:38-42` sets `aria-expanded="true"` only
-    while `wide.matches`, and nothing ever resets it - there is no `change`
-    listener on the `wide` MediaQueryList and no resize handler - so the
-    attribute survives a layout change. The failing sequence: open
-    `docs/index.html` at 1280px, click the Reference caret, then narrow the
-    window to 900px. Reference is the one `.has-sub > button` the narrow layout
-    still shows, because the three `.sub-toggle` buttons are `display: none` at
-    `:307`, and it reads `Reference ^` as a static label with `cursor: default`,
-    advertising a control that no longer toggles anything. The stale
-    `aria-expanded="true"` rides along on that same label. Not introduced this
-    turn - the two rules are byte-identical at `HEAD` - but newly reachable
-    across the 90px this turn moved into the narrow layout, since at 900px the
-    old 861px boundary still gave the wide layout, where the caret was correct.
-  - **Goal**: Either blank the glyph in the narrow block at a specificity that
-    wins, `.has-sub > button[aria-expanded="true"]::after { content: ""; }`
-    beside the rule already there, or reset the attribute from `docs.js` on the
-    `wide` MediaQueryList's `change` event, which clears the stale
-    `aria-expanded` as well as the caret. Verifying either from text needs
-    something the rig does not have: `test/page-style.mjs` folds rules in
-    document order and models no specificity at all, which is the same blind
-    spot that let this sit unseen while the bar walk was being built on top of
-    it. Give the resolver a specificity ordering, then assert which `content`
-    wins for `.has-sub > button::after` in each layout and each `aria-expanded`
-    state. A browser is not needed for any of it.
-  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
-- [ ] **The new page-against-file check compares prose and skips every list item** -
-  `prose()` at `test/docs-site.test.mjs:254-282` drops list items and the
-  indented lines that continue them, so the check added this turn compares 6 of
-  QUICKSTART.md's 15 blocks and 9 of CHEATSHEET.md's 13.
-  - **Issue**: The gameplay list at `QUICKSTART.md:44-53` and the terminal floor
-    list at `CHEATSHEET.md:126-129` are not compared against their pages at all,
-    which is the same silent drift the item was opened to end. Verified by
-    mutation: delete the whole `<li>Kills inside two seconds of each other
-    chain, up to <code>COMBO x8</code>.</li>` from `docs/quickstart.html` and
-    `node --test test/docs-site.test.mjs` reports 10 of 10 passing. The comment
-    at `:246-252` justifies the exclusion by reformatting - "a table or a fenced
-    block is reformatted on its way to the page" - which holds for those two and
-    not for a bullet list, which becomes `<ul><li>` and survives the normalizing
-    the function already does.
-  - **Goal**: Take list items as well as paragraphs - marker stripped, indented
-    continuations joined onto their item, through the same link-stripping and
-    `flatten` - and keep the fenced-block and table exclusions, for which the
-    reformatting argument does hold. Measured before queuing this: pulling all
-    13 list items out of both files that way, every one is already on its page,
-    so the gap closes with nothing else to fix. While in that function,
-    `flatten` at `:226` drops backticks but not `**` or `_`, so the first prose
-    paragraph to gain emphasis is reported as missing from a page that carries
-    it; strip the emphasis markers on the file side too.
-  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [ ] **The emphasis stripper reaches inside inline code** -
+  `test/docs-site.test.mjs:254-258` strips `**`, `__`, `*` and `_` from the file
+  side of the page-against-file check, and `:304` runs it before `flatten` at
+  `:226` drops the backticks, so it has no way to tell a code span from prose and
+  takes the markers out of both.
+  - **Issue**: Markdown holds emphasis markers literal inside a code span, and so
+    does the page: `` `__init__` `` reaches `<code>__init__</code>` and
+    `mainText` strips the tags to `__init__`, while the file side resolves to
+    `init`. The block is then reported as missing from a page that carries it
+    verbatim, which is a false failure in the one check written to catch real
+    drift. Measured on the helper directly: `` `__init__` in code `` resolves to
+    `` `init` in code ``, and `` `**not bold**` in code `` to
+    `` `not bold` in code ``. Nothing fails today only because neither
+    `QUICKSTART.md` nor `CHEATSHEET.md` contains a single `*` or `_` - the whole
+    function is unreached, so the first file to gain either is also the first
+    thing to exercise it.
+  - **Goal**: Hold the code spans out of the stripping - take the backticked runs
+    aside, strip emphasis from what is left, then put them back - or strip the
+    backticks first and mark their contents so the emphasis passes skip them.
+    Either way pin it with the two cases above plus the identifiers the comment
+    already claims survive, `THEME_BG` and `snake_case`, since those claims are
+    untested too.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
 
 ## Quick Wins
 
@@ -202,84 +192,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 83 earlier items in `TODO-archive.md`, newest last.
+> 86 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The new resolver collects at-rule context and then ignores it
-  - **Issue**: `test/page-style.mjs:30-60` records for every rule the at-rule
-    preludes it sits inside, and `declarationsFor` at `:92` then folds every rule
-    naming a selector regardless of that context. On `index.html` this cannot
-    show: the page has one `:root` and no `@media` at all. On
-    `docs/assets/style.css`, which `test/docs-site.test.mjs:26` already points
-    the same module at, it does. `:root` is declared twice - the dark block at
-    `:9` and the light block inside `@media (prefers-color-scheme: light)` at
-    `:39` - so `styleSheet(css).properties` comes back as the light scheme:
-    `--page` is `#f2f2f4` where the base block declares `#000000`, and `--text`,
-    `--heading` and `--rule` likewise. The doc comment at `:102` says these are
-    "the custom properties the sheet declares on `:root`", which is the dark
-    scheme, so the function and its own description disagree. Nothing reads
-    `properties` or `declarationsFor` for the docs sheet yet, which is the only
-    reason the suite is green - `test/docs-site.test.mjs` walks `style.rules`
-    directly and filters on `rule.at.length` itself.
-  - **Goal**: Decide what the two folding functions mean by a sheet with a media
-    query in it, and say it in one place rather than leaving each caller to
-    remember. Either `declarationsFor` takes the top-level cascade only and a
-    caller asking for a media block's rules goes through `rules`, or it takes a
-    condition and folds what matches - the first is the smaller change and is
-    what both current callers want. Correct the `properties` comment to whichever
-    it becomes. Worth an assertion in `test/docs-site.test.mjs` either way, since
-    the site's stylesheet is the repository's only sheet that declares `:root`
-    twice and is therefore the only thing that can catch this: resolve `--page`
-    off `docs/assets/style.css` and pin which scheme answers.
-  - From: Code Review Override - the resolver's at-rule context, and the rig's unchecked flag table
-- [x] **The Reference group sits off the right edge between 861px and 950px** -
-  The wide nav lays its eight entries on one unwrapped row, and that row is
-  wider than the width it switches on at, so the last group is painted past the
-  right edge of the screen across the first 90px of the wide range.
-  - **Issue**: Measured in chromium on `docs/index.html`, identical in both
-    colour schemes. At 861px the Reference group's box runs 841.47px to
-    951.16px in an 861px viewport, so 17.8% of the control is on screen;
-    `.nav-bar` overflows by 90px, by 51px at 900px, and first fits at 951px.
-    Opening it is worse than leaving it shut - the list runs to 1049.73px, 9.4%
-    visible, with `Project Structure`, `Terminal Requirements`, `How It Works`
-    and `Cheatsheet` all laid out between 846px and 1045px. Nothing can scroll
-    to them: `.nav` is `position: fixed`, so the overflow never reaches the
-    document and `scrollWidth` stays equal to `clientWidth` at every one of
-    these widths. Keyboard focus does land on the button, but a fixed ancestor
-    cannot be scrolled, so `window.scrollX` stays 0 and the focused control
-    stays invisible. Between 861px and 950px the nav offers no usable route to
-    four of the site's ten pages. Not this turn's doing: the same figures come
-    back from `git show HEAD:docs/assets/style.css` served in place of the
-    working tree's, so the defect predates the bar fix it was found beside.
-  - **Goal**: Resolve to [nav-reference-offscreen.prompt.md](.claude/prompts/nav-reference-offscreen.prompt.md)
-  - From: UI/UX Override - the width the wide nav switches on at
-- [x] **The bar check reads one column of the bar and calls it the bar** -
-  `test/docs-site.test.mjs:275-281` builds the drawn height out of `.menu a`
-  alone: the link's box, `.nav-bar`'s padding, and `.nav`'s bottom border. The
-  bar is a flex row and its height is the tallest of its children, and `.brand`
-  and `.nav-toggle` are children too.
-  - **Issue**: The check is named "the bar draws the height `--bar` declares"
-    and answers for the menu column only, so the fault it was written to end
-    comes back through any other child with all 468 tests green. Verified by
-    mutation: add `padding: var(--s3) 0` to `.brand` at
-    `docs/assets/style.css:104` and the brand's 26.4px line box becomes 50.4px,
-    taller than the link's 42px, so the bar draws 68.4px against the 60px
-    `--bar` declares - and `node --test test/docs-site.test.mjs` reports 8 of 8
-    passing. That is the same shape as the defect just fixed: something inside
-    the bar grew, the bar grew with it, and `--bar` went on declaring a figure
-    nothing drew. `.brand` is the child that can do it, because it states no
-    line box of its own and takes the body's 1.65 off a 16px base.
-  - **Goal**: Have the check take the tallest child rather than an assumed one.
-    That needs `controlHeight` to resolve a control with no `line-height` of its
-    own, which it deliberately refuses today - the refusal is what caught the
-    caret button - so the decision is either to give `test/page-style.mjs` an
-    inherited font size and line height to resolve a unitless ratio against, or
-    to have `.brand` and `.nav-toggle` state their own line box the way
-    `.menu a` and `.has-sub > button` now do and keep the refusal as it is. The
-    second is the smaller change and keeps every term in `--bar` a token. Either
-    way the check should fold every direct child of `.nav-bar` the layout shows
-    and assert the maximum, so the narrow layout's `--bar` is covered by the
-    same walk against the MENU button.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
 - [x] **Two documents in one commit disagree on how many rules read `--s8`** -
   `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
   holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
@@ -323,3 +237,76 @@ the roadmap section each one came from.
     files have no equivalent of, so the page holding more than the file is not
     the fault.
   - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [x] **The layout resolver reads any width query as the narrow one** -
+  `test/docs-site.test.mjs:349-352` decides a rule applies to the narrow layout
+  when every at-rule prelude around it matches `/\bwidth:/`, and to the wide
+  layout only when the rule sits at the top level with no prelude at all.
+  - **Issue**: Nothing fails today, because `docs/assets/style.css` carries
+    exactly one width query. A `@media (min-width: ...)` block added later is
+    folded into the narrow layout and left out of the wide one, which is
+    backwards in both directions, and the breakpoint check beside it collects
+    `max-width` preludes only - `assert.equal(widths.size, 1, ...)` at `:604` -
+    so nothing names the new query either. The bar walk would then report a
+    height for a layout the stylesheet does not have, silently and with the
+    suite green, which is the exact failure this file was written to end.
+  - **Goal**: Read the bound as well as the property, so a `max-width` prelude
+    applies to the narrow layout and a `min-width` one to the wide, and have the
+    breakpoint check assert the sheet names no width query it did not account
+    for - the way it already asserts there is exactly one `max-width`.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [x] **A group left open on the wide layout keeps its caret on the narrow one** -
+  `docs/assets/style.css:181` declares
+  `.has-sub > button[aria-expanded="true"]::after { content: "^"; }` at the top
+  level, and the narrow block's `.has-sub > button::after { content: ""; }` at
+  `:309` is the rule meant to take that glyph away. A media query contributes no
+  specificity, so (0,2,2) beats (0,1,2) whichever comes later in the file, and
+  the narrow layout cannot blank the caret of a button that is expanded.
+  - **Issue**: `docs/assets/docs.js:38-42` sets `aria-expanded="true"` only
+    while `wide.matches`, and nothing ever resets it - there is no `change`
+    listener on the `wide` MediaQueryList and no resize handler - so the
+    attribute survives a layout change. The failing sequence: open
+    `docs/index.html` at 1280px, click the Reference caret, then narrow the
+    window to 900px. Reference is the one `.has-sub > button` the narrow layout
+    still shows, because the three `.sub-toggle` buttons are `display: none` at
+    `:307`, and it reads `Reference ^` as a static label with `cursor: default`,
+    advertising a control that no longer toggles anything. The stale
+    `aria-expanded="true"` rides along on that same label. Not introduced this
+    turn - the two rules are byte-identical at `HEAD` - but newly reachable
+    across the 90px this turn moved into the narrow layout, since at 900px the
+    old 861px boundary still gave the wide layout, where the caret was correct.
+  - **Goal**: Either blank the glyph in the narrow block at a specificity that
+    wins, `.has-sub > button[aria-expanded="true"]::after { content: ""; }`
+    beside the rule already there, or reset the attribute from `docs.js` on the
+    `wide` MediaQueryList's `change` event, which clears the stale
+    `aria-expanded` as well as the caret. Verifying either from text needs
+    something the rig does not have: `test/page-style.mjs` folds rules in
+    document order and models no specificity at all, which is the same blind
+    spot that let this sit unseen while the bar walk was being built on top of
+    it. Give the resolver a specificity ordering, then assert which `content`
+    wins for `.has-sub > button::after` in each layout and each `aria-expanded`
+    state. A browser is not needed for any of it.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [x] **The new page-against-file check compares prose and skips every list item** -
+  `prose()` at `test/docs-site.test.mjs:254-282` drops list items and the
+  indented lines that continue them, so the check added this turn compares 6 of
+  QUICKSTART.md's 15 blocks and 9 of CHEATSHEET.md's 13.
+  - **Issue**: The gameplay list at `QUICKSTART.md:44-53` and the terminal floor
+    list at `CHEATSHEET.md:126-129` are not compared against their pages at all,
+    which is the same silent drift the item was opened to end. Verified by
+    mutation: delete the whole `<li>Kills inside two seconds of each other
+    chain, up to <code>COMBO x8</code>.</li>` from `docs/quickstart.html` and
+    `node --test test/docs-site.test.mjs` reports 10 of 10 passing. The comment
+    at `:246-252` justifies the exclusion by reformatting - "a table or a fenced
+    block is reformatted on its way to the page" - which holds for those two and
+    not for a bullet list, which becomes `<ul><li>` and survives the normalizing
+    the function already does.
+  - **Goal**: Take list items as well as paragraphs - marker stripped, indented
+    continuations joined onto their item, through the same link-stripping and
+    `flatten` - and keep the fenced-block and table exclusions, for which the
+    reformatting argument does hold. Measured before queuing this: pulling all
+    13 list items out of both files that way, every one is already on its page,
+    so the gap closes with nothing else to fix. While in that function,
+    `flatten` at `:226` drops backticks but not `**` or `_`, so the first prose
+    paragraph to gain emphasis is reported as missing from a page that carries
+    it; strip the emphasis markers on the file side too.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
