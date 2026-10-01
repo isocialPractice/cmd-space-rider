@@ -79,6 +79,54 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [nav-dropdown-overruns-at-951.prompt.md](.claude/prompts/nav-dropdown-overruns-at-951.prompt.md)
   - From: UI/UX Override - the dropdown that needs more room than the row does
 
+### Code Review Override - what the specificity resolver is recorded as covering
+
+- [ ] **The record says three test files weigh `specificity`, and one did** -
+  `test/page-style.test.mjs:4` opens "Three test files resolve rules through it",
+  and `CHANGELOG.md:47-48` repeats it as "`specificity` is weighed by three test
+  files".
+  - **Issue**: Before this turn exactly one file imported it,
+    `test/docs-site.test.mjs:21`, and this turn's new file makes two. Three files
+    do resolve a stylesheet through the module `test/page-style.mjs` -
+    `test/browser-shell.test.mjs`, `test/docs-site.test.mjs` and
+    `test/probes/overlay-anchor.mjs` - but two of them import only `pageStyle`,
+    for lengths rather than for cascade order, and one of the three is a probe
+    rather than a test file, so the count is wrong under either reading. The
+    header contradicts itself a sentence later as well: it says the function's
+    only exercise was the two selectors the caret check in one named file names,
+    which cannot be true of something three test files resolve rules through.
+    Nothing fails. The cost is that the sentence giving the new file its reason
+    to exist overstates what was already covered, and that sentence is what a
+    reader checks when deciding whether the resolver still needs tests.
+  - **Goal**: Say what is there - one test file weighed `specificity` before this
+    turn and two do now, while three files read a stylesheet through the module,
+    two of them for lengths and one of them a probe. Correct the same claim in
+    `CHANGELOG.md:47-48`.
+  - From: Code Review Override - what the specificity resolver is recorded as covering
+- [ ] **The functional-pseudo guard is recorded as covering the sheet and covers
+  the selectors a caller names** - `test/page-style.mjs:222` says "a sheet that
+  gains one fails here, where the gap is", and `CHANGELOG.md:63-65` has the throw
+  answering for "the first sheet to gain one".
+  - **Issue**: `specificity` is only ever reached for a selector a caller already
+    listed. `declIn` at `test/docs-site.test.mjs:529` weighs only
+    `rule.selectors.filter((sel) => selectors.includes(sel))` and skips a rule
+    naming nothing in that list, and `declarationsFor` in `test/page-style.mjs`
+    never calls `specificity` at all. So add
+    `.has-sub:not([aria-expanded]) > .sub { display: none }` to
+    `docs/assets/style.css` and the guard never fires: `declIn('narrow', '.sub')`
+    returns exactly what it returns today, a rule that really applies is left out
+    of the fold, and the suite stays green. That is the same silent wrong answer
+    the throw was added to end, reached by a selector no test names rather than by
+    one some test does. The guard is correct for what it covers; the two
+    sentences claim more than it covers.
+  - **Goal**: Either narrow both sentences to what the guard does - a selector a
+    caller weighs, not a sheet - or close the gap so they come true: walk every
+    rule in the sheet once and throw on a functional pseudo-class anywhere in it,
+    the way the breakpoint check already asserts the sheet names no width query it
+    could not place. The second is the stronger of the two and is what this module
+    already does for a length it cannot resolve.
+  - From: Code Review Override - what the specificity resolver is recorded as covering
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
