@@ -42,74 +42,42 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
-
-- [ ] **Nothing pins that the narrow layout opens every group** -
-  `docs/assets/style.css:305` gives the narrow `.sub` a `display: block`, and
-  that is the only thing showing the four pages under Reference below the
-  breakpoint. It wins over the top-level `.sub { display: none }` at `:182` on
-  document order alone, because both are a lone class at (0,1,0), and nothing in
-  the suite reads either one.
-  - **Issue**: This run's script change made that rule load-bearing.
-    `docs/assets/docs.js:52-56` now sets `aria-expanded="false"` on every group
-    when the layout narrows, so the reveal rule at `:187` no longer applies on
-    the narrow layout either, and the narrow `.sub` rule is the last thing left
-    drawing those pages. Verified by mutation: delete `display: block;` from
-    `:305` and `npm test` reports 472 of 472 passing, with `Project Structure`,
-    `Terminal Requirements`, `How It Works` and `Cheatsheet` unreachable at
-    every narrow width. That is the 0.7.5 defect back, and the script change
-    makes it total rather than partial - before it, a group opened above the
-    breakpoint at least carried its revealed `.sub` down.
-  - **Goal**: Assert in `test/docs-site.test.mjs` that `.sub` resolves to a
-    shown `display` on the narrow layout in both `aria-expanded` states, the way
-    the caret test already reads `content` per layout and state. `declIn` and the
-    new specificity ordering already answer it; the walk at `:610` reads `.sub`
-    for its margins and is the place to read its display beside them.
-  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
-- [ ] **The specificity model has no checks of its own** -
-  `test/page-style.mjs:219` is a new exported function that three test files now
-  resolve rules through, and its only exercise is the two selectors the caret
-  test names. Nothing reads the counts it returns.
-  - **Issue**: The answers are not obvious enough to leave unpinned - `a:before`
-    and `a::before` both weigh (0,0,2) because the legacy spelling is still a
-    pseudo-element, while `a:hover` weighs (0,1,1). The doc comment at `:206-218`
-    names its own blind spots, `:not()`, `:is()` and `:has()`, whose argument
-    specificity it does not model, and asks a caller who adds one to teach the
-    function rather than trust it. Nothing enforces that: neither stylesheet uses
-    one today, so the first `:not()` added gets a silently wrong count and the
-    rule it decides folds in the wrong order.
-  - **Goal**: Pin a table of selectors against their expected triples, covering
-    the id, class, attribute, pseudo-class, pseudo-element and `*` cases and both
-    colon spellings. Then make the blind spot loud rather than silent: throw on a
-    selector carrying `:not(`, `:is(`, `:where(` or `:has(`, so a sheet that
-    gains one fails in the resolver instead of resolving to a plausible count.
-  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
+### UI/UX Override - the dropdown that needs more room than the row does
 
 #### Found Issues
 
-- [ ] **The emphasis stripper reaches inside inline code** -
-  `test/docs-site.test.mjs:254-258` strips `**`, `__`, `*` and `_` from the file
-  side of the page-against-file check, and `:304` runs it before `flatten` at
-  `:226` drops the backticks, so it has no way to tell a code span from prose and
-  takes the markers out of both.
-  - **Issue**: Markdown holds emphasis markers literal inside a code span, and so
-    does the page: `` `__init__` `` reaches `<code>__init__</code>` and
-    `mainText` strips the tags to `__init__`, while the file side resolves to
-    `init`. The block is then reported as missing from a page that carries it
-    verbatim, which is a false failure in the one check written to catch real
-    drift. Measured on the helper directly: `` `__init__` in code `` resolves to
-    `` `init` in code ``, and `` `**not bold**` in code `` to
-    `` `not bold` in code ``. Nothing fails today only because neither
-    `QUICKSTART.md` nor `CHEATSHEET.md` contains a single `*` or `_` - the whole
-    function is unreached, so the first file to gain either is also the first
-    thing to exercise it.
-  - **Goal**: Hold the code spans out of the stripping - take the backticked runs
-    aside, strip emphasis from what is left, then put them back - or strip the
-    backticks first and mark their contents so the emphasis passes skip them.
-    Either way pin it with the two cases above plus the identifiers the comment
-    already claims survive, `THEME_BG` and `snake_case`, since those claims are
-    untested too.
-  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
+- [ ] **The opened Reference dropdown overruns the viewport from 951px to 1049px** -
+  The breakpoint move put the wide layout where the collapsed row fits. The
+  opened Reference panel needs 1050px, so across the first 99px of the wide
+  range it is painted past the right edge of a bar nothing can scroll.
+  - **Issue**: Measured in chromium on `docs/index.html` served over HTTP,
+    identical in both colour schemes. `.menu` is left-packed at its natural
+    width, so the Reference group's left edge is pinned at 841.47px at every
+    wide viewport up to 1049px, and the panel hangs rightward from there at a
+    fixed 208.27px, ending at 1049.73px however narrow the window is. That is
+    98.73px past the edge at 951px, 9.73px at 1040px, and it first fits at
+    1050px. At 951px the panel is 52.6% on screen and the four entries are
+    clipped mid-word: `Project Structure` reads `Project Str`,
+    `Terminal Requirements` reads `Terminal Re`. Nothing can scroll to them -
+    `.nav` is `position: fixed`, so `document.documentElement.scrollWidth`
+    stays equal to the viewport width across the whole band and
+    `scrollIntoView()` on an entry leaves `window.scrollX` at 0. Keyboard is
+    the same defect: open the group at 951px and the next four Tabs land on
+    `Project Structure`, `Terminal Requirements`, `How It Works` and
+    `Cheatsheet`, each with its box ending at 1044.73px of a 951px viewport.
+    The three other groups sit further left and never overrun, clearing the
+    edge by 313.41px, 140.50px and 49.63px at 951px.
+
+    Not a reopening of **The Reference group sits off the right edge between
+    861px and 950px**, which is complete and verified clean this run: at 861px,
+    900px and 950px the narrow layout shows, nothing inside `.nav-bar` passes
+    the right edge, the Reference group's box ends at 853px, 892px and 942px,
+    and all ten pages are reachable with every tabbed control on screen. That
+    item's own issue text recorded the 1049.73px figure, but its goal was the
+    breakpoint, and the breakpoint is where its fix landed. This is the band
+    just above the one it fixed.
+  - **Goal**: Resolve to [nav-dropdown-overruns-at-951.prompt.md](.claude/prompts/nav-dropdown-overruns-at-951.prompt.md)
+  - From: UI/UX Override - the dropdown that needs more room than the row does
 
 ## Quick Wins
 
@@ -192,68 +160,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 86 earlier items in `TODO-archive.md`, newest last.
+> 89 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Two documents in one commit disagree on how many rules read `--s8`** -
-  `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
-  holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
-  commit says "`--s8` had exactly two readers, the scroll offset and the page
-  frame's top padding".
-  - **Issue**: The changelog is the accurate one. `git show HEAD:docs/assets/style.css`
-    carries `var(--s8)` twice - `scroll-padding-top` at `:64` and `.wrap`'s top
-    padding at `:151` - so the design file undercounts by one and the two
-    records of the same removal cannot both be read as written. Nothing is
-    broken by it; the cost is that `DESIGN_LANGUAGE.md` is the file the
-    stylesheet's own header points at as the record of where each value came
-    from, so a reader checking why the step went is told one rule read it and
-    finds two.
-  - **Goal**: Say two in `DESIGN_LANGUAGE.md`, naming both the way the changelog
-    does, or drop the count and say only that the step's readers now derive from
-    the bar's own height. Either agrees with the stylesheet; the present wording
-    does not.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
-- [x] **Nothing checks that a page and the file it is published from agree** -
-  `docs/project-structure.html` calls `cheatsheet.html` "CHEATSHEET.md as a
-  page" and `quickstart.html` "QUICKSTART.md as a page", and no test compares
-  either pair. An edit to the file that misses the page is silent.
-  - **Issue**: It has now been missed on two consecutive runs, in the same
-    paragraph. 0.7.3 added ", and which flags each probe takes" to
-    `CHEATSHEET.md` and left it off the page; 0.7.4 added the paragraph naming
-    `test/probes/probes.mjs` and `test/probes.test.mjs` and left that off too.
-    Both were found by reading the two files side by side, which is the only
-    thing that has ever checked them. Normalizing away the markup on both sides
-    and asking which of `CHEATSHEET.md`'s prose paragraphs the page carries
-    answered it in one pass, and answered 2 before this review's fix and 0
-    after.
-  - **Goal**: Assert it in `test/docs-site.test.mjs`, which already reads the
-    pages as text. Strip the tags out of the page's `<main>`, unescape the
-    entities, take the prose paragraphs out of the markdown with the fenced
-    blocks and tables removed, collapse whitespace and inline code markers on
-    both sides, and assert every paragraph of the file is on the page. Pin both
-    pairs the site names - `CHEATSHEET.md` and `QUICKSTART.md` - and read the
-    pairing off `docs/project-structure.html`'s own "X.md as a page" lines
-    rather than listing it here, so a third page added later is covered without
-    a second edit. One direction only: the pages carry a pager and a nav the
-    files have no equivalent of, so the page holding more than the file is not
-    the fault.
-  - From: Code Review Override - the bar check that reads one column, and the step with two readers
-- [x] **The layout resolver reads any width query as the narrow one** -
-  `test/docs-site.test.mjs:349-352` decides a rule applies to the narrow layout
-  when every at-rule prelude around it matches `/\bwidth:/`, and to the wide
-  layout only when the rule sits at the top level with no prelude at all.
-  - **Issue**: Nothing fails today, because `docs/assets/style.css` carries
-    exactly one width query. A `@media (min-width: ...)` block added later is
-    folded into the narrow layout and left out of the wide one, which is
-    backwards in both directions, and the breakpoint check beside it collects
-    `max-width` preludes only - `assert.equal(widths.size, 1, ...)` at `:604` -
-    so nothing names the new query either. The bar walk would then report a
-    height for a layout the stylesheet does not have, silently and with the
-    suite green, which is the exact failure this file was written to end.
-  - **Goal**: Read the bound as well as the property, so a `max-width` prelude
-    applies to the narrow layout and a `min-width` one to the wide, and have the
-    breakpoint check assert the sheet names no width query it did not account
-    for - the way it already asserts there is exactly one `max-width`.
-  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
 - [x] **A group left open on the wide layout keeps its caret on the narrow one** -
   `docs/assets/style.css:181` declares
   `.has-sub > button[aria-expanded="true"]::after { content: "^"; }` at the top
@@ -310,3 +218,66 @@ the roadmap section each one came from.
     paragraph to gain emphasis is reported as missing from a page that carries
     it; strip the emphasis markers on the file side too.
   - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips
+- [x] **Nothing pins that the narrow layout opens every group** -
+  `docs/assets/style.css:305` gives the narrow `.sub` a `display: block`, and
+  that is the only thing showing the four pages under Reference below the
+  breakpoint. It wins over the top-level `.sub { display: none }` at `:182` on
+  document order alone, because both are a lone class at (0,1,0), and nothing in
+  the suite reads either one.
+  - **Issue**: This run's script change made that rule load-bearing.
+    `docs/assets/docs.js:52-56` now sets `aria-expanded="false"` on every group
+    when the layout narrows, so the reveal rule at `:187` no longer applies on
+    the narrow layout either, and the narrow `.sub` rule is the last thing left
+    drawing those pages. Verified by mutation: delete `display: block;` from
+    `:305` and `npm test` reports 472 of 472 passing, with `Project Structure`,
+    `Terminal Requirements`, `How It Works` and `Cheatsheet` unreachable at
+    every narrow width. That is the 0.7.5 defect back, and the script change
+    makes it total rather than partial - before it, a group opened above the
+    breakpoint at least carried its revealed `.sub` down.
+  - **Goal**: Assert in `test/docs-site.test.mjs` that `.sub` resolves to a
+    shown `display` on the narrow layout in both `aria-expanded` states, the way
+    the caret test already reads `content` per layout and state. `declIn` and the
+    new specificity ordering already answer it; the walk at `:610` reads `.sub`
+    for its margins and is the place to read its display beside them.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
+- [x] **The specificity model has no checks of its own** -
+  `test/page-style.mjs:219` is a new exported function that three test files now
+  resolve rules through, and its only exercise is the two selectors the caret
+  test names. Nothing reads the counts it returns.
+  - **Issue**: The answers are not obvious enough to leave unpinned - `a:before`
+    and `a::before` both weigh (0,0,2) because the legacy spelling is still a
+    pseudo-element, while `a:hover` weighs (0,1,1). The doc comment at `:206-218`
+    names its own blind spots, `:not()`, `:is()` and `:has()`, whose argument
+    specificity it does not model, and asks a caller who adds one to teach the
+    function rather than trust it. Nothing enforces that: neither stylesheet uses
+    one today, so the first `:not()` added gets a silently wrong count and the
+    rule it decides folds in the wrong order.
+  - **Goal**: Pin a table of selectors against their expected triples, covering
+    the id, class, attribute, pseudo-class, pseudo-element and `*` cases and both
+    colon spellings. Then make the blind spot loud rather than silent: throw on a
+    selector carrying `:not(`, `:is(`, `:where(` or `:has(`, so a sheet that
+    gains one fails in the resolver instead of resolving to a plausible count.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
+- [x] **The emphasis stripper reaches inside inline code** -
+  `test/docs-site.test.mjs:254-258` strips `**`, `__`, `*` and `_` from the file
+  side of the page-against-file check, and `:304` runs it before `flatten` at
+  `:226` drops the backticks, so it has no way to tell a code span from prose and
+  takes the markers out of both.
+  - **Issue**: Markdown holds emphasis markers literal inside a code span, and so
+    does the page: `` `__init__` `` reaches `<code>__init__</code>` and
+    `mainText` strips the tags to `__init__`, while the file side resolves to
+    `init`. The block is then reported as missing from a page that carries it
+    verbatim, which is a false failure in the one check written to catch real
+    drift. Measured on the helper directly: `` `__init__` in code `` resolves to
+    `` `init` in code ``, and `` `**not bold**` in code `` to
+    `` `not bold` in code ``. Nothing fails today only because neither
+    `QUICKSTART.md` nor `CHEATSHEET.md` contains a single `*` or `_` - the whole
+    function is unreached, so the first file to gain either is also the first
+    thing to exercise it.
+  - **Goal**: Hold the code spans out of the stripping - take the backticked runs
+    aside, strip emphasis from what is left, then put them back - or strip the
+    backticks first and mark their contents so the emphasis passes skip them.
+    Either way pin it with the two cases above plus the identifiers the comment
+    already claims survive, `THEME_BG` and `snake_case`, since those claims are
+    untested too.
+  - From: Code Review Override - the emphasis stripper inside code spans, and the open groups nothing pins
