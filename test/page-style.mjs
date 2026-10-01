@@ -210,13 +210,29 @@ const PSEUDO_ELEMENTS = /^(before|after|first-line|first-letter)$/;
  * an expanded group kept its caret on a layout that has no dropdowns to open.
  * A resolver that folds in document order alone cannot see that at all.
  *
- * What it does not model: the specificity of a `:not()`, `:is()` or `:has()`
- * argument, which CSS takes from the most specific selector inside the
- * parentheses. Neither stylesheet this module is pointed at uses one, and a
- * wrong answer there would be silent, so a caller that adds one should teach
- * this function about it rather than trusting the count.
+ * What it does not model: the specificity of a `:not()`, `:is()`, `:where()` or
+ * `:has()` argument. CSS takes the first three from the most specific selector
+ * inside the parentheses and `:where()` from nothing at all, while the
+ * pseudo-class pass below would count any of the four as one plain class. So
+ * the four throw rather than answer. A wrong count here is silent in the worst
+ * way - it is a plausible count, so the rule it decides folds in the wrong
+ * order with nothing failing - and neither stylesheet this module is pointed at
+ * carries one today, which makes the first to gain one also the first to
+ * exercise the gap. Teaching this function the argument rule is what lifts the
+ * guard; until then a sheet that gains one fails here, where the gap is.
  */
+const FUNCTIONAL_PSEUDO = /:(?:not|is|where|has)\(/i;
+
 export function specificity(selector) {
+  // Matched with the colon, so `.has-sub` - which this sheet is full of - is not
+  // read as a `:has()`.
+  if (FUNCTIONAL_PSEUDO.test(selector)) {
+    throw new Error(
+      'specificity does not model the argument of a functional pseudo-class, '
+      + `so this selector has no count to trust: ${selector}`
+    );
+  }
+
   let ids = 0;
   let classes = 0;
   let types = 0;

@@ -1385,3 +1385,66 @@ still be found by name.
     and assert the maximum, so the narrow layout's `--bar` is covered by the
     same walk against the MENU button.
   - From: Code Review Override - the bar check that reads one column, and the step with two readers
+
+## Archived 10-01-26
+
+- [x] **Two documents in one commit disagree on how many rules read `--s8`** -
+  `DESIGN_LANGUAGE.md:116` says "the only thing that read it was the offset that
+  holds content clear of the fixed bar", and `CHANGELOG.md:44` in the same
+  commit says "`--s8` had exactly two readers, the scroll offset and the page
+  frame's top padding".
+  - **Issue**: The changelog is the accurate one. `git show HEAD:docs/assets/style.css`
+    carries `var(--s8)` twice - `scroll-padding-top` at `:64` and `.wrap`'s top
+    padding at `:151` - so the design file undercounts by one and the two
+    records of the same removal cannot both be read as written. Nothing is
+    broken by it; the cost is that `DESIGN_LANGUAGE.md` is the file the
+    stylesheet's own header points at as the record of where each value came
+    from, so a reader checking why the step went is told one rule read it and
+    finds two.
+  - **Goal**: Say two in `DESIGN_LANGUAGE.md`, naming both the way the changelog
+    does, or drop the count and say only that the step's readers now derive from
+    the bar's own height. Either agrees with the stylesheet; the present wording
+    does not.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [x] **Nothing checks that a page and the file it is published from agree** -
+  `docs/project-structure.html` calls `cheatsheet.html` "CHEATSHEET.md as a
+  page" and `quickstart.html` "QUICKSTART.md as a page", and no test compares
+  either pair. An edit to the file that misses the page is silent.
+  - **Issue**: It has now been missed on two consecutive runs, in the same
+    paragraph. 0.7.3 added ", and which flags each probe takes" to
+    `CHEATSHEET.md` and left it off the page; 0.7.4 added the paragraph naming
+    `test/probes/probes.mjs` and `test/probes.test.mjs` and left that off too.
+    Both were found by reading the two files side by side, which is the only
+    thing that has ever checked them. Normalizing away the markup on both sides
+    and asking which of `CHEATSHEET.md`'s prose paragraphs the page carries
+    answered it in one pass, and answered 2 before this review's fix and 0
+    after.
+  - **Goal**: Assert it in `test/docs-site.test.mjs`, which already reads the
+    pages as text. Strip the tags out of the page's `<main>`, unescape the
+    entities, take the prose paragraphs out of the markdown with the fenced
+    blocks and tables removed, collapse whitespace and inline code markers on
+    both sides, and assert every paragraph of the file is on the page. Pin both
+    pairs the site names - `CHEATSHEET.md` and `QUICKSTART.md` - and read the
+    pairing off `docs/project-structure.html`'s own "X.md as a page" lines
+    rather than listing it here, so a third page added later is covered without
+    a second edit. One direction only: the pages carry a pager and a nav the
+    files have no equivalent of, so the page holding more than the file is not
+    the fault.
+  - From: Code Review Override - the bar check that reads one column, and the step with two readers
+- [x] **The layout resolver reads any width query as the narrow one** -
+  `test/docs-site.test.mjs:349-352` decides a rule applies to the narrow layout
+  when every at-rule prelude around it matches `/\bwidth:/`, and to the wide
+  layout only when the rule sits at the top level with no prelude at all.
+  - **Issue**: Nothing fails today, because `docs/assets/style.css` carries
+    exactly one width query. A `@media (min-width: ...)` block added later is
+    folded into the narrow layout and left out of the wide one, which is
+    backwards in both directions, and the breakpoint check beside it collects
+    `max-width` preludes only - `assert.equal(widths.size, 1, ...)` at `:604` -
+    so nothing names the new query either. The bar walk would then report a
+    height for a layout the stylesheet does not have, silently and with the
+    suite green, which is the exact failure this file was written to end.
+  - **Goal**: Read the bound as well as the property, so a `max-width` prelude
+    applies to the narrow layout and a `min-width` one to the wide, and have the
+    breakpoint check assert the sheet names no width query it did not account
+    for - the way it already asserts there is exactly one `max-width`.
+  - From: Code Review Override - the caret the narrow layout cannot blank, and the list items the new check skips

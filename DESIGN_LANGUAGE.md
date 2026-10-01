@@ -223,6 +223,16 @@ One size on the site is off this scale, and it is the only one:
   also asserts the stylesheet names no third width query: the site has two
   layouts, and the checks that read the bar's geometry sort every rule into one
   of them by the bound its query names.
+- **The narrow layout has no dropdowns, so it shows every list.** There is room
+  to open all four groups at once below the breakpoint, so the stylesheet shows
+  the lists outright, hides the three caret-only buttons and turns Reference's
+  into a label. That one `display` is the only thing drawing the four pages
+  under Reference there - the reveal rule is keyed on `aria-expanded="true"`,
+  and `docs.js` clears that attribute on the way down - so taking it away makes
+  four of the ten pages unreachable at every narrow width, which is what the
+  breakpoint move was done to end. `test/docs-site.test.mjs` reads the list's
+  `display` in both layouts and both states for that reason, rather than
+  trusting the rule to stay.
 - **Relative links throughout.** The site is served from
   `/cmd-space-rider/docs/` rather than from a domain root, so absolute paths
   would break. Relative links also mean the pages open correctly straight off
