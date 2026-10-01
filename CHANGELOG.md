@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.7.7-alpha] - 2026-10-01
+
+### Fixed
+
+- The emphasis stripper added to the page-against-file check last turn reached
+  inside inline code. It ran before `flatten` drops the backticks, so it had no
+  way to tell a code span from prose and took the markers out of both: `` `__init__` ``
+  resolved to `` `init` `` on the file side while the page carried
+  `<code>__init__</code>` and resolved to `__init__`, reporting a block as
+  missing from a page that holds it verbatim. That is a false failure in the one
+  check written to catch real drift. The code spans are now held out of the
+  stripping, each one standing in as a single character while the markers are
+  taken off and put back afterwards, which is the order markdown itself resolves
+  the two in. The function is pinned on its own, because nothing in
+  `QUICKSTART.md` or `CHEATSHEET.md` carries a `*` or a `_` yet, so the check
+  that calls it never reaches it.
+- The same fault in the other direction, found reviewing the fix above. Taking
+  the spans aside by splitting the text at them and stripping each run of prose
+  between them separately keeps a marker that sits inside a span, which was the
+  reported half, and loses the pair that wraps one: `` **`--debug`** `` is
+  `**`, a span and `**`, so the two markers land in different runs, no pass sees
+  a pair, and both survive onto a side whose page writes them as
+  `<strong><code>` and carries neither. Measured on the helper: four shapes of
+  wrapped emphasis resolved to a file side the page could not match, so a block
+  carrying any of them was reported missing from a page holding it word for word.
+  `DESIGN_LANGUAGE.md` writes five of its list items that way, and the pairing is
+  read off `docs/project-structure.html`'s own "X.md as a page" lines, so the
+  next file published as a page brings the shape with it. Standing a span in as
+  one opaque character answers both halves at once, and all four shapes are
+  pinned beside the two that were.
+
+### Added
+
+- A check that the narrow layout shows every dropdown list, in both
+  `aria-expanded` states. `docs/assets/style.css` gives the narrow `.sub` a
+  `display: block`, and that one declaration is the only thing drawing the four
+  pages under Reference below the breakpoint - the reveal rule is keyed on
+  `aria-expanded="true"`, and last turn's script change clears that attribute on
+  the way down, which made the narrow rule load-bearing rather than a second
+  route. Nothing in the suite read either rule: taking `display: block` out left
+  472 of 472 passing with `Project Structure`, `Terminal Requirements`,
+  `How It Works` and `Cheatsheet` unreachable at every narrow width, which is
+  the 0.7.5 defect back. Both layouts are read, because the wide half alone
+  would not have caught it.
+- `test/page-style.test.mjs`, the resolver's own tests. `specificity` is weighed
+  by three test files and the whole nav geometry walk rests on the order it
+  returns, and its only exercise was the two selectors the caret check names, so
+  every count was trusted and none was read. It now pins a table of selectors
+  against the triples CSS weighs them at - the id, class, attribute,
+  pseudo-class, pseudo-element and `*` cases, and both colon spellings of all
+  four CSS2 pseudo-elements, since `a:before` weighs (0,0,2) as a pseudo-element
+  while `a:hover` weighs (0,1,1) as a pseudo-class - plus the comparator's
+  ordering of the caret pair that the specificity work was done for.
+
+### Changed
+
+- `specificity` in `test/page-style.mjs` throws on a selector carrying `:not(`,
+  `:is(`, `:where(` or `:has(` rather than answering. CSS takes the first three
+  from the most specific selector inside the parentheses and `:where()` from
+  nothing at all, while the pseudo-class pass counts any of the four as one
+  plain class - a plausible count, and sometimes the right one, so the first
+  sheet to gain one would have folded a rule in the wrong order with the suite
+  green. The guard matches the colon, so `.has-sub`, which the site's nav is
+  full of, is not read as a `:has()`.
+
 ## [0.7.6-alpha] - 2026-09-30
 
 ### Fixed

@@ -251,11 +251,60 @@ function mainText(name) {
  * `snake_case` whole: a marker only opens emphasis where a word character does
  * not run into it.
  */
-const emphasis = (text) => text
+const stripEmphasis = (text) => text
   .replace(/\*\*([^*]+)\*\*/g, '$1')
   .replace(/__([^_]+)__/g, '$1')
   .replace(/(^|[^\w*])\*(?!\s)([^*]+?)\*(?!\w)/g, '$1$2')
   .replace(/(^|[^\w_])_(?!\s)([^_]+?)_(?!\w)/g, '$1$2');
+
+/**
+ * A code span, and the stand-in that one held out of the stripping leaves behind.
+ *
+ * `\u0000` has no meaning in markdown and no word character about it, so it
+ * neither opens an emphasis run nor closes one and the guards above read it
+ * exactly as they read the span it stands for. Written as an escape rather than
+ * as the character, the way the entity table's values are, so no control
+ * character sits in this file's own text.
+ */
+const CODE_SPAN = /`+[^`]*`+/g;
+const HELD = '\u0000';
+
+/**
+ * The same, with the code spans held out of it.
+ *
+ * Markdown holds an emphasis marker literal inside a code span, and so does the
+ * page: `` `__init__` `` reaches `<code>__init__</code>` and `mainText` strips
+ * the tags back to `__init__`, while the file side resolved to `init`. The block
+ * was then reported as missing from a page that carries it verbatim, which is a
+ * false failure in the one check written to catch real drift. The stripping runs
+ * before `flatten` drops the backticks, so it cannot tell a span from prose
+ * unless the spans are taken aside first.
+ *
+ * Stood in for rather than split on. Markdown resolves a code span before it
+ * looks for emphasis, so a span is one opaque character as far as the markers
+ * are concerned, and a stand-in is that character. Splitting the text at the
+ * spans and stripping each run of prose separately models it only halfway: it
+ * does keep a marker inside a span, but it puts the two markers of a pair that
+ * wraps one into different runs, so `` **`--debug`** `` is `**`, a span and
+ * `**`, no pass sees a pair, and both markers survive onto a side the page has
+ * none on. `DESIGN_LANGUAGE.md` writes five of its list items that way, so that
+ * is the shape the next file published as a page is likely to arrive in.
+ *
+ * A lone backtick opens no span and matches nothing, which leaves it in the
+ * prose where it belongs. The count is asserted rather than assumed: every
+ * stand-in has to still be there to put its span back into, and a block
+ * carrying the character itself would leave one over.
+ */
+const emphasis = (text) => {
+  const spans = [];
+  const held = text.replace(CODE_SPAN, (span) => { spans.push(span); return HELD; });
+  const prose = stripEmphasis(held).split(HELD);
+  assert.equal(
+    prose.length - 1, spans.length,
+    `the emphasis stripping lost a held-out code span: ${text}`
+  );
+  return prose.map((part, at) => (at ? spans[at - 1] + part : part)).join('');
+};
 
 /**
  * The blocks of a markdown file worth comparing against its page: paragraphs and
@@ -303,6 +352,74 @@ function blocks(markdown) {
   // A link reads as its own text on the page, where the target is an attribute.
   return found.map((text) => flatten(emphasis(text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))));
 }
+
+test('docs: the emphasis stripper leaves a code span exactly as the page carries it', () => {
+  // The helper the check below leans on, pinned on its own because nothing in
+  // either published file exercises it: neither QUICKSTART.md nor CHEATSHEET.md
+  // holds a single `*` or `_`, so the first one to gain either is also the first
+  // thing to run this function at all.
+  //
+  // A marker inside a code span is literal in the markdown and literal on the
+  // page, so taking it off one side and not the other reports a block as missing
+  // from a page that carries it word for word.
+  for (const said of [
+    '`__init__` in code',
+    '`**not bold**` in code',
+    '`THEME_BG` and `snake_case`',
+    'a lone ` backtick opens no span',
+  ]) {
+    assert.equal(emphasis(said), said, `a code span is left alone: ${said}`);
+  }
+
+  // The claims the doc comment above makes about the single-marker guards, which
+  // were untested too: a marker only opens emphasis where no word character runs
+  // into it, so an identifier keeps its underscores outside a span as well.
+  for (const said of ['THEME_BG', 'snake_case', 'out/index.js', 'a_b_c']) {
+    assert.equal(emphasis(said), said, `an identifier keeps its markers: ${said}`);
+  }
+
+  // And prose does shed them, which is the reason the function exists.
+  for (const [said, left] of [
+    ['**bold** prose', 'bold prose'],
+    ['__bold__ prose', 'bold prose'],
+    ['_italic_ prose', 'italic prose'],
+    ['a *starred* word', 'a starred word'],
+    ['**bold** and `__init__` and _italic_', 'bold and `__init__` and italic'],
+  ]) {
+    assert.equal(emphasis(said), left, `prose sheds its markers: ${said}`);
+  }
+
+  // Emphasis wrapped around a span, which is the other half of the same fault
+  // and the half that outlived the first fix. The pair's two markers sit either
+  // side of the span, so stripping each run of prose between the spans
+  // separately leaves both of them standing - and the page, which writes the
+  // pair as `<strong><code>`, carries neither. `DESIGN_LANGUAGE.md` already
+  // writes five list items this way.
+  for (const [said, left] of [
+    ['**`--debug`** turns it on', '`--debug` turns it on'],
+    ['the **`out/` folder** is built', 'the `out/` folder is built'],
+    ['pass *`--probe`* instead', 'pass `--probe` instead'],
+    ['a __`THEME_BG`__ value', 'a `THEME_BG` value'],
+  ]) {
+    assert.equal(emphasis(said), left, `emphasis around a span sheds its markers: ${said}`);
+  }
+
+  // End to end, as the check below compares the two sides: the file through
+  // blocks()'s own normalizing against the page through mainText()'s. The page
+  // half is spelled out here rather than read off a page, because no page
+  // carries either marker yet - which is the whole gap.
+  const asPage = (html) => flatten(unescapeEntities(html.replace(/<[^>]*>/g, '')));
+  assert.deepEqual(
+    blocks('A `__init__` and a **bold** word.'),
+    [asPage('<p>A <code>__init__</code> and a <strong>bold</strong> word.</p>')],
+    'a code span and a bold word resolve to the same string on both sides'
+  );
+  assert.deepEqual(
+    blocks('Run **`--debug`** to see it.'),
+    [asPage('<p>Run <strong><code>--debug</code></strong> to see it.</p>')],
+    'and so does a code span the emphasis is wrapped around'
+  );
+});
 
 test('docs: a page published from a repository file carries all of that file', () => {
   // docs/project-structure.html calls two of its pages "X.md as a page", and
@@ -599,6 +716,39 @@ test('docs: a group left open on the wide layout does not stay open across the b
     script, /if\s*\(!wide\.matches\)\s*closeSubs\(null\)/,
     'crossing into the narrow layout closes every group, so no button is left announcing one'
   );
+});
+
+test('docs: the narrow layout shows every dropdown list, whatever state it was left in', () => {
+  // Below the breakpoint there are no dropdowns to open: the stylesheet shows
+  // every group, hides the three caret-only buttons and turns Reference's into a
+  // label. The narrow block's `display: block` on `.sub` is the only thing
+  // drawing the four pages under Reference there - Project Structure, Terminal
+  // Requirements, How It Works and Cheatsheet - and the script change that
+  // cleared the stale caret made it load-bearing: docs.js now sets
+  // `aria-expanded="false"` on every group when the layout narrows, so the
+  // top-level reveal rule does not apply on the narrow layout either.
+  //
+  // Verified by mutation before this was written: take `display: block` out of
+  // the narrow block and the whole suite was green with four of the site's ten
+  // pages unreachable at every narrow width, which is the 0.7.5 defect back.
+  //
+  // Both states, for the same reason the caret is read in both. The attribute is
+  // the DOM's, so a page loaded straight into a narrow window has never had one
+  // set at all, while one narrowed from the wide layout has.
+  const display = (layout, expanded) => declIn(
+    layout,
+    '.sub',
+    ...(expanded ? ['.has-sub > button[aria-expanded="true"] + .sub'] : []),
+  ).display;
+
+  assert.equal(display('narrow', false), 'block', 'the narrow layout shows a group nothing has opened');
+  assert.equal(display('narrow', true), 'block', 'and one left open above the breakpoint');
+
+  // The wide layout is the other half of the same rule, and the half that would
+  // not have caught the mutation on its own: there a closed group is hidden and
+  // the reveal rule is what opens it.
+  assert.equal(display('wide', false), 'none', 'the wide layout hides a closed group');
+  assert.equal(display('wide', true), 'block', 'and the reveal rule opens an expanded one');
 });
 
 test('docs: the bar draws the height --bar declares, and the offsets clear it', () => {
