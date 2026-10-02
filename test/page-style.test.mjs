@@ -1,10 +1,18 @@
 // test/page-style.test.mjs — test/page-style.mjs read as a module, rather than
 // through the pages that use it.
 //
-// `specificity` is the half that needed a file of its own. Three test files
-// resolve rules through it and the whole nav geometry walk rests on the order it
-// returns, but its only exercise was the two selectors the caret test in
-// test/docs-site.test.mjs names - so every count was trusted and none was read.
+// `specificity` is the half that needed a file of its own. One test file weighed
+// it before this one existed - test/docs-site.test.mjs, where the nav geometry
+// walk rests on the order it returns - and its only exercise there was the two
+// selectors that file's caret test names, so every count was trusted and none was
+// read. Two weigh it now, that file and this one.
+//
+// Three files read a stylesheet through test/page-style.mjs for what it says:
+// test/browser-shell.test.mjs, test/docs-site.test.mjs and
+// test/probes/overlay-anchor.mjs. Only the middle one weighs a selector - the
+// other two read lengths out of the sheet, and one of the three is a probe rather
+// than a test. This file reads the module instead, and opens the two sheets only
+// to assert that the module can still read them at all.
 //
 // The answers are not obvious enough to leave at that. `a:before` and
 // `a::before` both weigh (0,0,2), because the legacy spelling is still a
@@ -18,8 +26,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { specificity, compareSpecificity } from './page-style.mjs';
+import { REPO_ROOT } from './helpers.mjs';
+import { specificity, compareSpecificity, styleSheet, pageStyle } from './page-style.mjs';
+
+const DOCS = join(REPO_ROOT, 'docs');
 
 /**
  * Every shape of simple selector CSS counts differently, against the triple it
@@ -109,8 +122,11 @@ test('page-style: a functional pseudo-class throws rather than resolving to a pl
   // CSS takes the specificity of a `:not()`, `:is()` or `:has()` from the most
   // specific selector inside the parentheses, and `:where()` from nothing at
   // all. The pseudo-class pass counts any of the four as one plain class, which
-  // is a real-looking answer and sometimes the right one - so the first sheet to
-  // gain one would have folded a rule in the wrong order with the suite green.
+  // is a real-looking answer and sometimes the right one.
+  //
+  // This is the direct caller's path and nothing wider: `specificity` is only
+  // reached for a selector somebody named, so the sheet that gains one is caught
+  // by `styleSheet` instead, which the test below pins.
   for (const selector of [
     'a:not(.current)',
     'li:is(.one, .two)',
@@ -142,4 +158,77 @@ test('page-style: a class that merely reads like one of the four still weighs', 
   ]) {
     assert.deepEqual(specificity(selector), expected, `${selector} is not a functional pseudo-class`);
   }
+});
+
+test('page-style: a sheet carrying a functional pseudo-class is refused, not resolved', () => {
+  // The wider half of the same guard, and the half the silent case needs.
+  // `specificity` only ever sees a selector a caller named, and both readers here
+  // match a selector whole - `declarationsFor` folds the rules whose list holds
+  // the caller's selector, and the layout fold in test/docs-site.test.mjs weighs
+  // only the selectors its caller passed in. So a `:not()` rule that really
+  // applies is not mis-weighed, it is skipped, and what comes back is a real value
+  // from the sheet with nothing failing.
+  //
+  // Both shapes below are the ones that would have gone unseen. The first takes a
+  // custom property away from every length read off it; the second takes a
+  // declaration out of the dropdown fold. Neither names a selector any caller
+  // lists, so neither reaches the guard inside `specificity` at all.
+  for (const css of [
+    ':root:not(.light) { --bar: 80px }',
+    '.has-sub:not([aria-expanded]) > .sub { display: none }',
+    '.menu li:is(.one, .two) { color: red }',
+    '.menu li:where(.one) { color: red }',
+    '.nav:has(> .menu) { color: red }',
+    '.menu li:NOT(:last-child) { margin: 0 }',
+  ]) {
+    assert.throws(
+      () => styleSheet(`:root { --bar: 50px } ${css}`),
+      /functional pseudo-class/,
+      `a sheet carrying ${css} has no rule order this module can be trusted on`
+    );
+  }
+});
+
+test('page-style: the sheets this repository ships are ones the module can read', () => {
+  // The guard above is only worth having if it is off today, and that is a fact
+  // about the repository rather than about the module: the two sheets are read for
+  // their lengths and their rule order throughout the suite, so one of them
+  // gaining a `:not()` has to fail here, naming the rule, rather than in whichever
+  // geometry walk reached it first.
+  //
+  // Each file is read through the call the rest of the suite reads it through:
+  // `styleSheet` for a `.css` file, `pageStyle` for the page that carries its
+  // sheet inline. The page matters, because `styleSheet` on the whole file parses
+  // the markup and the game's script as CSS as well - 257 rules against the
+  // stylesheet's 20 - and every prelude a brace leaves behind is weighed as a
+  // selector. A line of ordinary JavaScript is enough to fail it:
+  // `querySelectorAll('#touch div:not(.off)')` on the statement before an `if`
+  // block lands in one, and the sheet is refused with a selector that is a line
+  // of script. `pageStyle` slices the `<style>` block out first, which is both the
+  // thing being asserted about and what browser-shell.test.mjs and the
+  // overlay-anchor probe already read the page with.
+  for (const [what, file, read] of [
+    ["the documentation site's stylesheet", join(DOCS, 'assets', 'style.css'), styleSheet],
+    ['the game page, whose stylesheet is inline', join(REPO_ROOT, 'index.html'), pageStyle],
+  ]) {
+    assert.doesNotThrow(
+      () => read(readFileSync(file, 'utf8')),
+      `${what} carries a selector this module would have to guess at`
+    );
+  }
+});
+
+test('page-style: a sheet whose classes merely read like the four is read normally', () => {
+  // The same reason the per-selector guard matches the colon. `.has-sub` is on
+  // every dropdown group in the site's nav, so a sheet-wide guard keyed on the
+  // bare word would refuse the one stylesheet the specificity work exists for.
+  const sheet = styleSheet(`
+    :root { --bar: 50px }
+    .has-sub > button { color: red }
+    .not-found { color: red }
+    .is-open .where { color: red }
+    [data-has="sub"] { color: red }
+  `);
+  assert.equal(sheet.properties['--bar'], '50px', 'the sheet resolves, so none of its classes was read as a pseudo-class');
+  assert.equal(sheet.rules.length, 5, 'and every rule in it was parsed');
 });

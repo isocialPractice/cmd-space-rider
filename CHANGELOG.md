@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.7.8-alpha] - 2026-10-02
+
+### Fixed
+
+- The opened Reference dropdown on the documentation site overran the viewport
+  from 951px to 1049px. The breakpoint move in 0.7.5-alpha put the wide layout
+  where the *collapsed* row fits, and nothing more; `.menu` is left-packed, so
+  every panel hangs rightward from the left edge of its own group, and the last
+  group's left edge is far enough along the row that its panel needed 1050px.
+  Measured in chromium over HTTP, identical in both colour schemes: the panel ran
+  841.47px to 1049.73px at every wide width up to 1049px, which is 98.73px past
+  the edge of a 951px viewport with the panel 52.6% on screen, `Project Structure`
+  clipped to `Project Str`, and all four entries taking focus with their outline
+  off-screen. Nothing could scroll to them - `.nav` is `position: fixed`, so
+  `scrollWidth` stayed equal to the viewport width across the whole band. The last
+  group's panel is now anchored to its own right edge instead, hanging inward into
+  room the row has by definition, which puts it at 742.89px to 951.16px at 951px.
+  Positional rather than naming Reference, so an entry added after it is covered
+  too.
+
+  The breakpoint stays at 950/951, which is a decision rather than an oversight.
+  The row's natural width is 951.16px, so a right-anchored panel inherits a sixth
+  of a pixel of overhang at a 951px viewport; it paints nothing outside,
+  `scrollWidth` stays equal to `clientWidth`, and 951.16px is a font metric that
+  moves with any change to the eight entries' text. Moving to 952px would spend
+  the fraction at the price of pinning a layout boundary to the fractional part of
+  a measurement, so the integer stands and the stylesheet and
+  `DESIGN_LANGUAGE.md` both record why.
+
+### Added
+
+- A check that the last menu group anchors its dropdown to its own right edge,
+  read as the agreement between two declarations rather than as a drawn width -
+  the project has no browser runner and must not gain one. It is the same shape as
+  the caret checks beside it: which of two rules naming `.sub` wins, per layout.
+  It also asserts the override outweighs the base rule rather than merely
+  following it, that the narrow layout leaves `.sub` static where neither offset
+  applies, and that all ten pages still end their menu with a group - the selector
+  is positional, so a plain entry in the last place would match nothing, silently,
+  and put the panel back over the edge.
+
+### Changed
+
+- `styleSheet` in `test/page-style.mjs` walks every rule it parsed and refuses a
+  sheet carrying a functional pseudo-class, where before only `specificity` refused
+  one, and only for a selector a caller had already named. That left the silent
+  case open, because every reader in this module matches a selector whole: add
+  `.has-sub:not([aria-expanded]) > .sub { display: none }` to the site's sheet and
+  the dropdown fold returned exactly what it returned before, with a rule that
+  really applies left out of it, and measured against the previous commit, 479 of
+  479 passing. The same rule now fails the suite naming the selector, and the two
+  sheets this repository ships are asserted to still be readable, so the guard is
+  pinned as off today rather than assumed to be. Each of the two is read through
+  the call the rest of the suite reads it through: `styleSheet` for the site's
+  `.css` file, `pageStyle` for the game page. So that half of the assertion is over
+  the page's stylesheet rather than over the whole file, whose markup and script a
+  brace-walking parser takes for 237 further rules of their own.
+- Two records of what that work covered, corrected in the 0.7.7-alpha entry above
+  and in the test files themselves. `specificity` was weighed by one test file
+  before it got tests of its own, not three; three files read a stylesheet through
+  the module, two for lengths and one of those a probe. And the throw answered for
+  a selector a caller weighed rather than for a sheet, which is the gap the walk
+  above closes.
+- `DESIGN_LANGUAGE.md` records the anchoring and the sixth of a pixel beside the
+  breakpoint bullet that measured the row, since the one is what the other does not
+  guarantee. `docs/development.html` and `docs/project-structure.html` name the new
+  check and the sheet-wide refusal in their accounts of the suite.
+
 ## [0.7.7-alpha] - 2026-10-01
 
 ### Fixed
@@ -44,10 +112,13 @@
   `How It Works` and `Cheatsheet` unreachable at every narrow width, which is
   the 0.7.5 defect back. Both layouts are read, because the wide half alone
   would not have caught it.
-- `test/page-style.test.mjs`, the resolver's own tests. `specificity` is weighed
-  by three test files and the whole nav geometry walk rests on the order it
-  returns, and its only exercise was the two selectors the caret check names, so
-  every count was trusted and none was read. It now pins a table of selectors
+- `test/page-style.test.mjs`, the resolver's own tests. One test file weighed
+  `specificity` before this one, `test/docs-site.test.mjs`, where the nav geometry
+  walk rests on the order it returns - and its only exercise there was the two
+  selectors that file's caret check names, so every count was trusted and none was
+  read. Two weigh it now. Three files read a stylesheet through the module for
+  what it says, two of them for lengths rather than for cascade order and one of
+  the three a probe rather than a test. It now pins a table of selectors
   against the triples CSS weighs them at - the id, class, attribute,
   pseudo-class, pseudo-element and `*` cases, and both colon spellings of all
   four CSS2 pseudo-elements, since `a:before` weighs (0,0,2) as a pseudo-element
@@ -60,9 +131,9 @@
   `:is(`, `:where(` or `:has(` rather than answering. CSS takes the first three
   from the most specific selector inside the parentheses and `:where()` from
   nothing at all, while the pseudo-class pass counts any of the four as one
-  plain class - a plausible count, and sometimes the right one, so the first
-  sheet to gain one would have folded a rule in the wrong order with the suite
-  green. The guard matches the colon, so `.has-sub`, which the site's nav is
+  plain class - a plausible count, and sometimes the right one. The guard answers
+  for a selector a caller hands in; the sheet-wide half of it arrived in
+  0.7.8-alpha. It matches the colon, so `.has-sub`, which the site's nav is
   full of, is not read as a `:has()`.
 
 ## [0.7.6-alpha] - 2026-09-30
