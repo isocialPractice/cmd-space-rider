@@ -15,7 +15,10 @@
 // This is a model of a browser and not a browser. It covers what the rules it is
 // pointed at actually use: custom properties, calc, min, max, px, vw and vh. A
 // length it cannot resolve throws instead of resolving to something plausible,
-// which is the whole reason it is trustworthy at all.
+// which is the whole reason it is trustworthy at all. A sheet is refused outright
+// on the same terms: `styleSheet` walks every rule it parsed and refuses one
+// carrying a functional pseudo-class, because every reader here matches a selector
+// whole and so misses such a rule rather than mis-weighing it.
 //
 // `specificity` at the foot of the file is the other half of reading a rule the
 // way a browser does: which of two rules naming the same element wins is decided
@@ -77,6 +80,15 @@ function declarations(body) {
 }
 
 /**
+ * The four pseudo-classes that take a selector list as an argument.
+ *
+ * Matched with the colon, which is the whole reason it can be trusted: this
+ * module is pointed at sheets full of `.has-sub`, and a pattern keyed on the bare
+ * word would refuse the one class the caret work was built around.
+ */
+const FUNCTIONAL_PSEUDO = /:(?:not|is|where|has)\(/i;
+
+/**
  * A resolver bound to one stylesheet's text.
  *
  * `rules` is every rule in cascade order, `declarationsFor` folds the ones that
@@ -89,6 +101,34 @@ export function styleSheet(css) {
   // matches nothing.
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const rules = parseRules(text);
+
+  // The whole sheet, once, before a caller resolves anything out of it.
+  //
+  // A functional pseudo-class is not only a count `specificity` cannot work out.
+  // It is a rule every reader here misses: `declarationsFor` below folds the rules
+  // whose selector list holds the caller's selector *whole*, and the layout fold
+  // in test/docs-site.test.mjs weighs only the selectors its caller named, so a
+  // rule that really applies is left out of both and the value that comes back is
+  // a real value from the sheet. Add `:root:not(.x) { --bar: 80px }` and every
+  // length read off `--bar` answers with the base block's figure; add
+  // `.has-sub:not([aria-expanded]) > .sub { display: none }` and the dropdown fold
+  // returns exactly what it returns today. Neither is a selector any caller names,
+  // so neither reaches the guard inside `specificity` at all.
+  //
+  // So the sheet is refused here rather than at whichever selector happens to be
+  // weighed. That is what makes a sheet that gains one fail wherever it is read,
+  // and it is the same bargain the length resolver strikes below: throw, rather
+  // than answer with something plausible.
+  const unweighable = rules
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) => FUNCTIONAL_PSEUDO.test(selector));
+  if (unweighable.length) {
+    throw new Error(
+      'this stylesheet carries a functional pseudo-class, whose argument neither '
+      + 'specificity nor whole-selector matching models, so no rule in the sheet '
+      + `can be trusted to fold in the order a browser folds it: ${unweighable.join(', ')}`
+    );
+  }
 
   /**
    * The declarations that apply to a bare selector in the top-level cascade,
@@ -219,13 +259,19 @@ const PSEUDO_ELEMENTS = /^(before|after|first-line|first-letter)$/;
  * order with nothing failing - and neither stylesheet this module is pointed at
  * carries one today, which makes the first to gain one also the first to
  * exercise the gap. Teaching this function the argument rule is what lifts the
- * guard; until then a sheet that gains one fails here, where the gap is.
+ * guard.
+ *
+ * This guard answers for a selector a caller hands in, and nothing wider: it is
+ * only ever reached for a selector somebody already named, and a rule naming
+ * something else is skipped before it gets here. A *sheet* that gains one is
+ * refused by `styleSheet` instead, which walks every rule it parsed - that is
+ * where the silent case lives, since the rule that folds in the wrong order is
+ * usually one no caller ever names.
  */
-const FUNCTIONAL_PSEUDO = /:(?:not|is|where|has)\(/i;
-
 export function specificity(selector) {
-  // Matched with the colon, so `.has-sub` - which this sheet is full of - is not
-  // read as a `:has()`.
+  // The sheet-wide guard above has already refused a stylesheet carrying one, so
+  // this is the direct caller's path: a selector handed to this function on its
+  // own, by a test or a probe, with no sheet behind it to have been checked.
   if (FUNCTIONAL_PSEUDO.test(selector)) {
     throw new Error(
       'specificity does not model the argument of a functional pseudo-class, '

@@ -223,6 +223,24 @@ One size on the site is off this scale, and it is the only one:
   also asserts the stylesheet names no third width query: the site has two
   layouts, and the checks that read the bar's geometry sort every rule into one
   of them by the bound its query names.
+- **The breakpoint answers for the collapsed row, so the last group's panel
+  hangs inward.** The row fitting is not the panel fitting: `.menu` is
+  left-packed, so each panel hangs rightward from the left edge of its own group,
+  and the last group's left edge is far enough along that its panel wanted 1050px
+  of viewport. Across 951px to 1049px the opened Reference list was painted past
+  the right edge of the fixed bar - 98.73px over at 951px, just over half of it on
+  screen, four entries clipped mid-word and taking focus off-screen, with nothing
+  able to scroll to them. The last group anchors its panel to its own right edge
+  instead, which is the row's right edge and therefore the one the breakpoint
+  already guarantees fits. It is written positionally, `:last-child`, so an entry
+  added after Reference is covered without anyone remembering to move the rule.
+
+  The sixth of a pixel is chosen. The row ends at 951.16px, so a right-anchored
+  panel at a 951px viewport inherits 0.16px of overhang; it paints nothing outside
+  and the page still does not scroll sideways, and 951.16px is a font metric that
+  moves with any change to the entries' text. A 952px breakpoint would spend the
+  fraction at the price of pinning a layout boundary to the fractional part of a
+  measurement, so the integer stands.
 - **The narrow layout has no dropdowns, so it shows every list.** There is room
   to open all four groups at once below the breakpoint, so the stylesheet shows
   the lists outright, hides the three caret-only buttons and turns Reference's

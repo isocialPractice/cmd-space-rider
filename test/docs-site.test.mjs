@@ -45,6 +45,24 @@ function groupsOf(nav) {
 }
 
 /**
+ * The menu's own entries, as their opening tags - what `.menu > li` selects.
+ *
+ * Depth-counted rather than matched flat. A dropdown's own entries are `<li>`s
+ * inside the group's `<li>`, so a pattern over every `<li` in the nav ends on
+ * Cheatsheet - the last entry of the last group's list, one level below the
+ * entry the stylesheet's `:last-child` reaches.
+ */
+function menuEntriesOf(nav) {
+  const out = [];
+  let depth = 0;
+  for (const [, close, tag, attrs] of nav.matchAll(/<(\/?)(ul|li)(?=[\s>])([^>]*)>/g)) {
+    if (tag === 'ul') depth += close ? -1 : 1;
+    else if (!close && depth === 1) out.push(`<li${attrs}>`);
+  }
+  return out;
+}
+
+/**
  * The element a dropdown list has to be preceded by before the wide layout will
  * reveal it, read off the stylesheet's own rule.
  *
@@ -749,6 +767,58 @@ test('docs: the narrow layout shows every dropdown list, whatever state it was l
   // the reveal rule is what opens it.
   assert.equal(display('wide', false), 'none', 'the wide layout hides a closed group');
   assert.equal(display('wide', true), 'block', 'and the reveal rule opens an expanded one');
+});
+
+test('docs: the last menu group anchors its dropdown to its own right edge', () => {
+  // The breakpoint guarantees the *collapsed* row fits, and nothing more. `.menu`
+  // is left-packed, so every panel hangs rightward from the left edge of its own
+  // group, and the last group's left edge is far enough along that its panel
+  // needed 1050px of viewport: measured in chromium, the opened Reference panel
+  // ran 841.47px to 1049.73px at every wide width up to 1049px, which is 98.73px
+  // past the edge of a 951px viewport with four entries clipped mid-word and
+  // nothing able to scroll to them, `.nav` being fixed. Anchoring the last
+  // group's panel to its own right edge hangs it inward instead, into room the
+  // row has by definition.
+  //
+  // What is pinned here is the agreement between the two declarations, not the
+  // drawn width: the project has no browser runner and must not gain one. So this
+  // is the same shape as the caret checks above - which of two rules naming the
+  // same element wins, per layout - and 1049.73px stays a figure in a comment
+  // beside the rule it explains.
+  const LAST = '.menu > li:last-child .sub';
+  const wide = declIn('wide', '.sub', LAST);
+
+  assert.equal(wide.left, 'auto', 'the last group gives up the left anchor the base rule sets');
+  assert.equal(wide.right, '0', 'and takes the right edge of its own group instead');
+
+  // The override has to outweigh `.sub` rather than merely follow it, which is
+  // the lesson the caret cost: `.sub` is (0,1,0) and this is (0,3,1), so document
+  // order is not what is deciding it and a rule moved up the file still wins.
+  assert.ok(
+    compareSpecificity(specificity('.sub'), specificity(LAST)) < 0,
+    'the last-group rule outweighs the base .sub rule, so its anchor does not rest on file order'
+  );
+
+  // Harmless on the narrow layout rather than absent from it. The rule is top
+  // level, so it applies there too, but the narrow block takes `.sub` out of
+  // positioned flow and neither offset reaches a static box.
+  assert.equal(
+    declIn('narrow', '.sub', LAST).position, 'static',
+    'the narrow layout stacks the lists in flow, where left and right do nothing'
+  );
+
+  // The selector is positional, so the markup has to keep a group last. A plain
+  // link in that place and the rule matches nothing, silently, and the panel goes
+  // back over the edge - which `docs: the nav is the same markup on every page`
+  // would not catch, since it only asks that all ten pages agree.
+  for (const name of PAGES) {
+    const entries = menuEntriesOf(navOf(name));
+    assert.ok(entries.length, `${name} carries no menu entries`);
+    assert.match(
+      entries[entries.length - 1], /class="has-sub"/,
+      `${name} ends its menu with a plain entry, so the positional rule anchors no panel`
+    );
+  }
 });
 
 test('docs: the bar draws the height --bar declares, and the offsets clear it', () => {

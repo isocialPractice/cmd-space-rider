@@ -186,6 +186,37 @@ body {
 }
 .has-sub > button[aria-expanded="true"] + .sub { display: block; }
 
+/* The last group's panel hangs inward, from its own right edge.
+
+   `.menu` is left-packed at its natural width, so every panel hangs rightward
+   from the left edge of its own group - and the last group's left edge is far
+   enough along the row that its panel needed 1050px of viewport while the
+   breakpoint only guarantees the collapsed row fits. Across 951px to 1049px the
+   opened Reference panel was painted past the right edge of a bar that, being
+   `position: fixed`, nothing can scroll to: at 951px it ran 841.47px to
+   1049.73px, 98.73px over, 52.6% on screen, with `Project Structure` clipped to
+   `Project Str` and all four entries taking focus with their outline off-screen.
+   The other three groups sit further left and cleared the edge by 313.41px,
+   140.50px and 49.63px there.
+
+   Anchoring it to the right edge instead hangs it inward, which the row has room
+   for by definition: the row's own right edge is the edge the breakpoint already
+   guarantees fits. At 951px that puts the panel at 742.89px to 951.16px.
+
+   Positional rather than naming Reference, because an entry added after it takes
+   the last place and wants the same treatment - which `:last-child` gives it and
+   a selector naming the group would not.
+
+   The 0.16px is chosen, not left over. The row's natural width is 951.16px, so
+   at a 951px viewport the collapsed row is already a sixth of a pixel over and a
+   right-anchored panel inherits exactly that overhang. It paints no pixel
+   outside, `document.documentElement.scrollWidth` stays equal to `clientWidth`,
+   and 951.16px is a font metric that moves with any change to the eight entries'
+   text. Moving the breakpoint to 952px would spend the fraction, at the cost of
+   pinning a layout boundary to the fractional part of a measurement, so the
+   integer stands and this records why. */
+.menu > li:last-child .sub { left: auto; right: 0; }
+
 /* The nav's lists are lists, so the prose rhythm at the foot of the type block
    reaches them: every ul takes a --s4 bottom margin and every li a --s2 one.
    Inside a fixed bar those land in its height, which is how the bar came to
