@@ -15,6 +15,24 @@ its origin survives archiving into `## Complete`.
 
 ### UI/UX Override - what the glyph tuning is recorded as doing
 
+- [ ] The test harness restates the bolt speed the engine now names
+  - **Issue**: `BULLET_SPEED` was added to both builds this turn and both now
+    read their travel off it, and `BUILDS` in `test/engagement.mjs:37-56` carries
+    it for each build (`:44` and `:53`) so the harness has it to hand. Three places in that file
+    still write the figure out instead: `const travel = 60 * dt` at
+    `test/engagement.mjs:535`, `:818` and `:1362`. Nothing fails, because 60 is
+    what the constant holds. The cost is that the rebuilt frame these three
+    compute is the thing every reach, band and pairing reading is measured
+    against, so a change to `BULLET_SPEED` leaves the harness measuring the old
+    cannon and the parity check at `test/parity.test.mjs:59` passes while every
+    figure quoted beside it is wrong. The adjacent `advance` lines use a 60 of
+    their own - units per unit of speed, not bullet travel - so the two have to
+    be told apart rather than replaced together.
+  - **Goal**: Read the travel off `build.BULLET_SPEED` at all three sites, the
+    way `volleyLife` already reads the life off `build.BULLET_LIFE_SLACK`, and
+    leave the `advance` 60 alone with a word saying which figure it is.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+
 #### Found Issues
 
 - [ ] `tuneText`'s comment credits `geometricPrecision` with work the centring
@@ -37,6 +55,51 @@ its origin survives archiving into `## Complete`.
     mechanism the measurement contradicts, which is the kind of claim the next
     person to touch the renderer would reason from.
   - **Goal**: Resolve to [tune-text-rationale.prompt.md](.claude/prompts/tune-text-rationale.prompt.md)
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [ ] The same `geometricPrecision` rationale is recorded in three more places
+  - **Issue**: The override above covers the doc comment at `index.html:291-306`
+    and its prompt file says plainly what not to touch, naming
+    `test/menu-layout.test.mjs` under **What not to change**. The claim it
+    corrects is not only there. `CHANGELOG.md:0.8.0-alpha` has "asked for
+    `geometricPrecision` text and no kerning, which is what makes the centring
+    worth having: left to itself a canvas rounds both a glyph's position and its
+    advance to whole pixels, snapping the inset back to zero";
+    `test/menu-layout.test.mjs` opens the test `the grid is drawn with hinted
+    rounding off` with "The centring is only worth having with this set. Left to
+    itself a canvas rounds both a glyph's position and its advance to whole
+    pixels, which snaps the inset back to zero and puts the grid back where it
+    started"; and `docs/how-it-works.html` publishes "the canvas is asked for
+    exact glyph positions rather than hinted ones so the centring survives being
+    drawn". All three are the mechanism the 96 chromium comparisons in the prompt
+    file contradict, and the third is on the public site. Worked as written, the
+    override narrows one of four copies and leaves three standing, one of them in
+    the test whose name asserts it.
+  - **Goal**: Narrow all four together when the prompt file is worked, on the
+    measurement it already carries: keep both settings and both capability
+    checks, and say the fractional x is honoured either way in this engine, so
+    the request is insurance rather than the thing doing the work. The test's
+    assertions are correct and stay - `textRendering`, `fontKerning` and
+    `textBaseline` are all genuinely set; it is the comment above them and the
+    test's name that claim the mechanism.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [ ] The pad's release rule is recorded as verified by a key the pad cannot hold
+  - **Issue**: `CHANGELOG.md:0.8.0-alpha` closes the gamepad entry with "Verified
+    in a chromium window against a stubbed `navigator.getGamepads`: ... and a `D`
+    held on the keyboard survived a resting pad." `D` is not one of the nine
+    names `PAD_CONTROL_KEYS` holds - the pad steers on `LEFT`, `RIGHT`, `UP` and
+    `DOWN`, and the keyboard reaches those through the arrow keys rather than
+    through `WASD`. So the poll's loop never visits `D` whatever `padWasHeld`
+    says, and that reading would have come back the same with the release rule
+    deleted. The rule itself holds, and is pinned at the seam the suite can reach
+    by `the page polls the pad once a frame and releases only what it pressed` in
+    `test/browser-shell.test.mjs`. What is wrong is the sentence recording how it
+    was checked live, which is what a reader consults when deciding whether the
+    rule still needs watching.
+  - **Goal**: Either re-run that check on a key the pad does reach - an arrow
+    held on the keyboard while a pad rests, which is the collision the rule
+    exists for - and record the result, or narrow the sentence to what the `D`
+    reading can show, which is that the poll does not clear keys outside
+    `PAD_CONTROL_KEYS`.
   - From: UI/UX Override - what the glyph tuning is recorded as doing
 
 ### Create and Deploy GitHub Pages Override
