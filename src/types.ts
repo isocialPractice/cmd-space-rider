@@ -287,6 +287,26 @@ export const RAPID_FIRE_MULT = 3;
  */
 export const RAPID_FIRE_INTERVAL = FIRE_INTERVAL / RAPID_FIRE_MULT;
 
+/** Depth units a bolt covers each second. One frame's travel is this times dt. */
+export const BULLET_SPEED = 60;
+
+/**
+ * Depth of slack on a bolt's life past the draw distance.
+ *
+ * The reach itself is the draw distance - `updateBullets` drops a bolt that has
+ * passed `state.maxViewZ`, because out there is past every target
+ * `drawEntitiesFar` will draw. The slack is what keeps the life from being what
+ * ends a flight instead: a bolt is dropped the frame its life runs out, before
+ * that frame's contacts are taken, so a life ending on the very frame a bolt
+ * crosses the draw distance would retire it with that frame untested and a
+ * target parked at the far edge unkillable.
+ *
+ * One ring's spacing is the figure, and it is more than a frame's travel at
+ * every rate the suite walks - ten units at the sixth of a second the slowest
+ * one uses.
+ */
+export const BULLET_LIFE_SLACK = 14;
+
 /**
  * One-shot sounds the engine queues for the frame it has just simulated. The
  * engine names the event; what it sounds like is the browser build's business,

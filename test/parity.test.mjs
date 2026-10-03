@@ -56,6 +56,15 @@ test('both builds agree on what a powerup is worth', () => {
   assert.equal(browser.RAPID_FIRE_INTERVAL, terminalTypes.RAPID_FIRE_INTERVAL);
 });
 
+test('both builds give a bolt the same reach', () => {
+  // The reach is the draw distance in both, so the pair that sizes a bolt's
+  // flight has to agree as well - one build reaching the far end of its tunnel
+  // and the other stopping short of it is the fault this guards.
+  assert.equal(browser.BULLET_SPEED, terminalTypes.BULLET_SPEED);
+  assert.equal(browser.BULLET_LIFE_SLACK, terminalTypes.BULLET_LIFE_SLACK);
+  assert.equal(new browser.Game().state.maxViewZ, new TerminalGame().state.maxViewZ);
+});
+
 test('both builds draw a powerup the same way', () => {
   // The glyph table is read by the engine for the burst colour, by the renderer
   // for the drop, and by the footer for the badge, so a build that drifted here

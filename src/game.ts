@@ -8,6 +8,7 @@ import {
   WARP_INTERVAL, WARP_FLASH_TIME,
   POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
   RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
+  BULLET_SPEED, BULLET_LIFE_SLACK,
   RNG,
 } from './types';
 
@@ -354,9 +355,16 @@ export class Game {
    */
   private fireVolley(): void {
     const s = this.state;
-    s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life: 2 });
-    s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
-    s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life: 2 });
+    // A bolt's reach is the depth the tunnel is drawn to, and the life is sized
+    // from that depth so the timer can never be what ends a flight short of it.
+    // A flat two seconds was what it used to be, which retired a bolt about 120
+    // units out: the tunnel is drawn to 200, so the outer fifth of what the
+    // player could see could not be shot at all, with nothing on screen saying
+    // why. See BULLET_LIFE_SLACK for the slack on the far end.
+    const life = (s.maxViewZ + BULLET_LIFE_SLACK) / BULLET_SPEED;
+    s.bullets.push({ x: s.shipX, y: s.shipY, z: -2, life });
+    s.bullets.push({ x: s.shipX - 0.25, y: s.shipY - 0.05, z: -1.5, life });
+    s.bullets.push({ x: s.shipX + 0.25, y: s.shipY - 0.05, z: -1.5, life });
     this.cue('shot');
   }
 
@@ -972,11 +980,28 @@ export class Game {
    */
   private updateBullets(dt: number, advance: number): void {
     const s = this.state;
-    const travel = 60 * dt;
+    const travel = BULLET_SPEED * dt;
     const slackCols = shotSlackCols(s.screenWidth);
 
     for (let i = s.bullets.length - 1; i >= 0; i--) {
       const b = s.bullets[i];
+
+      // The reach is what the player can see, and this is where that is
+      // enforced. A bolt already out past the draw distance has nothing left to
+      // register against - `contacts` drops every target drawn beyond it - and
+      // the projection clamps out there, so carrying it on would leave it
+      // frozen at the vanishing point still taking contacts against whatever
+      // shared its column.
+      //
+      // Read before the step rather than after it, so the frame that carried a
+      // bolt across the draw distance is taken in full first. That is the frame
+      // a target parked at the far edge dies on, and dropping the bolt the
+      // moment it crossed would retire it with that frame untested. It also
+      // keeps this exit exclusive with a kill, the way the life check below is:
+      // a bolt retired here never reaches a collision check, so nothing outside
+      // has to guess which of the two spent it.
+      if (b.z < -s.maxViewZ) { s.bullets.splice(i, 1); continue; }
+
       const fromZ = b.z;
       b.z -= travel;
       b.life -= dt;

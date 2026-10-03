@@ -19,9 +19,15 @@ the documentation. The full text lives on the
 | `Esc` | Menu / quit |
 | `Ctrl+C` | Quit immediately (terminal) |
 | Thumbstick / `FIRE` / `BOOST` | Touch: steer / fire or confirm / boost |
+| Left stick / `A` / `B` | Gamepad: steer / fire or confirm / boost |
+| Triggers | Gamepad: barrel roll, left and right |
 
 Press-not-hold keys are `P`, `M`, `Esc`, `Q` and `E`. They fire once per press
 and take a short deadzone after a hold.
+
+A gamepad has to report the standard layout before it drives anything, and its
+stick takes the same dead zone and eight sectors the on-screen thumbstick does.
+Any pad plugged in can fly the run, and a second one alongside does no harm.
 
 ## CLI
 

@@ -41,6 +41,8 @@ export const BUILDS = [
     tunnelSpan: terminalTunnelSpan, tracerLit: terminalTypes.tracerLit,
     shotSlackCols: terminalTypes.shotSlackCols,
     seedRng: terminalTypes.seedRng,
+    BULLET_SPEED: terminalTypes.BULLET_SPEED,
+    BULLET_LIFE_SLACK: terminalTypes.BULLET_LIFE_SLACK,
   },
   {
     name: 'browser', Game: browser.Game,
@@ -48,6 +50,8 @@ export const BUILDS = [
     tunnelSpan: browser.tunnelSpan, tracerLit: browser.tracerLit,
     shotSlackCols: browser.shotSlackCols,
     seedRng: browser.seedRng,
+    BULLET_SPEED: browser.BULLET_SPEED,
+    BULLET_LIFE_SLACK: browser.BULLET_LIFE_SLACK,
   },
 ];
 
@@ -131,6 +135,34 @@ export const VOLLEY_BAND = {
   floors: { '80x24': 0.95, '60x20': 0.95, '205x50': 0.95 },
 };
 
+/**
+ * The volley out at the far end of the drawn tunnel, which is the band a bolt
+ * used to expire short of.
+ *
+ * Kept apart from VOLLEY_BAND rather than folded into it because the two are
+ * asking different questions. That band is about the spread covering a long
+ * shot's column creep; this one is about the cannon reaching the draw distance
+ * at all, which a flat two-second life did not. A single shot resolves about
+ * half of these, so the floors are the volley's - the thing a player fires.
+ */
+export const FAR_BAND = {
+  name: '140 to 200', near: 140, far: 200, volley: true, minShots: 40,
+  floors: { '80x24': 0.85, '60x20': 0.95, '205x50': 0.75 },
+};
+
+/**
+ * Depths a shot dead ahead is flown at, from point blank out to the draw
+ * distance. Every one of them is expected to land.
+ *
+ * Walked in tens rather than swept at random because this is a reach check and
+ * the band it covers is the one that failed: a target parked dead ahead landed
+ * at every range to 170 and missed from 180 up, and the misses were silent -
+ * the tunnel is drawn to 200, so the player saw the target, fired into it, and
+ * nothing on screen said the bolt had stopped short.
+ */
+export const REACH_STEP = 10;
+export const REACH_NEAR = 30;
+
 /** The same walk flown with nothing but the painted screen to aim by. */
 export const EYE_BANDS = [
   {
@@ -208,6 +240,19 @@ export function emptyRun(build, grid = GRIDS[0]) {
 export const VOLLEY_SIZE = 3;
 
 /**
+ * Seconds a bolt the trigger raised stays in the air, as `fireVolley` sizes it.
+ *
+ * Read off the draw distance rather than written down as a figure, which is the
+ * whole of the fix it mirrors: a flat two seconds retired a bolt about 120 units
+ * out while the tunnel was drawn to 200, so the outer fifth of the tunnel could
+ * not be shot. The reach is enforced in `updateBullets`, which drops a bolt past
+ * `maxViewZ`; the life only has to be longer than that crossing takes.
+ */
+export function volleyLife(build, state) {
+  return (state.maxViewZ + build.BULLET_LIFE_SLACK) / build.BULLET_SPEED;
+}
+
+/**
  * The volley as `updatePlaying` pushes it: a centre shot at the muzzle and two
  * a quarter of a unit either side, half a unit nearer and a twentieth lower.
  *
@@ -216,11 +261,12 @@ export const VOLLEY_SIZE = 3;
  * target can already be drawn there - and a reading taken at the top of that
  * frame finds no shot in the air to attribute it to.
  */
-export function muzzleVolley(shipX, shipY) {
+export function muzzleVolley(build, state, shipX, shipY) {
+  const life = volleyLife(build, state);
   return [
-    { x: shipX, y: shipY, z: -2, life: 2 },
-    { x: shipX - 0.25, y: shipY - 0.05, z: -1.5, life: 2 },
-    { x: shipX + 0.25, y: shipY - 0.05, z: -1.5, life: 2 },
+    { x: shipX, y: shipY, z: -2, life },
+    { x: shipX - 0.25, y: shipY - 0.05, z: -1.5, life },
+    { x: shipX + 0.25, y: shipY - 0.05, z: -1.5, life },
   ];
 }
 
@@ -469,7 +515,8 @@ export const MUZZLE_Z = -2;
  * shot whose life ran out on the very frame its target sailed past the camera
  * read as a kill for as long as the two were told apart by the bullet count.
  * Long enough that the life can never be what ends the flight keeps the two
- * questions separate.
+ * questions separate - which is why this stays a flat figure rather than
+ * following `volleyLife`.
  */
 export const STAGED_LIFE = 10;
 
@@ -773,7 +820,7 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
     // the two scales exactly as updateBullets carries it.
     const raised = snapshot.bullets.length
       ? snapshot.bullets
-      : (muzzle ? muzzleVolley(muzzle.x, muzzle.y) : []);
+      : (muzzle ? muzzleVolley(build, s, muzzle.x, muzzle.y) : []);
     const stepped = raised.map((b) => {
       const bz = b.z - travel;
       return { x: (b.x * game.projScale(b.z)) / game.projScale(bz), y: b.y, z: bz, life: 1 };
@@ -1330,13 +1377,25 @@ function flyFreely(build, grid, { frames, holdY, dt, fireInterval, seed }) {
 
     // The shots the frame spent, in the order updateBullets walked them: from
     // the end of the list, so the kills line up with the bursts above one for
-    // one. A shot that ran out of life leaves the air on its own, so only a
-    // shot with life left in it was spent on something.
+    // one.
+    //
+    // Two things retire a shot without it being spent on anything, and both
+    // have to be read out or every pairing after one of them shifts by one and
+    // a kill is read against a shot that was nowhere near it. The life running
+    // out is the first. The reach is the second: `updateBullets` drops a bolt
+    // that was already out past the draw distance when the frame opened, which
+    // is how the far end of the tunnel became shootable at all. Both are read
+    // off the depth and the life the frame opened with, because both are exits
+    // the engine takes before it looks at a collision - so neither can be
+    // confused with a shot that landed.
     const air = new Set(s.bullets);
     const spent = [];
     for (let i = was.bullets.length - 1; i >= 0; i--) {
       const b = was.bullets[i];
-      if (!air.has(b.ref) && b.life - dt > 0) spent.push(b);
+      if (air.has(b.ref)) continue;
+      if (b.z < -s.maxViewZ) continue;
+      if (b.life - dt <= 0) continue;
+      spent.push(b);
     }
     // A shot spent on a mine lands no kill and throws a burst that is not the
     // kill colour, so it shifts every pairing after it by one and there is
@@ -1402,8 +1461,21 @@ function flyFreely(build, grid, { frames, holdY, dt, fireInterval, seed }) {
       // drawn: the contact can land on a sweep step the frame's far end has
       // already climbed past the corridor from. So the frame says it cannot
       // answer rather than saying nothing was drawn.
+      //
+      // Two ends that failed for opposite reasons cannot answer either, and
+      // that is the same abstention rather than a second rule. `unlit` says a
+      // block was drawn with no tracer on it; `hidden` says there was no block
+      // drawn to read. One of each means both halves of the pair were drawn
+      // during the frame and never in the same reading - here, a tracer
+      // climbing out of the play area as the block it met came up into it, out
+      // at the far end of the tunnel where a frame's travel is worth several
+      // rows. The contact the sweep took sits on a step between the two ends,
+      // so neither end speaks for it. `closerContact` ranks `unlit` above
+      // `hidden` and would otherwise report the frame as a tracer nothing drew.
       const settled = closerContact(now, before);
-      const verdict = settled === 'unlit' && !started ? 'hidden' : settled;
+      const opposed = (now === 'unlit' && before === 'hidden')
+        || (now === 'hidden' && before === 'unlit');
+      const verdict = settled === 'unlit' && (!started || opposed) ? 'hidden' : settled;
       report.killContacts.set(verdict, (report.killContacts.get(verdict) ?? 0) + 1);
       // The same verdict again, kept apart for the kills the pairing is the
       // whole of. A frame that spent one shot pairs the same way whichever

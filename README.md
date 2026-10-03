@@ -15,9 +15,10 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Cross-platform** &mdash; Runs on Windows, macOS, and Linux. Any terminal that supports 256 colors and Unicode.
 - **Neon warp tunnel** &mdash; Perspective-scrolling walls, animated ring stripes, a parallax starfield, and a warp transition every minute.
 - **Ship controls** &mdash; Steer, boost, fire a pulse cannon, and barrel roll out of trouble.
+- **Three ways in** &mdash; Keyboard, touch, or a standard gamepad, all feeding the same controls.
 - **Progressive difficulty** &mdash; Speed, obstacle density and mines all escalate with distance.
 
-The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, retro sound, the CRT overlay, touch controls, light mode, and the five debug scenarios.
+The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, retro sound, the CRT overlay, touch and gamepad controls, light mode, and the five debug scenarios.
 
 ## [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html)
 
@@ -51,6 +52,7 @@ space-rider --help                   Show help
 | `F` or `Shift` (browser) | Boost |
 | `Q` / `E` | Barrel roll |
 | `P` | Pause / resume a run |
+| Gamepad: left stick / `A` / `B` / triggers | Steer / fire or confirm / boost / barrel roll |
 
 The [Usage page](https://isocialpractice.github.io/cmd-space-rider/docs/usage.html) carries the full control table, the key repeat and deadzone behaviour, the gameplay rules, and the five debug modes. The [Cheatsheet](CHEATSHEET.md) puts every key, flag and figure on one page.
 

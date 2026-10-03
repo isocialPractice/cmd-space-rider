@@ -26,9 +26,9 @@ import assert from 'node:assert/strict';
 
 import {
   BUILDS, GRIDS, FRAME,
-  AIMED_BANDS, VOLLEY_BAND, EYE_BANDS,
+  AIMED_BANDS, VOLLEY_BAND, EYE_BANDS, FAR_BAND, REACH_NEAR, REACH_STEP,
   HUD_ROWS, FOOTER_ROWS, WALL_CHARS,
-  emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk,
+  emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk, volleyLife,
   watchEngagement, tracerCells, tracerCellsBothHalves,
   unitsPerCol, freeFlight, darkWalk, FRAME_RATES, FREE_SEEDS,
   FREE_FRAMES, FREE_RATE_FRAMES, FREE_HEIGHTS,
@@ -132,6 +132,93 @@ for (const build of BUILDS) {
       assert.ok(
         hit / shots >= floor,
         `long-range volley landed ${hit}/${shots}, wanted ${Math.round(floor * 100)}%`
+      );
+    });
+
+    test(`${at}: a shot reaches the whole depth the tunnel is drawn to`, () => {
+      // The cannon's reach against the draw distance, which is the pair the
+      // defect behind this check sat between. A bolt's life was a flat two
+      // seconds and it travels sixty units a second, so about 120 units of
+      // travel plus whatever the target closed in that time put the furthest
+      // reach a little over 150; `state.maxViewZ` is 200. Flown dead ahead at
+      // every ten units from 30, this landed to 170 and missed from 180 up at
+      // 80x24 in both builds - the outer fifth of what the player could see,
+      // with nothing on screen saying why. The life is read off the draw
+      // distance now, so the two cannot drift apart again.
+      const far = emptyRun(build, grid).state.maxViewZ;
+      const short = [];
+      for (let z = REACH_NEAR; z <= far; z += REACH_STEP) {
+        for (const volley of [false, true]) {
+          const outcome = engage(emptyRun(build, grid), { x: 0, y: 0, z: -z, volley });
+          if (outcome !== 'hit') short.push(`${z}/${volley ? 'volley' : 'single'}=${outcome}`);
+        }
+      }
+      assert.deepEqual(short, [], `dead ahead, short of the draw distance at ${far}`);
+    });
+
+    test(`${at}: the volley lands out at the far end of the drawn tunnel`, () => {
+      // The reach check above is one column; this is the placement walk flown
+      // out in the band that used to be unreachable, so a reach that only held
+      // dead ahead would fail here. Both builds read the same figures: 52/58,
+      // 60/60 and 47/60 at the three grids.
+      const floor = FAR_BAND.floors[grid.name];
+      const { hit, shots, rams } = sweep(build, grid, FAR_BAND);
+      assert.ok(
+        shots >= FAR_BAND.minShots,
+        `only ${shots} of 60 engagements resolved, ${rams} were rams`
+      );
+      assert.ok(
+        hit / shots >= floor,
+        `${FAR_BAND.name} out: ${hit}/${shots} landed, wanted ${Math.round(floor * 100)}%`
+      );
+    });
+
+    test(`${at}: a bolt is retired at the draw distance, not before it`, () => {
+      // The mechanism behind the two checks above, so a regression names the
+      // cause rather than a percentage. Two halves: the life has to outlast the
+      // crossing, and the crossing has to be what ends the flight.
+      const game = emptyRun(build, grid);
+      const s = game.state;
+      const far = s.maxViewZ;
+      const life = volleyLife(build, s);
+
+      // The nearest muzzle of the volley is the one with the furthest to go.
+      const crossing = (far - 1.5) / build.BULLET_SPEED;
+      assert.ok(
+        life > crossing,
+        `a bolt expires after ${life}s with ${crossing}s of crossing to do`
+      );
+
+      // Flown with nothing staged, so the reach is the only thing that can end
+      // it. The frame that carries a bolt across the draw distance is taken in
+      // full before the bolt is dropped, so the deepest it is ever seen at is
+      // one frame's travel past the far edge and no further.
+      stageTarget(s, 0, 0, -far);
+      s.obstacles = [];
+      game.update(FRAME, {}, { SPACE: true });
+      assert.equal(s.bullets.length, 3, 'the trigger raised no volley');
+
+      const travel = build.BULLET_SPEED * FRAME;
+      let deepest = 0;
+      let frames = 0;
+      for (; frames < 400 && s.bullets.length; frames++) {
+        deepest = Math.min(deepest, ...s.bullets.map((b) => b.z));
+        game.update(FRAME, {}, {});
+      }
+      assert.equal(s.bullets.length, 0, `a bolt was still in the air after ${frames} frames`);
+      assert.ok(
+        deepest <= -far,
+        `a bolt got no further than ${deepest.toFixed(1)} of the ${-far} drawn`
+      );
+      assert.ok(
+        deepest >= -far - travel,
+        `a bolt ran to ${deepest.toFixed(1)}, more than a frame past the ${-far} drawn`
+      );
+      // The reach ended the flight, not the clock: the life still had time on it
+      // when the last bolt left the air.
+      assert.ok(
+        frames * FRAME < life,
+        `the ${life}s life ran out in ${frames} frames, so the clock ended the flight`
       );
     });
 
