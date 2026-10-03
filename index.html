@@ -250,6 +250,66 @@ function themePalette(scheme){
 // render is the innermost loop in the program.
 let PALETTE=ANSI256;
 
+// ===== Glyph placement inside a cell =====
+// How a character is positioned in the cell it belongs to, which is what
+// decides how crisp the grid reads at a small font.
+//
+// A cell is a whole number of pixels wide - fitGrid takes the ceiling of the
+// font's advance, because a grid laid out on fractional columns accumulates
+// the fraction across the row and the last column falls off the canvas. So
+// every cell carries the difference between its width and the advance the font
+// actually draws at, and until this was worked out the glyph was drawn hard
+// against the cell's left edge and all of that difference sat on its right.
+//
+// At a comfortable font that is a fraction of a pixel nobody sees. At
+// MIN_FONT_SIZE it is a real share of the cell, and this game spends most of a
+// frame drawing the box characters the tunnel walls are built from - glyphs
+// designed to tile edge to edge. Left-packed, the seam between two of them is
+// the whole of that difference in one gap. Centred, it is half of it on each
+// side, which is the same ink with the break halved.
+//
+// Browser only. The CLI build writes characters into a terminal, which places
+// them in its own cells, so there is nothing here for test/parity.test.mjs to
+// pair with.
+
+/**
+ * How far into its cell a glyph is drawn, in pixels.
+ *
+ * `advance` is the width the font draws the character at, unrounded - the
+ * figure `fitGrid` took the ceiling of to get `cellW`. Half the slack between
+ * them puts the glyph in the middle of its cell.
+ *
+ * Zero for anything that is not a usable pair, which covers the caller that
+ * has no measurement to hand and passes the cell width itself: a glyph as wide
+ * as its cell, or wider, has no slack to share and is drawn where it always
+ * was.
+ */
+function glyphInset(cellW,advance){
+  if(!(advance>0)||!(cellW>0)||advance>=cellW)return 0;
+  return (cellW-advance)/2;
+}
+
+/**
+ * Ask a canvas context to draw text at exact positions rather than hinted ones.
+ *
+ * `geometricPrecision` is what makes the centring above worth having. Left to
+ * itself a canvas rounds a glyph's position and its advance to whole pixels,
+ * which snaps the inset straight back to zero and puts the grid back where it
+ * started; this turns that rounding off and takes the fractional position as
+ * given. Kerning is off because every cell is drawn on its own - there is no
+ * pair of characters for a kerning table to have an opinion about - so the
+ * lookup is work with nothing to show for it.
+ *
+ * Both are set behind a capability check and neither has a fallback, because
+ * neither has anything to fall back to: a context without them draws the grid
+ * exactly as this build drew it before, which is legible and simply less crisp.
+ */
+function tuneText(ctx){
+  if(!ctx)return;
+  if('textRendering' in ctx)ctx.textRendering='geometricPrecision';
+  if('fontKerning' in ctx)ctx.fontKerning='none';
+}
+
 // ===== ScreenBuffer (canvas-backed) =====
 class ScreenBuffer{
   constructor(w,h){this.resize(w,h)}
@@ -283,9 +343,16 @@ class ScreenBuffer{
   vLine(x,y,len,ch,fgColor,bgColor=0){
     for(let i=0;i<len;i++)this.put(x,y+i,ch,fgColor,bgColor);
   }
-  render(ctx,cellW,cellH,font){
+  // `advance` is the width the font draws a character at, unrounded. It defaults
+  // to the cell width, which is an inset of zero - a caller with no measurement
+  // to hand gets the left-packed grid this build drew before.
+  render(ctx,cellW,cellH,font,advance=cellW){
     ctx.textBaseline='top';
     ctx.font=font;
+    tuneText(ctx);
+    // One reading for the whole grid: every cell is the same width and the font
+    // is monospace, so the inset cannot vary between two cells of one frame.
+    const inset=glyphInset(cellW,advance);
     for(let y=0;y<this.height;y++){
       for(let x=0;x<this.width;x++){
         const i=y*this.width+x;
@@ -301,7 +368,7 @@ class ScreenBuffer{
         const ch=this.chars[i];
         if(ch!==' '){
           ctx.fillStyle=PALETTE[this.fg[i]]||'#aaaaaa';
-          ctx.fillText(ch,px,py);
+          ctx.fillText(ch,px+inset,py);
         }
       }
     }
@@ -467,6 +534,22 @@ const RAPID_FIRE_INTERVAL=FIRE_INTERVAL/RAPID_FIRE_MULT;
 // same: the scenario is a stress test and the pickup is a reward, and tuning one
 // should not move the other.
 const CHAOS_FIRE_INTERVAL=0.12;
+// Depth units a bolt covers each second. One frame's travel is this times dt.
+const BULLET_SPEED=60;
+// Depth of slack on a bolt's life past the draw distance.
+//
+// The reach itself is the draw distance - updateBullets drops a bolt that has
+// passed state.maxViewZ, because out there is past every target
+// drawEntitiesFar will draw. The slack is what keeps the life from being what
+// ends a flight instead: a bolt is dropped the frame its life runs out, before
+// that frame's contacts are taken, so a life ending on the very frame a bolt
+// crosses the draw distance would retire it with that frame untested and a
+// target parked at the far edge unkillable.
+//
+// One ring's spacing is the figure, and it is more than a frame's travel at
+// every rate the suite walks - ten units at the sixth of a second the slowest
+// one uses.
+const BULLET_LIFE_SLACK=14;
 
 // The three kinds of powerup, in the order a drop draws from.
 const POWERUP_KINDS=['shield','rapid','slow'];
@@ -725,9 +808,16 @@ class Game{
   // come to fire different spreads.
   fireVolley(){
     const s=this.state;
-    s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life:2});
-    s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life:2});
-    s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life:2});
+    // A bolt's reach is the depth the tunnel is drawn to, and the life is sized
+    // from that depth so the timer can never be what ends a flight short of it.
+    // A flat two seconds was what it used to be, which retired a bolt about 120
+    // units out: the tunnel is drawn to 200, so the outer fifth of what the
+    // player could see could not be shot at all, with nothing on screen saying
+    // why. See BULLET_LIFE_SLACK for the slack on the far end.
+    const life=(s.maxViewZ+BULLET_LIFE_SLACK)/BULLET_SPEED;
+    s.bullets.push({x:s.shipX,y:s.shipY,z:-2,life});
+    s.bullets.push({x:s.shipX-0.25,y:s.shipY-0.05,z:-1.5,life});
+    s.bullets.push({x:s.shipX+0.25,y:s.shipY-0.05,z:-1.5,life});
     this.cue('shot');
   }
   update(dt,keys,justPressed){
@@ -1228,10 +1318,25 @@ class Game{
   // survives.
   updateBullets(dt,advance){
     const s=this.state;
-    const travel=60*dt;
+    const travel=BULLET_SPEED*dt;
     const slackCols=shotSlackCols(s.screenWidth);
     for(let i=s.bullets.length-1;i>=0;i--){
       const b=s.bullets[i];
+      // The reach is what the player can see, and this is where that is
+      // enforced. A bolt already out past the draw distance has nothing left to
+      // register against - contacts drops every target drawn beyond it - and
+      // the projection clamps out there, so carrying it on would leave it
+      // frozen at the vanishing point still taking contacts against whatever
+      // shared its column.
+      //
+      // Read before the step rather than after it, so the frame that carried a
+      // bolt across the draw distance is taken in full first. That is the frame
+      // a target parked at the far edge dies on, and dropping the bolt the
+      // moment it crossed would retire it with that frame untested. It also
+      // keeps this exit exclusive with a kill, the way the life check below is:
+      // a bolt retired here never reaches a collision check, so nothing outside
+      // has to guess which of the two spent it.
+      if(b.z<-s.maxViewZ){s.bullets.splice(i,1);continue}
       const fromZ=b.z;
       b.z-=travel;b.life-=dt;
       if(b.life<=0){s.bullets.splice(i,1);continue}
@@ -2034,6 +2139,11 @@ function fitGrid(pxW,pxH,measure){
     const cell=measure(fontSize);
     return {
       fontSize,cellW:cell.w,cellH:cell.h,
+      // Carried through rather than re-measured by the caller, which would have
+      // to know the font size this fitting settled on to ask the right
+      // question. A `measure` that does not report one - a model cell in a
+      // test, say - leaves the cell width standing in, which insets nothing.
+      advance:cell.advance??cell.w,
       cols:max(1,floor(pxW/cell.w)),rows:max(1,floor(pxH/cell.h)),
     };
   };
@@ -2117,6 +2227,32 @@ function overlayVars(grid,viewportH){
   };
 }
 
+/**
+ * Re-seat the game on a fitted grid: the buffer the renderer writes into, the
+ * starfield that is laid out in cells, and the grid the engine lays its own
+ * screens out against. The new buffer comes back for the page to hold.
+ *
+ * Lifted out of handleResize for the reason fitGrid was lifted out of it. What
+ * is left there is the window's business - the canvas, the font string, the CSS
+ * variables - and this is not that. It is the one place a resize reaches into
+ * the run, and so the one place a resize could lose one: a buffer left at the
+ * old size paints a grid the engine is no longer writing for, and a run reset
+ * here would come up as a fresh game the first time the player dragged a window
+ * edge. A terminal cannot be resized below its own grid, so the CLI build has
+ * no equivalent and nothing in test/parity.test.mjs pairs with this.
+ *
+ * Seated whatever `grid.fits` says. The notice is drawn on this same buffer, so
+ * one left at the old size is clipped exactly as the game would be; what the
+ * page does about an unfittable grid is frame()'s decision, and all this has to
+ * do is leave the run standing either way.
+ */
+function seatGrid(game,grid){
+  game.initStars(grid.cols,grid.rows);
+  game.state.screenWidth=grid.cols;
+  game.state.screenHeight=grid.rows;
+  return new ScreenBuffer(grid.cols,grid.rows);
+}
+
 // ===== Touch controls =====
 // A phone has no keyboard, so the browser build grows a thumbstick and two
 // buttons when it finds itself on one. The stick reading is arithmetic and
@@ -2173,6 +2309,145 @@ function stickKeys(dx,dy,radius=STICK_RADIUS){
  */
 function touchFireKey(mode){
   return mode==='playing'?'SPACE':'ENTER';
+}
+
+// ===== Gamepad =====
+// A third way into the same two maps the keyboard and the thumbstick feed, so
+// nothing downstream knows which one a run is being played on. The reading is
+// arithmetic over one navigator.getGamepads() snapshot and lives here where a
+// test can walk it; the polling is down in the page wiring, which is the part
+// that needs a browser.
+//
+// Standard layout only. The Gamepad API reports a `mapping` of 'standard' when
+// the browser recognises the device, and every pad that reports it puts the
+// same control at the same index - so reading by index is reading the layout
+// rather than guessing at a device. A pad that reports anything else is left
+// alone: a wheel or a flight stick mapped by these indices would steer on
+// whatever axis happened to be first, which is worse than not being driveable.
+
+/** Standard-layout button indices this build reads. */
+const PAD_A=0;
+const PAD_B=1;
+const PAD_LEFT_TRIGGER=6;
+const PAD_RIGHT_TRIGGER=7;
+/** Standard-layout axes for the left stick. */
+const PAD_STICK_X=0;
+const PAD_STICK_Y=1;
+
+/**
+ * How far a trigger is pulled before it counts as pressed.
+ *
+ * The face buttons are digital and report 0 or 1, so the figure only matters
+ * for the two triggers, which are analog on every pad that has them. Half way
+ * is where a deliberate pull is clear of a resting finger.
+ */
+const PAD_TRIGGER_PULL=0.5;
+
+/**
+ * Whether one standard-layout button is pressed.
+ *
+ * `value` is the analog reading and `pressed` the digital one, and a pad
+ * carries both. The analog figure is preferred where there is one, because a
+ * trigger's `pressed` is a threshold the driver chose rather than the one this
+ * game wants; `pressed` is the fallback for a button resting at zero, which is
+ * every face button that is not being held.
+ */
+function padPressed(button,pull=PAD_TRIGGER_PULL){
+  if(!button)return false;
+  if(typeof button==='number')return button>=pull;
+  if(typeof button.value==='number'&&button.value>0)return button.value>=pull;
+  return !!button.pressed;
+}
+
+/**
+ * The keys a gamepad snapshot is holding down, in the names the engine reads.
+ *
+ * Steering goes through stickKeys at a radius of 1, which is the whole throw of
+ * a gamepad axis. That is reuse rather than coincidence: the deadzone and the
+ * eight even sectors are how this game has already decided a stick should read,
+ * and giving the pad its own copy would let a thumb on glass and a thumb on a
+ * controller drift apart under one tuning change. A pad's own vertical sign
+ * already matches the screen's - pushing up reads negative in both - so no
+ * flip is wanted on the way through.
+ *
+ * `mode` picks what the A button sends, through the same touchFireKey the
+ * on-screen FIRE button asks: the trigger during a run, and the confirm key on
+ * the title screen, the debug menu and the game over screen, none of which the
+ * engine lets past without an ENTER.
+ *
+ * Both keys are named in the result whichever mode it is, so a caller releasing
+ * what a snapshot is not holding has the other one to release.
+ */
+function padKeys(pad,mode){
+  const out={
+    LEFT:false,RIGHT:false,UP:false,DOWN:false,
+    SPACE:false,ENTER:false,F:false,Q:false,E:false,
+  };
+  if(!pad||pad.mapping!=='standard')return out;
+
+  const axes=pad.axes||[];
+  const steer=stickKeys(axes[PAD_STICK_X]||0,axes[PAD_STICK_Y]||0,1);
+  out.LEFT=steer.LEFT;
+  out.RIGHT=steer.RIGHT;
+  out.UP=steer.UP;
+  out.DOWN=steer.DOWN;
+
+  const buttons=pad.buttons||[];
+  out[touchFireKey(mode)]=padPressed(buttons[PAD_A]);
+  out.F=padPressed(buttons[PAD_B]);
+  out.Q=padPressed(buttons[PAD_LEFT_TRIGGER]);
+  out.E=padPressed(buttons[PAD_RIGHT_TRIGGER]);
+  return out;
+}
+
+/** Every key padKeys can report, for a caller that has to release them. */
+const PAD_CONTROL_KEYS=Object.keys(padKeys(null,'menu'));
+
+/**
+ * The key the A button is sending, resolved when it went down and held until it
+ * comes up.
+ *
+ * `padKeys` reads A against the mode of the frame it was polled on, and the
+ * mode changes under a button nobody moved. A run ending with fire held is the
+ * case that matters: the poll after the death reads the same unmoved button as
+ * the ENTER the game over screen waits on, so the screen is confirmed a frame
+ * after it appears and the score is never there to read. Measured on a seeded
+ * flight with A held throughout, the run died on frame 2089 with 8425 points
+ * and was already back at zero on frame 2090.
+ *
+ * `holdButton` has never had that problem, because it resolves the on-screen
+ * FIRE button's key once, at the pointerdown, and holds it to the release. This
+ * is the same rule for a button that is polled rather than listened to, and it
+ * errs the same way: a hold carried across a mode change sends the key it was
+ * pressed for, so the next thing has to be pressed for rather than fallen into.
+ *
+ * `was` is the key the previous poll settled on, or null for an A button that
+ * was up. The answer is null while it stays up.
+ */
+function padFireKey(held,was){
+  if(!held.SPACE&&!held.ENTER)return null;
+  if(was==='SPACE'||was==='ENTER')return was;
+  return held.SPACE?'SPACE':'ENTER';
+}
+
+/**
+ * One reading from however many pads are plugged in, held keys OR-ed together.
+ *
+ * Merged rather than picking a pad, because which entry of
+ * navigator.getGamepads() a given controller lands in is not the player's
+ * business: a browser leaves gaps in that array, fills a different slot after a
+ * reconnect, and some drivers report one physical pad twice. OR-ing means any
+ * pad drives the game and a second one plugged in beside it does no harm.
+ */
+function padsKeys(pads,mode){
+  const out={};
+  for(const k of PAD_CONTROL_KEYS)out[k]=false;
+  for(const pad of pads||[]){
+    if(!pad||pad.connected===false)continue;
+    const held=padKeys(pad,mode);
+    for(const k of PAD_CONTROL_KEYS)if(held[k])out[k]=true;
+  }
+  return out;
 }
 
 // ===== Sound (Web Audio) =====
@@ -2299,14 +2574,24 @@ const ctx=canvas.getContext('2d');
 
 const fontOf=(size)=>`${size}px 'Courier New', 'Consolas', monospace`;
 
-/** The cell a given font size draws, measured off the canvas it is drawn on. */
+/**
+ * The cell a given font size draws, measured off the canvas it is drawn on.
+ *
+ * `advance` is the unrounded width, kept beside the cell it was ceiled into
+ * because that is where the two can be compared: the difference between them is
+ * the slack `glyphInset` centres the glyph in. Measured with the same tuning
+ * the grid is drawn under, or the figure would be the hinted width while the
+ * drawing used the precise one.
+ */
 function measureCell(size){
   ctx.font=fontOf(size);
-  return {w:max(1,ceil(ctx.measureText('M').width)),h:size+CELL_LEADING};
+  tuneText(ctx);
+  const advance=ctx.measureText('M').width;
+  return {w:max(1,ceil(advance)),h:size+CELL_LEADING,advance};
 }
 
 let FONT=fontOf(FONT_SIZE);
-let cellW,cellH;
+let cellW,cellH,cellAdvance;
 let termWidth,termHeight;
 /** Whether the window can hold the grid the game is laid out for. */
 let gridFits=true;
@@ -2320,13 +2605,13 @@ function handleResize(){
   FONT=fontOf(grid.fontSize);
   cellW=grid.cellW;
   cellH=grid.cellH;
+  cellAdvance=grid.advance;
   gridFits=grid.fits;
   termWidth=grid.cols;
   termHeight=grid.rows;
-  screen=new ScreenBuffer(termWidth,termHeight);
-  game.initStars(termWidth,termHeight);
-  game.state.screenWidth=termWidth;
-  game.state.screenHeight=termHeight;
+  // Everything the resize does to the run, in one call above the DOM marker
+  // where the suite can reach it. Nothing about a run is touched down here.
+  screen=seatGrid(game,grid);
   // What the touch overlay anchors to and is sized against. Both figures, and
   // which property each belongs to, are overlayVars above the DOM marker where
   // the suite can reach them; these lines only hand the map to the CSS, which
@@ -2409,6 +2694,54 @@ window.addEventListener('keyup',e=>{
   const k=mapKey(e);
   if(k){e.preventDefault();keys[k]=false}
 });
+
+// ===== Gamepad, wired to the page =====
+// The Gamepad API has no events for buttons, only a snapshot asked for on
+// demand, so this is polled once a frame rather than listened to.
+
+/**
+ * What the pads were holding on the previous poll.
+ *
+ * Kept so the poll can release what it pressed and nothing else. A pad reports
+ * every key it is not holding as up, and feeding those straight through would
+ * have a resting controller clearing the keyboard's keys sixty times a second -
+ * a pad plugged in and left alone would make the game unplayable. So a key is
+ * only released here if this is the thing that pressed it.
+ *
+ * A key held on the keyboard and the pad at once is the one case that reads
+ * oddly: letting go of the pad lifts it while the keyboard still has it down,
+ * because a held key sends no second keydown to put it back. Playing with a
+ * hand on each is already an unusual way to hold the game, and the alternative
+ * is a pad that cannot release anything the keyboard ever touched.
+ */
+let padWasHeld=null;
+
+/** The key the A button went down on, held until it comes up. */
+let padFire=null;
+
+function pollGamepads(){
+  if(typeof navigator?.getGamepads!=='function')return;
+
+  const held=padsKeys(navigator.getGamepads(),game.state.mode);
+  // A fire key is the press's, not the frame's - see padFireKey for the mode
+  // change that reads an unmoved button as a different key. Written back into
+  // the reading so the release below is the release of what was pressed.
+  padFire=padFireKey(held,padFire);
+  held.SPACE=padFire==='SPACE';
+  held.ENTER=padFire==='ENTER';
+
+  for(const k of PAD_CONTROL_KEYS){
+    if(held[k]){
+      // The first press is also the gesture a browser wants before it will let
+      // a page make a sound, the way a keydown and a touch are.
+      if(!padWasHeld?.[k])audio.resume();
+      setKey(k,true);
+    }else if(padWasHeld?.[k]){
+      setKey(k,false);
+    }
+  }
+  padWasHeld=held;
+}
 
 // ===== Touch controls, wired to the page =====
 // The on-screen stick and buttons feed the same two maps the keyboard does, so
@@ -2551,6 +2884,12 @@ function frame(now){
 
   const dt=min(FRAME_MS/1000,0.05);
 
+  // The pad has no events to listen for, so its keys are read here. Above the
+  // notice branch below, because the keyboard's listeners fire whatever the
+  // window size is and a pad that stopped reporting under the floor would come
+  // back with keys still held from before the resize.
+  pollGamepads();
+
   // The window cannot hold the grid even at the smallest font, so it gets the
   // notice and nothing else - as the CLI build does in a terminal too small
   // for it. The run is left exactly where it stood: resizing back brings the
@@ -2567,7 +2906,7 @@ function frame(now){
     ctx.fillStyle=THEME_BG[scheme];
     ctx.fillRect(0,0,canvas.width,canvas.height);
     renderTooSmall(screen);
-    screen.render(ctx,cellW,cellH,FONT);
+    screen.render(ctx,cellW,cellH,FONT,cellAdvance);
     for(const k of Object.keys(justPressed))delete justPressed[k];
     return;
   }
@@ -2616,7 +2955,7 @@ function frame(now){
   const shake=shakeOffset(game.state);
   ctx.save();
   ctx.translate(shake.x,shake.y);
-  screen.render(ctx,cellW,cellH,FONT);
+  screen.render(ctx,cellW,cellH,FONT,cellAdvance);
   ctx.restore();
 
   // Clear justPressed

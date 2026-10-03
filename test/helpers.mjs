@@ -27,15 +27,20 @@ const EXPORTS = [
   'BASE_SPEED_START', 'SHAKE_PIXELS', 'BEST_SCORE_KEY', 'CRT_KEY',
   'ROLL_TIME', 'ROLL_COOLDOWN', 'COMBO_TIME', 'COMBO_MAX',
   'SHOT_SLACK_COLS', 'SLACK_REF_WIDTH', 'shotSlackCols',
-  'fitGrid', 'renderTooSmall', 'footerBandPx', 'playBandPx', 'overlayVars',
+  'fitGrid', 'renderTooSmall', 'footerBandPx', 'playBandPx', 'overlayVars', 'seatGrid',
+  'glyphInset', 'tuneText',
   'MIN_WIDTH', 'MIN_HEIGHT', 'FONT_SIZE', 'MIN_FONT_SIZE', 'CELL_LEADING',
   'WARP_INTERVAL', 'WARP_FLASH_TIME', 'warpWallColor',
   'POWERUP_DROP_CHANCE', 'POWERUP_DRIFT', 'POWERUP_SHIELD_GAIN',
   'POWERUP_KINDS', 'POWERUP_GLYPHS', 'powerupBadges',
   'FIRE_INTERVAL', 'RAPID_FIRE_MULT', 'RAPID_FIRE_INTERVAL', 'RAPID_FIRE_TIME',
+  'BULLET_SPEED', 'BULLET_LIFE_SLACK',
   'SLOW_MOTION_TIME', 'SLOW_MOTION_SCALE',
   'ANSI256', 'LIGHT_INK', 'THEME_BG', 'themePalette',
   'stickKeys', 'touchFireKey', 'STICK_RADIUS', 'STICK_DEADZONE', 'STICK_AXIS_SHARE',
+  'padKeys', 'padsKeys', 'padPressed', 'padFireKey', 'PAD_CONTROL_KEYS', 'PAD_TRIGGER_PULL',
+  'PAD_A', 'PAD_B', 'PAD_LEFT_TRIGGER', 'PAD_RIGHT_TRIGGER',
+  'PAD_STICK_X', 'PAD_STICK_Y',
 ];
 
 /** In-memory stand-in for window.localStorage. */

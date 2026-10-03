@@ -208,6 +208,247 @@ test('a drag on the controls cannot scroll or zoom the page', () => {
   assert.match(html, /#stick,#fire,#boost\{[^}]*touch-action:none/s);
 });
 
+// ----- The gamepad -----
+//
+// The third way into the two key maps, after the keyboard and the thumbstick,
+// and the only one with no events to listen for: the Gamepad API hands out a
+// snapshot when asked and nothing else, so the page polls it once a frame.
+//
+// Checked at the same seam the thumbstick is. `padKeys` is arithmetic over one
+// snapshot and sits above the `// ===== Canvas Setup & Sizing =====` marker;
+// the polling is below it, where nothing in this suite can reach, so what the
+// poll does is read off the page as source.
+
+/** A standard-layout snapshot: two left-stick axes and the eight buttons read. */
+function padSnapshot({ x = 0, y = 0, a = 0, b = 0, lt = 0, rt = 0, mapping = 'standard' } = {}) {
+  const buttons = [a, 0, 0, 0, 0, 0, lt, rt].map((value) => ({ value, pressed: value >= 0.5 }));
+  buttons[1] = { value: b, pressed: b >= 0.5 };
+  return { mapping, connected: true, axes: [x, y], buttons };
+}
+
+/** The keys a snapshot holds, as a sorted name, so a reading reads as one. */
+function heldNames(held) {
+  return Object.keys(held).filter((k) => held[k]).sort().join('+');
+}
+
+test('a pad at rest holds nothing', () => {
+  assert.equal(heldNames(browser.padKeys(padSnapshot(), 'playing')), '');
+});
+
+test('the left stick steers, on the keys the ship is steered by', () => {
+  // The engine reads A/LEFT, D/RIGHT, W/UP and S/DOWN, so the arrow names are
+  // what a pad has to produce for the ship to move at all.
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ x: -1 }), 'playing')), 'LEFT');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ x: 1 }), 'playing')), 'RIGHT');
+  // A pad's vertical axis reads negative pushed up, which is the same sign the
+  // page's own y runs in - so the stick and the thumbstick need no flip
+  // between them.
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ y: -1 }), 'playing')), 'UP');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ y: 1 }), 'playing')), 'DOWN');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ x: 1, y: -1 }), 'playing')), 'RIGHT+UP');
+});
+
+test('the stick reads by the same rule the thumbstick does', () => {
+  // Reuse stated as the invariant: a pad axis pair is a push at a radius of 1,
+  // and it has to come out of padKeys as the same four keys stickKeys gives
+  // that push. One tuning governs a thumb on glass and a thumb on a controller,
+  // and a change to STICK_DEADZONE or STICK_AXIS_SHARE moves both or neither.
+  for (let deg = 0; deg < 360; deg += 3) {
+    for (const throwAt of [0.2, 0.31, 0.6, 1]) {
+      const rad = (deg * Math.PI) / 180;
+      const x = Math.cos(rad) * throwAt;
+      const y = Math.sin(rad) * throwAt;
+      const steer = browser.stickKeys(x, y, 1);
+      const held = browser.padKeys(padSnapshot({ x, y }), 'playing');
+      const at = `${deg} degrees at ${throwAt}`;
+      for (const k of ['LEFT', 'RIGHT', 'UP', 'DOWN']) {
+        assert.equal(held[k], steer[k], `${at}: ${k}`);
+      }
+    }
+  }
+});
+
+test('a stick inside the dead zone steers nowhere', () => {
+  const inside = browser.STICK_DEADZONE * 0.9;
+  for (const [x, y] of [[inside, 0], [-inside, 0], [0, inside], [0, -inside]]) {
+    assert.equal(heldNames(browser.padKeys(padSnapshot({ x, y }), 'playing')), '', `${x},${y}`);
+  }
+  const outside = browser.STICK_DEADZONE * 1.1;
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ x: -outside }), 'playing')), 'LEFT');
+});
+
+test('A fires in a run and confirms everywhere else', () => {
+  // The same reading the on-screen FIRE button takes, and taken through the
+  // same function: the title screen, the debug menu and the game over screen
+  // all wait on an ENTER the pad has no other way to send.
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ a: 1 }), 'playing')), 'SPACE');
+  for (const mode of ['menu', 'dead', 'debugMenu']) {
+    assert.equal(heldNames(browser.padKeys(padSnapshot({ a: 1 }), mode)), 'ENTER', mode);
+  }
+});
+
+test('B boosts and the two triggers roll either way', () => {
+  // F is the boost the engine reads, and Q and E are the two directions of the
+  // barrel roll - left trigger rolls left, as the hands are already arranged.
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ b: 1 }), 'playing')), 'F');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ lt: 1 }), 'playing')), 'Q');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ rt: 1 }), 'playing')), 'E');
+  assert.equal(
+    heldNames(browser.padKeys(padSnapshot({ x: -1, a: 1, b: 1, rt: 1 }), 'playing')),
+    'E+F+LEFT+SPACE',
+    'a full handful should all come through at once'
+  );
+});
+
+test('a trigger has to be pulled, not brushed', () => {
+  // The triggers are the only analog buttons on a pad, and a resting finger
+  // reports a few percent. The face buttons are digital either way.
+  const pull = browser.PAD_TRIGGER_PULL;
+  assert.equal(browser.padPressed({ value: pull * 0.9, pressed: false }), false);
+  assert.equal(browser.padPressed({ value: pull, pressed: false }), true);
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ lt: pull * 0.9 }), 'playing')), '');
+  assert.equal(heldNames(browser.padKeys(padSnapshot({ lt: pull }), 'playing')), 'Q');
+});
+
+test('a button resting at zero is read by its pressed flag', () => {
+  // Some drivers report a face button with no analog figure at all. The flag is
+  // the fallback, and it has to be read or those pads press nothing.
+  assert.equal(browser.padPressed({ value: 0, pressed: true }), true);
+  assert.equal(browser.padPressed({ value: 0, pressed: false }), false);
+  assert.equal(browser.padPressed(undefined), false);
+  assert.equal(browser.padPressed(null), false);
+});
+
+test('a pad that is not standard layout drives nothing', () => {
+  // The indices are the standard layout, not a guess at a device. A wheel or a
+  // flight stick read by them would steer on whatever axis came first, which is
+  // worse for the player than a controller the game ignores.
+  const live = padSnapshot({ x: -1, a: 1, b: 1, lt: 1, rt: 1 });
+  assert.notEqual(heldNames(browser.padKeys(live, 'playing')), '', 'the snapshot should hold keys');
+  for (const mapping of ['', undefined, 'none']) {
+    const odd = { ...live, mapping };
+    assert.equal(heldNames(browser.padKeys(odd, 'playing')), '', `mapping ${String(mapping)}`);
+  }
+});
+
+test('no pad, or an empty slot, holds nothing', () => {
+  // navigator.getGamepads() returns a fixed-length array with nulls in the
+  // slots nothing is plugged into, so the nulls arrive here on every poll.
+  assert.equal(heldNames(browser.padKeys(null, 'playing')), '');
+  assert.equal(heldNames(browser.padsKeys([null, null, null, null], 'playing')), '');
+  assert.equal(heldNames(browser.padsKeys(null, 'playing')), '');
+  assert.equal(heldNames(browser.padsKeys([], 'playing')), '');
+});
+
+test('every pad plugged in can drive, and a disconnected one cannot', () => {
+  // Which slot a controller lands in is not the player's business: a browser
+  // leaves gaps, fills a different slot after a reconnect, and some drivers
+  // report one physical pad twice. So the slots are OR-ed rather than chosen
+  // between.
+  const pads = [null, padSnapshot({ x: -1 }), null, padSnapshot({ a: 1 })];
+  assert.equal(heldNames(browser.padsKeys(pads, 'playing')), 'LEFT+SPACE');
+
+  const gone = [{ ...padSnapshot({ x: 1, a: 1 }), connected: false }, padSnapshot({ b: 1 })];
+  assert.equal(
+    heldNames(browser.padsKeys(gone, 'playing')), 'F',
+    'a pad that has been unplugged should not still be holding its last reading'
+  );
+});
+
+test('the keys a pad can hold are all keys the engine reads', () => {
+  // A name this map produces that nothing downstream looks at is a control that
+  // silently does nothing, and the engine is the only thing that says which
+  // names those are. Read out of the compiled engine rather than listed again.
+  const engine = readFileSync(join(REPO_ROOT, 'src', 'game.ts'), 'utf8');
+  for (const k of browser.PAD_CONTROL_KEYS) {
+    assert.ok(
+      engine.includes(`keys['${k}']`) || engine.includes(`justPressed['${k}']`),
+      `${k} is held by the pad but read nowhere in the engine`
+    );
+  }
+});
+
+test('the A button keeps the key it went down on until it comes up', () => {
+  // `padKeys` reads A against the mode of the frame it was polled on, so a mode
+  // change under a button nobody moved used to turn a hold into a fresh press
+  // of a different key. The run ending is the case that mattered: fire held
+  // through a death came back as the ENTER the game over screen waits on, and
+  // on a seeded flight with A held throughout the run died on frame 2089 with
+  // 8425 points and was already back at zero on frame 2090 - a game over screen
+  // that stood for one frame and a score nobody could read.
+  //
+  // Held either way round, because the title screen is the same change in
+  // reverse: A pressed to launch a run must not become the trigger halfway
+  // through its own press.
+  const playing = browser.padsKeys([padSnapshot({ a: 1 })], 'playing');
+  const dead = browser.padsKeys([padSnapshot({ a: 1 })], 'dead');
+  assert.equal(browser.padFireKey(playing, null), 'SPACE', 'a press in a run fires');
+  assert.equal(browser.padFireKey(dead, 'SPACE'), 'SPACE', 'and stays the trigger past the death');
+  assert.equal(browser.padFireKey(dead, null), 'ENTER', 'a press on the game over screen confirms');
+  assert.equal(browser.padFireKey(playing, 'ENTER'), 'ENTER', 'and stays the confirm into the run');
+});
+
+test('a released A button resolves afresh on its next press', () => {
+  // The hold is the press's key, not the pad's forever. Letting go has to clear
+  // it or a pad that launched a run could never fire in it.
+  const up = browser.padsKeys([padSnapshot()], 'playing');
+  assert.equal(browser.padFireKey(up, 'ENTER'), null, 'an A button that is up holds nothing');
+  assert.equal(browser.padFireKey(up, null), null);
+
+  const playing = browser.padsKeys([padSnapshot({ a: 1 })], 'playing');
+  assert.equal(browser.padFireKey(playing, null), 'SPACE', 'the next press reads the mode again');
+});
+
+test('the fire hold leaves the rest of the pad alone', () => {
+  // Only A is resolved against the mode, so only A is held across one. The
+  // stick, the boost and the two triggers send the same key in every mode and
+  // have nothing to carry.
+  const full = browser.padsKeys([padSnapshot({ x: -1, b: 1, lt: 1 })], 'playing');
+  const before = heldNames(full);
+  browser.padFireKey(full, 'ENTER');
+  assert.equal(heldNames(full), before, 'resolving the fire key should read, not write');
+  assert.equal(before, 'F+LEFT+Q');
+});
+
+test('the page polls the pad once a frame and releases only what it pressed', () => {
+  // The polling sits below the DOM marker, so it is read as source the way the
+  // notice branch is in menu-layout.test.mjs. Three things have to hold, and
+  // the middle one is the whole reason the previous reading is kept: a pad
+  // reports every key it is not holding as up, so feeding those straight
+  // through would have a controller sitting on a desk clearing the keyboard's
+  // keys sixty times a second.
+  assert.match(html, /\n  pollGamepads\(\);/, 'frame() should poll the pad');
+  const start = html.indexOf('function pollGamepads(){');
+  assert.ok(start > 0, 'the page should have a poll');
+  const body = html.slice(start, html.indexOf('\n}', start));
+
+  assert.ok(body.includes('padWasHeld'), 'the poll should remember what it was holding');
+  assert.ok(
+    /else if\(padWasHeld\?\.\[k\]\)\{\s*setKey\(k,false\)/.test(body),
+    'and release a key only where it was the thing holding it'
+  );
+  assert.ok(body.includes('setKey(k,true)'), 'the poll should press through setKey');
+  assert.ok(body.includes('audio.resume()'), 'a first press is the gesture a sound needs');
+
+  // And the fire key is resolved through the hold rather than taken from the
+  // frame's own reading, which is the half of it the unit checks above cannot
+  // see: they pin the function, and this pins the poll using it.
+  assert.ok(
+    body.includes('padFireKey(held,padFire)'),
+    'the poll should hold the fire key the press resolved'
+  );
+  assert.ok(
+    body.includes("held.SPACE=padFire==='SPACE'") && body.includes("held.ENTER=padFire==='ENTER'"),
+    'and write it back, so the release is the release of what was pressed'
+  );
+
+  // Polled before the branch that draws the too-small notice, so a pad behaves
+  // like the keyboard, whose listeners fire whatever the window size is.
+  const poll = html.indexOf('\n  pollGamepads();');
+  const notice = html.indexOf('if(!gridFits){');
+  assert.ok(poll < notice, 'the poll should come before the notice branch returns');
+});
+
 // ----- Where the controls sit -----
 //
 // The overlay is laid out in CSS and the grid underneath it is laid out by

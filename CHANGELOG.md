@@ -1,5 +1,141 @@
 # Changelog
 
+## [0.8.0-alpha] - 2026-10-03
+
+### Added
+
+- A standard-layout gamepad is the browser build's third way in, beside the
+  keyboard and the touch controls. The left stick steers, `A` fires during a run
+  and confirms everywhere else, `B` boosts, and the two triggers roll left and
+  right. It feeds the same two key maps the other two feed, so nothing
+  downstream knows which one is flying a run.
+
+  Read by position in the standard layout, and only from a pad that reports
+  that layout: a wheel or a flight stick read by the same indices would steer on
+  whatever axis happened to come first, which is worse for the player than a
+  controller the game ignores. The stick goes through the on-screen
+  thumbstick's own reading at a radius of 1, so one dead zone and one set of
+  eight even sectors govern a thumb on glass and a thumb on a controller, and a
+  change to either tuning moves both or neither. `A` picks its key through the
+  same function the on-screen `FIRE` button asks, because the title screen, the
+  debug menu and the game over screen all wait on an `ENTER` a pad has no other
+  way to send.
+
+  Polled once a frame rather than listened to, since the Gamepad API has no
+  button events - it hands out a snapshot when asked and nothing else. The poll
+  releases only the keys it pressed: a controller reports everything it is not
+  holding as up, and feeding those straight through would have a pad left on a
+  desk clearing the keyboard's keys sixty times a second. Every slot is read
+  together rather than one being chosen, because which slot a controller lands
+  in is not the player's business - browsers leave gaps, fill a different slot
+  after a reconnect, and some drivers report one physical pad twice.
+
+  `A` also keeps the key it went down on until it comes up, which a poll needs
+  and a listener does not: the mode it reads against changes under a button
+  nobody moved. A run ending with fire held was the case that mattered - the
+  poll after the death read the same unmoved button as the `ENTER` the game over
+  screen waits on, so the screen was confirmed one frame after it appeared and
+  the score was never there to read. On a flight with `A` held throughout, the
+  run died on frame 2089 with 8425 points and was already back at zero on frame
+  2090. `holdButton` has never had the problem, because it resolves the
+  on-screen `FIRE` button's key once at the pointerdown and holds it to the
+  release, and this is the same rule for a button that is polled. It errs the
+  same way too: a hold carried across a mode change sends the key it was pressed
+  for, so the next thing has to be pressed for rather than fallen into.
+
+  Verified in a chromium window against a stubbed `navigator.getGamepads`: the
+  stick moved the ship and let go of it, `A` raised a volley of three, `B` set
+  the boost and cleared it, the left trigger rolled to `rollDir -1`, and a `D`
+  held on the keyboard survived a resting pad.
+
+### Changed
+
+- A bolt now reaches the whole depth the tunnel is drawn to. Its life was a flat
+  two seconds and it travels sixty units a second, so about 120 units of travel
+  plus whatever the target closed in that time put the furthest reach a little
+  over 150; `maxViewZ` is 200. Flown dead ahead at every ten units from 30, this
+  landed to 170 and missed from 180 up at 80x24 in both builds - the outer fifth
+  of what the player could see, with nothing on screen saying why.
+
+  The life is read off the draw distance now rather than written down as a
+  figure, so the two cannot drift apart again, and the reach itself is enforced
+  where it belongs: `updateBullets` retires a bolt that was already out past
+  `maxViewZ` when the frame opened. Out there it has nothing left to register
+  against - `contacts` drops every target drawn beyond that depth - and the
+  projection clamps, so carrying it on would leave it frozen at the vanishing
+  point still taking contacts against whatever shared its column. Read before
+  the step rather than after it, so the frame that carried a bolt across is
+  taken in full first: that is the frame a target parked at the far edge dies
+  on. It also keeps the exit exclusive with a kill, which is what lets the free
+  flight tell a bolt that was spent from one that simply ran out of reach.
+
+  Every range from 30 to 200 now lands dead ahead, single shot and volley, in
+  both builds at all three grids. The placement walk out at 140 to 200 lands
+  52/58, 60/60 and 47/60 with the volley, which is the band pinned beside the
+  existing ones in `test/pulse-cannon.test.mjs`.
+
+- Characters are drawn centred in their cells rather than packed against the
+  left edge. A cell is a whole number of pixels wide, because a grid laid out on
+  fractional columns accumulates the fraction across the row and loses its last
+  column off the canvas, so every cell carries the difference between its width
+  and the advance the font draws at - all of which used to sit in one gap on the
+  glyph's right. Measured live at font 16 the advance is 9.60 in a 10-pixel
+  cell, and at the small end 6.60 in a 7-pixel cell: a fifth of a pixel either
+  way, which is a real share of a cell at `MIN_FONT_SIZE` and matters most to
+  the box characters the tunnel walls are built from, since those are drawn to
+  tile edge to edge. Centred, the seam between two of them is halved.
+
+  The canvas is asked for `geometricPrecision` text and no kerning, which is
+  what makes the centring worth having: left to itself a canvas rounds both a
+  glyph's position and its advance to whole pixels, snapping the inset back to
+  zero. The cell is measured under the same tuning it is drawn under, or the
+  figure would be the hinted width while the drawing used the precise one. Both
+  properties are set behind a capability check and neither has a fallback,
+  because neither has anything to fall back to: a context without them draws the
+  grid exactly as this build drew it before.
+
+### Fixed
+
+- The free flight's kill pairing read a contact as a tracer nothing drew when
+  the frame's two ends had failed for opposite reasons. `unlit` says a block was
+  drawn with no tracer on it and `hidden` says there was no block drawn to read,
+  and one of each means both halves of the pair were drawn during the frame and
+  never in the same reading - out at the far end of the tunnel, where a frame's
+  travel is worth several rows, a tracer can climb out of the play area as the
+  block it met comes up into it. The contact the sweep took sits on a step
+  between the two ends, so neither end speaks for it; the ranking preferred
+  `unlit` and reported the frame as a kill with no bolt behind it. It abstains
+  now, which is what `hidden` already meant for a shot raised inside the frame
+  that resolved it.
+
+### Internal
+
+- The page's re-seating of a run on a new grid is a function of its own,
+  `seatGrid`, lifted out of `handleResize` the way `fitGrid` already was and
+  exported through `test/helpers.mjs`. What is left in the handler is the
+  window's business - the canvas, the font string, the CSS variables - while the
+  one place a resize reaches into a live run is now somewhere the suite can
+  reach. Both it and the `frame()` branch that draws the too-small notice sat
+  below the `// ===== Canvas Setup & Sizing =====` marker, so a browser was the
+  only thing that had ever checked either.
+
+  Pinned at both ends and across the round trip: re-seating a playing run at a
+  grid under the floor and again at one above it leaves `mode`, `score` and
+  `distance` untouched and leaves the buffer at the new grid's size, the
+  starfield is re-laid inside every grid it is seated on, the handler is read as
+  source to confirm it still routes through the lift, and the notice branch is
+  read to confirm it returns before the run is advanced. Confirmed live in a
+  chromium window: a run at 900x600 taken down to 200x120 and back came up on
+  the same run, score 701 both ways down and `fits` false in between.
+
+  Browser only. A terminal cannot be made smaller than the grid it is showing,
+  so the CLI build has no equivalent and `test/parity.test.mjs` has nothing to
+  pair any of it with.
+
+- `BULLET_SPEED` and `BULLET_LIFE_SLACK` are named constants in both builds, and
+  `test/parity.test.mjs` holds them to the same figures along with the draw
+  distance they are sized against.
+
 ## [0.7.8-alpha] - 2026-10-02
 
 ### Fixed
