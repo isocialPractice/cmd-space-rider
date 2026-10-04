@@ -13,94 +13,101 @@ its origin survives archiving into `## Complete`.
 - [ ] **Replay ghost** — Record the player's inputs during a run. On the next run, show a ghosted version of the previous ship flying the same path. Motivates beating your own performance.
   - From: Bigger Features
 
-### UI/UX Override - what the glyph tuning is recorded as doing
+### UI/UX Override - the inset figures the glyph comment states
 
-- [ ] The test harness restates the bolt speed the engine now names
-  - **Issue**: `BULLET_SPEED` was added to both builds this turn and both now
-    read their travel off it, and `BUILDS` in `test/engagement.mjs:37-56` carries
-    it for each build (`:44` and `:53`) so the harness has it to hand. Three places in that file
-    still write the figure out instead: `const travel = 60 * dt` at
-    `test/engagement.mjs:535`, `:818` and `:1362`. Nothing fails, because 60 is
-    what the constant holds. The cost is that the rebuilt frame these three
-    compute is the thing every reach, band and pairing reading is measured
-    against, so a change to `BULLET_SPEED` leaves the harness measuring the old
-    cannon and the parity check at `test/parity.test.mjs:59` passes while every
-    figure quoted beside it is wrong. The adjacent `advance` lines use a 60 of
-    their own - units per unit of speed, not bullet travel - so the two have to
-    be told apart rather than replaced together.
-  - **Goal**: Read the travel off `build.BULLET_SPEED` at all three sites, the
-    way `volleyLife` already reads the life off `build.BULLET_LIFE_SLACK`, and
-    leave the `advance` 60 alone with a word saying which figure it is.
+#### Resolve Issues
+
+- [ ] Inset Figures 1 - the range and the two zeroes the narrowed comment adds
+  are derived from an advance Courier New does not have
+  - **Issue**: The narrowing itself landed - the `geometricPrecision` mechanism
+    claim is gone from all four places. What it added in its place is a new
+    paragraph in `tuneText`'s doc comment at `index.html:308-313`, repeated in
+    `CHANGELOG.md:30-35`, giving the inset's range and two sizes where it is
+    said to be zero. All three of its figures are wrong, measured in chromium
+    against the page's own `measureCell` at every size `fitGrid` can settle on.
+    Courier New advances at `1229/2048` em, which is `0.6000977`, not at `0.6`
+    em: the measured advance matches `1229/2048 * size` at all eleven sizes to
+    within half a thousandth of a pixel and matches `0.6 * size` at none of
+    them. Because `cellW` is the ceiling of that advance, the four
+    ten-thousandths of an em decide the cell at exactly the two sizes the
+    comment singles out - at font 10 an advance of `6.001` ceils to `7` where
+    `6.000` would ceil to `6`, and at font 15 `9.001` ceils to `10` where
+    `9.000` would ceil to `9`. So the two sizes recorded as having no inset at
+    all carry the largest insets in the range, `0.500px` and `0.499px`, and no
+    size in the range has an inset of zero. The stated range of `0.100px to
+    0.400px` is really `0.099px to 0.500px`. The claim is not merely off; at
+    the two sizes it names it is inverted, and those are the two sizes where
+    the centring does the most good. The bound the same paragraph states - the
+    slack always under a pixel, the inset always half of it and never reaching
+    half a pixel - was checked and holds.
+  - **Goal**: Resolve to [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
   - From: UI/UX Override - what the glyph tuning is recorded as doing
 
 #### Found Issues
 
-- [ ] `tuneText`'s comment credits `geometricPrecision` with work the centring
-  does on its own
-  - **Issue**: The doc comment at `index.html:291-306` says
-    "`geometricPrecision` is what makes the centring above worth having", on the
-    stated ground that "left to itself a canvas rounds a glyph's position and
-    its advance to whole pixels, which snaps the inset straight back to zero".
-    Measured in chromium against the shipped page, it does not. A six-glyph run
-    drawn at the page's own `FONT` and `cellW` came back byte-identical under
-    `textRendering: 'auto'` and under `geometricPrecision` with kerning off, for
-    `░ ▒ ▓ █ ╣ M` at 16px, 8px, 7px and 6px, in both colour schemes - 96
-    comparisons with no pixel column differing by one level. The fractional x is
-    honoured either way, so the centring stands up without the request and the
-    reason given for it is not the engine's behaviour. The centring itself does
-    land: at 7px, where the slack is worst, the darkest column at a junction
-    between two tiling glyphs rose from 192 to 205 for `▒ ▓ █` and 144 to 162
-    for `░`, the one-pixel left overhang went away, and the part-inked columns
-    in a run halved from 14 to 7. Nothing is broken; the comment claims a
-    mechanism the measurement contradicts, which is the kind of claim the next
-    person to touch the renderer would reason from.
-  - **Goal**: Resolve to [tune-text-rationale.prompt.md](.claude/prompts/tune-text-rationale.prompt.md)
-  - From: UI/UX Override - what the glyph tuning is recorded as doing
-- [ ] The same `geometricPrecision` rationale is recorded in three more places
-  - **Issue**: The override above covers the doc comment at `index.html:291-306`
-    and its prompt file says plainly what not to touch, naming
-    `test/menu-layout.test.mjs` under **What not to change**. The claim it
-    corrects is not only there. `CHANGELOG.md:0.8.0-alpha` has "asked for
-    `geometricPrecision` text and no kerning, which is what makes the centring
-    worth having: left to itself a canvas rounds both a glyph's position and its
-    advance to whole pixels, snapping the inset back to zero";
-    `test/menu-layout.test.mjs` opens the test `the grid is drawn with hinted
-    rounding off` with "The centring is only worth having with this set. Left to
-    itself a canvas rounds both a glyph's position and its advance to whole
-    pixels, which snaps the inset back to zero and puts the grid back where it
-    started"; and `docs/how-it-works.html` publishes "the canvas is asked for
-    exact glyph positions rather than hinted ones so the centring survives being
-    drawn". All three are the mechanism the 96 chromium comparisons in the prompt
-    file contradict, and the third is on the public site. Worked as written, the
-    override narrows one of four copies and leaves three standing, one of them in
-    the test whose name asserts it.
-  - **Goal**: Narrow all four together when the prompt file is worked, on the
-    measurement it already carries: keep both settings and both capability
-    checks, and say the fractional x is honoured either way in this engine, so
-    the request is insurance rather than the thing doing the work. The test's
-    assertions are correct and stay - `textRendering`, `fontKerning` and
-    `textBaseline` are all genuinely set; it is the comment above them and the
-    test's name that claim the mechanism.
-  - From: UI/UX Override - what the glyph tuning is recorded as doing
-- [ ] The pad's release rule is recorded as verified by a key the pad cannot hold
-  - **Issue**: `CHANGELOG.md:0.8.0-alpha` closes the gamepad entry with "Verified
-    in a chromium window against a stubbed `navigator.getGamepads`: ... and a `D`
-    held on the keyboard survived a resting pad." `D` is not one of the nine
-    names `PAD_CONTROL_KEYS` holds - the pad steers on `LEFT`, `RIGHT`, `UP` and
-    `DOWN`, and the keyboard reaches those through the arrow keys rather than
-    through `WASD`. So the poll's loop never visits `D` whatever `padWasHeld`
-    says, and that reading would have come back the same with the release rule
-    deleted. The rule itself holds, and is pinned at the seam the suite can reach
-    by `the page polls the pad once a frame and releases only what it pressed` in
-    `test/browser-shell.test.mjs`. What is wrong is the sentence recording how it
-    was checked live, which is what a reader consults when deciding whether the
-    rule still needs watching.
-  - **Goal**: Either re-run that check on a key the pad does reach - an arrow
-    held on the keyboard while a pad rests, which is the collision the rule
-    exists for - and record the result, or narrow the sentence to what the `D`
-    reading can show, which is that the poll does not clear keys outside
-    `PAD_CONTROL_KEYS`.
-  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [ ] "Halves the seam" holds at four of the eleven font sizes, does nothing at
+  four and reverses at three
+  - **Issue**: `docs/how-it-works.html` publishes that centring the glyph
+    "halves the seam between two of the box characters the tunnel walls are
+    built from", and `index.html`'s comment and `CHANGELOG.md` say the same.
+    Measured at the junction between two tiling wall glyphs - the wall is a ring
+    outline two cells thick, so the tunnel holds pairs rather than runs, four of
+    each glyph on screen at every size - by repainting the live buffer twice in
+    one synchronous pass, once through `ScreenBuffer.render` with the page's own
+    `cellAdvance` and once with `advance = cellW`, which is the left-packed grid
+    this replaced. Taking the darkest of the two pixel columns either side of a
+    junction, as a level out of 255: at an inset of 0.5px (fonts 15, 10) it
+    rises 41.7 to 68.7 and the spread across the junction falls 82.3 to 23.3;
+    at 0.4px (fonts 12, 7) it rises 55.3 to 72.0 and the spread falls 68.7 to
+    36.3, which is the halving as described. At 0.3px (fonts 14, 9) the reading
+    is exactly mirrored - 97.0/124.0 becomes 124.0/97.0, the deficit swapping
+    sides with the darkest column and the spread unchanged to a tenth of a
+    level. At 0.1px (fonts 13, 8) nothing moves at all. At 0.2px (fonts 16, 11,
+    6) it goes the wrong way: the darkest column falls 111.7 to 102.0 and the
+    spread widens 12.7 to 31.3, because left-packed was already nearly even
+    there and the inset tips it past centre. Related: there is no gap between
+    two of these glyphs to remove in the first place - of 28 glyph-and-size
+    pairs, 24 ink wider than their cell and four ink exactly it, and `▒ ▓ █`
+    each reach a whole pixel left of the origin they are drawn at, so two
+    adjacent cells overlap. What the inset moves is where the soft edge of that
+    overlap falls. The feature is worth having and the numbers say so - the
+    worst seam in the build is at fonts 15 and 10 and that is where it helps
+    most - but the sentence claims a uniform effect the raster does not show.
+  - **Goal**: Narrow the three copies to what the measurement supports: the
+    centring lifts the seam most where the slack is widest, which is where it
+    was worst, and does nothing or a little harm where the slack is narrow. The
+    figures are in [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
+    and in the `2026-10-04` entry of
+    `test-results/ui-ux-tester.agent/ui-ux-tester.log`. The published sentence
+    is the one that matters most, since it is the only one a visitor reads.
+    Leave `docs/how-it-works.html`'s "a fifth of a pixel nobody sees" alone - at
+    font 16 the inset is 0.199px and that is right.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [ ] A run of block glyphs still inks the column left of its first cell at the
+  two sizes with the smallest inset
+  - **Issue**: `▒`, `▓` and `█` reach a whole pixel left of the origin they are
+    drawn at, at every font size, measured off `actualBoundingBoxLeft`. The
+    inset normally clears it, and at nine of the eleven sizes nothing is drawn
+    left of a run's first cell. At font 13 (inset 0.099px) and font 8 (inset
+    0.100px) a tenth of a pixel is not enough: a run of `█` with an empty cell
+    to its left inks the column left of that cell at level 39 of 255, the same
+    level the left-packed grid put there. It is faint and it is not a
+    regression - the centring neither caused it nor was expected to fix it -
+    but the grid does bleed one column outside the cells it is laid out on at
+    those two sizes, and nothing in the repository says so.
+  - **Goal**: A decision rather than a change, and probably a sentence rather
+    than code. Either record it beside `glyphInset` as a known limit of the
+    placement at the narrow-slack sizes, or floor the inset so it always clears
+    the left bearing - which would cost the centring its symmetry and wants
+    weighing against a defect nobody has reported seeing. Do not change
+    `glyphInset`'s arithmetic without the second decision: the suite pins the
+    two margins being equal, in `the inset never pushes a glyph out of its own
+    cell` in `test/menu-layout.test.mjs`, and a floor would break that
+    deliberately. The open `## Measurement` item above, "A probe for the glyph
+    tuning's own figures", is where this belongs if a browser probe is ever
+    admitted - it is the same question of a figure that only chromium can
+    produce.
+  - From: UI/UX Override - the inset figures the glyph comment states
 
 ### Create and Deploy GitHub Pages Override
 
@@ -150,66 +157,108 @@ ship heights, range band, frame rate - so a figure can be rebuilt from the
 repository alone instead of from scratch files in `.tmp`. Probes report; the
 assertions stay in `test/`.
 
+- [ ] **A probe for the glyph tuning's own figures** - 0.8.1-alpha quotes three
+  sets of numbers that only a scratch script can rebuild: the 96 hinted-against-
+  precise comparisons behind "the fractional position is honoured either way",
+  the inset's 0.100px to 0.400px range with its zeroes at font 10 and 15, and
+  the seam levels in the prompt file that measured the centring landing. The
+  arithmetic half needs no browser and belongs beside the other probes; the
+  rasterizer half needs chromium, which the project has so far declined, so this
+  wants a decision on whether a browser probe lives here at all or whether the
+  figure is quoted with its method and left unrebuildable. The pad release
+  reading from the same version has the same problem - `ArrowLeft` surviving a
+  resting pad was measured against a patched copy of `index.html`, and nothing
+  in the repository reproduces it.
+
 ## Complete
 
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 96 earlier items in `TODO-archive.md`, newest last.
+> 100 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **The functional-pseudo guard is recorded as covering the sheet and covers
-  the selectors a caller names** - `test/page-style.mjs:222` says "a sheet that
-  gains one fails here, where the gap is", and `CHANGELOG.md:63-65` has the throw
-  answering for "the first sheet to gain one".
-  - **Issue**: `specificity` is only ever reached for a selector a caller already
-    listed. `declIn` at `test/docs-site.test.mjs:529` weighs only
-    `rule.selectors.filter((sel) => selectors.includes(sel))` and skips a rule
-    naming nothing in that list, and `declarationsFor` in `test/page-style.mjs`
-    never calls `specificity` at all. So add
-    `.has-sub:not([aria-expanded]) > .sub { display: none }` to
-    `docs/assets/style.css` and the guard never fires: `declIn('narrow', '.sub')`
-    returns exactly what it returns today, a rule that really applies is left out
-    of the fold, and the suite stays green. That is the same silent wrong answer
-    the throw was added to end, reached by a selector no test names rather than by
-    one some test does. The guard is correct for what it covers; the two
-    sentences claim more than it covers.
-  - **Goal**: Either narrow both sentences to what the guard does - a selector a
-    caller weighs, not a sheet - or close the gap so they come true: walk every
-    rule in the sheet once and throw on a functional pseudo-class anywhere in it,
-    the way the breakpoint check already asserts the sheet names no width query it
-    could not place. The second is the stronger of the two and is what this module
-    already does for a length it cannot resolve.
-  - From: Code Review Override - what the specificity resolver is recorded as covering
-- [x] **Shots die short of what the tunnel shows** - A bullet's two second life
-  at 60 units a second gives it about 120 units of travel, and a target closes
-  on it at the run's speed, so the furthest a shot can reach is a little over
-  150 units. The tunnel is drawn to `maxViewZ`, which is 200. Firing straight
-  down the middle at a target parked dead ahead lands at every range from 30 to
-  150 units and misses at every range from 160 up, so the outer fifth of what
-  the player can see cannot be shot at all, with nothing on screen saying why.
-  Decide whether the reach should cover the draw distance - a longer `life`, a
-  faster shot, or a shorter `maxViewZ` - and pin it in `test/pulse-cannon.test.mjs`
-  beside the range bands. Both builds together, as `test/parity.test.mjs` expects.
-  - From: Quick Wins
-- [x] **The page's use of the fitted grid has no check** - `fitGrid` itself is
-  pinned in `test/menu-layout.test.mjs`, but what the page does with it is not:
-  `handleResize` carrying the fitted grid through to the `ScreenBuffer` the
-  renderer writes into, and `frame()` drawing the notice and returning early
-  while the window is under the floor. Both sit below the
-  `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at, so
-  nothing in the suite can reach them, and the browser is the only thing that
-  has ever checked either. Measured in a real chromium window: a run at 900x600
-  taken down to 200x120 and back came up on the same run, score 159 to 189 and
-  distance 18.0 to 21.0, with no title screen in between. Lift the re-seating
-  out of `handleResize` the way `fitGrid` was already lifted out of it - a pure
-  function taking the game and a fitted grid - and export it through
-  `test/helpers.mjs`. Then assert that re-seating a playing run at a grid under
-  the floor and again at one above it leaves `mode`, `score` and `distance`
-  untouched and leaves the buffer at the new grid's size. Browser only: a
-  terminal cannot be smaller than its own grid, so the CLI build has no
-  equivalent and `test/parity.test.mjs` has nothing to pair it with.
-  - From: Quick Wins
-- [x] **Gamepad support (browser)** — Map standard gamepad API inputs: left stick for steering, A button for fire, B for boost, triggers for barrel roll.
-  - From: Polish
 - [x] **Smooth font rendering** — Experiment with subpixel positioning and canvas font smoothing for crisper character rendering at small cell sizes.
   - From: Polish
+- [x] The test harness restates the bolt speed the engine now names
+  - **Issue**: `BULLET_SPEED` was added to both builds this turn and both now
+    read their travel off it, and `BUILDS` in `test/engagement.mjs:37-56` carries
+    it for each build (`:44` and `:53`) so the harness has it to hand. Three places in that file
+    still write the figure out instead: `const travel = 60 * dt` at
+    `test/engagement.mjs:535`, `:818` and `:1362`. Nothing fails, because 60 is
+    what the constant holds. The cost is that the rebuilt frame these three
+    compute is the thing every reach, band and pairing reading is measured
+    against, so a change to `BULLET_SPEED` leaves the harness measuring the old
+    cannon and the parity check at `test/parity.test.mjs:59` passes while every
+    figure quoted beside it is wrong. The adjacent `advance` lines use a 60 of
+    their own - units per unit of speed, not bullet travel - so the two have to
+    be told apart rather than replaced together.
+  - **Goal**: Read the travel off `build.BULLET_SPEED` at all three sites, the
+    way `volleyLife` already reads the life off `build.BULLET_LIFE_SLACK`, and
+    leave the `advance` 60 alone with a word saying which figure it is.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [x] **Inset Figures**: `tuneText`'s comment credits `geometricPrecision` with
+  work the centring does on its own
+  - **Issue**: The doc comment at `index.html:291-306` says
+    "`geometricPrecision` is what makes the centring above worth having", on the
+    stated ground that "left to itself a canvas rounds a glyph's position and
+    its advance to whole pixels, which snaps the inset straight back to zero".
+    Measured in chromium against the shipped page, it does not. A six-glyph run
+    drawn at the page's own `FONT` and `cellW` came back byte-identical under
+    `textRendering: 'auto'` and under `geometricPrecision` with kerning off, for
+    `░ ▒ ▓ █ ╣ M` at 16px, 8px, 7px and 6px, in both colour schemes - 96
+    comparisons with no pixel column differing by one level. The fractional x is
+    honoured either way, so the centring stands up without the request and the
+    reason given for it is not the engine's behaviour. The centring itself does
+    land: at 7px, where the slack is worst, the darkest column at a junction
+    between two tiling glyphs rose from 192 to 205 for `▒ ▓ █` and 144 to 162
+    for `░`, the one-pixel left overhang went away, and the part-inked columns
+    in a run halved from 14 to 7. Nothing is broken; the comment claims a
+    mechanism the measurement contradicts, which is the kind of claim the next
+    person to touch the renderer would reason from.
+  - **Goal**: Resolve to [tune-text-rationale.prompt.md](.claude/prompts/tune-text-rationale.prompt.md)
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [x] The same `geometricPrecision` rationale is recorded in three more places
+  - **Issue**: The override above covers the doc comment at `index.html:291-306`
+    and its prompt file says plainly what not to touch, naming
+    `test/menu-layout.test.mjs` under **What not to change**. The claim it
+    corrects is not only there. `CHANGELOG.md:0.8.0-alpha` has "asked for
+    `geometricPrecision` text and no kerning, which is what makes the centring
+    worth having: left to itself a canvas rounds both a glyph's position and its
+    advance to whole pixels, snapping the inset back to zero";
+    `test/menu-layout.test.mjs` opens the test `the grid is drawn with hinted
+    rounding off` with "The centring is only worth having with this set. Left to
+    itself a canvas rounds both a glyph's position and its advance to whole
+    pixels, which snaps the inset back to zero and puts the grid back where it
+    started"; and `docs/how-it-works.html` publishes "the canvas is asked for
+    exact glyph positions rather than hinted ones so the centring survives being
+    drawn". All three are the mechanism the 96 chromium comparisons in the prompt
+    file contradict, and the third is on the public site. Worked as written, the
+    override narrows one of four copies and leaves three standing, one of them in
+    the test whose name asserts it.
+  - **Goal**: Narrow all four together when the prompt file is worked, on the
+    measurement it already carries: keep both settings and both capability
+    checks, and say the fractional x is honoured either way in this engine, so
+    the request is insurance rather than the thing doing the work. The test's
+    assertions are correct and stay - `textRendering`, `fontKerning` and
+    `textBaseline` are all genuinely set; it is the comment above them and the
+    test's name that claim the mechanism.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [x] The pad's release rule is recorded as verified by a key the pad cannot hold
+  - **Issue**: `CHANGELOG.md:0.8.0-alpha` closes the gamepad entry with "Verified
+    in a chromium window against a stubbed `navigator.getGamepads`: ... and a `D`
+    held on the keyboard survived a resting pad." `D` is not one of the nine
+    names `PAD_CONTROL_KEYS` holds - the pad steers on `LEFT`, `RIGHT`, `UP` and
+    `DOWN`, and the keyboard reaches those through the arrow keys rather than
+    through `WASD`. So the poll's loop never visits `D` whatever `padWasHeld`
+    says, and that reading would have come back the same with the release rule
+    deleted. The rule itself holds, and is pinned at the seam the suite can reach
+    by `the page polls the pad once a frame and releases only what it pressed` in
+    `test/browser-shell.test.mjs`. What is wrong is the sentence recording how it
+    was checked live, which is what a reader consults when deciding whether the
+    rule still needs watching.
+  - **Goal**: Either re-run that check on a key the pad does reach - an arrow
+    held on the keyboard while a pad rests, which is the collision the rule
+    exists for - and record the result, or narrow the sentence to what the `D`
+    reading can show, which is that the poll does not clear keys outside
+    `PAD_CONTROL_KEYS`.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
