@@ -292,17 +292,30 @@ function glyphInset(cellW,advance){
 /**
  * Ask a canvas context to draw text at exact positions rather than hinted ones.
  *
- * `geometricPrecision` is what makes the centring above worth having. Left to
- * itself a canvas rounds a glyph's position and its advance to whole pixels,
- * which snaps the inset straight back to zero and puts the grid back where it
- * started; this turns that rounding off and takes the fractional position as
- * given. Kerning is off because every cell is drawn on its own - there is no
+ * `geometricPrecision` is insurance, not the thing that makes the centring
+ * above work. Measured against this page in chromium, the fractional position
+ * is honoured either way: a six-glyph run drawn at the page's own `FONT` and
+ * `cellW` came back byte-identical under `textRendering: 'auto'` and under
+ * this tuning, for `░ ▒ ▓ █ ╣ M` at 16, 8, 7 and 6 pixels, left-packed and
+ * centred, in both colour schemes - 96 comparisons with no pixel column
+ * differing by one level. The request is kept because an engine that does
+ * round a glyph's position to a whole pixel would snap the inset straight back
+ * to zero, and it costs nothing to ask; it is not what the centring rests on
+ * here. Kerning is off because every cell is drawn on its own - there is no
  * pair of characters for a kerning table to have an opinion about - so the
  * lookup is work with nothing to show for it.
  *
+ * What the centring has to work with is small and bounded. `cellW` is the
+ * ceiling of the advance, so the slack is always under a pixel and the inset,
+ * being half of it, can never reach half a pixel: across the font range it runs
+ * 0.100px to 0.400px. At two sizes it is exactly nothing - Courier New advances
+ * at 0.6 em, so the slack is `ceil(0.6s) - 0.6s`, which is zero at `s = 10`
+ * and `s = 15` - and there a centred row is the left-packed one.
+ *
  * Both are set behind a capability check and neither has a fallback, because
  * neither has anything to fall back to: a context without them draws the grid
- * exactly as this build drew it before, which is legible and simply less crisp.
+ * exactly as this build drew it before, which the measurement above says is the
+ * same pixels in chromium and may be less crisp in an engine that hints.
  */
 function tuneText(ctx){
   if(!ctx)return;

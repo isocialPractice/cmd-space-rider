@@ -23,12 +23,17 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { REPO_ROOT } from './helpers.mjs';
 
 import {
   BUILDS, GRIDS, FRAME,
   AIMED_BANDS, VOLLEY_BAND, EYE_BANDS, FAR_BAND, REACH_NEAR, REACH_STEP,
   HUD_ROWS, FOOTER_ROWS, WALL_CHARS,
   emptyRun, stageTarget, engage, sweep, sweepByEye, stagedShot, walk, volleyLife,
+  ghostFlight,
   watchEngagement, tracerCells, tracerCellsBothHalves,
   unitsPerCol, freeFlight, darkWalk, FRAME_RATES, FREE_SEEDS,
   FREE_FRAMES, FREE_RATE_FRAMES, FREE_HEIGHTS,
@@ -717,7 +722,61 @@ for (const build of BUILDS) {
       `the wall shot was drawn on all ${wall.live} of its frames, so nothing was clipped`
     );
   });
+
+  test(`${build.name}: the harness steps a bolt at the engine's speed, not a figure of its own`, () => {
+    // Three sites in engagement.mjs step a bolt forward to rebuild the frame a
+    // reading is measured against, and all three used to write the speed out as
+    // 60. That passes for as long as 60 is what `BULLET_SPEED` holds, and the
+    // parity check on the pair cannot catch it: both builds agree on the figure
+    // the harness is ignoring. So the walk is flown twice, once at a speed the
+    // build does not hold, and has to come back somewhere else.
+    // A legal placement off the walk's own axes, out where the flight is long
+    // enough for a speed change to move the contact by more than a row.
+    const aim = { x: 0, y: 2, targetZ: -120, dt: FRAME };
+    const shipped = ghostFlight(build, emptyRun(build, GRIDS[0]), aim);
+    const faster = ghostFlight(
+      { ...build, BULLET_SPEED: build.BULLET_SPEED * 2 },
+      emptyRun(build, GRIDS[0]),
+      aim
+    );
+
+    assert.ok(shipped, 'the shipped bolt should meet a target 120 units out');
+    assert.ok(faster, 'a bolt at twice the speed should too');
+    assert.ok(
+      faster.targetZ < shipped.targetZ,
+      `a bolt at twice the speed should meet the target before it closes as far: ` +
+      `got z ${faster.targetZ.toFixed(1)} against the shipped ${shipped.targetZ.toFixed(1)}`
+    );
+  });
 }
+
+test('no walk in the harness writes the bolt speed out for itself', () => {
+  // The check above flies one of the three sites that rebuild a frame; this
+  // reaches all of them at once, which is what a figure restated in three
+  // places needs. `BULLET_SPEED` is the engine's, and a walk holding its own
+  // copy measures the old cannon the moment the engine's moves - silently,
+  // because the figures it then quotes are still internally consistent.
+  //
+  // The `advance` 60 beside each one is a different figure: units of depth per
+  // unit of speed, the engine's own literal in `updateObstacles`. It is read
+  // against `s.speed` and is left alone, so the pattern here is the bare
+  // multiply by dt rather than any 60 in the file.
+  const harness = readFileSync(join(REPO_ROOT, 'test', 'engagement.mjs'), 'utf8');
+  const lines = harness.split(/\r?\n/);
+  const squashed = (line) => line.replace(/\s+/g, '');
+
+  const bare = lines.filter((line) => squashed(line).includes('=60*dt')).map((l) => l.trim());
+  assert.deepEqual(
+    bare, [],
+    `the harness should step a bolt at build.BULLET_SPEED, not a figure of its own: ${bare.join(' | ')}`
+  );
+
+  const read = lines.filter((line) => squashed(line).includes('=build.BULLET_SPEED*dt'));
+  assert.equal(
+    read.length, 3,
+    `all three rebuilt frames should read the bolt speed off the build, found ${read.length}`
+  );
+});
 
 for (const grid of GRIDS) {
   test(`both builds resolve the same engagements the same way at ${grid.name}`, () => {

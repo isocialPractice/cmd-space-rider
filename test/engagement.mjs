@@ -528,11 +528,18 @@ export const STAGED_LIFE = 10;
  * target's column creeps outward for the whole flight. So the flight is walked
  * here first, off the projection alone, and the column it reports is what the
  * shot is then aimed at.
+ *
+ * Takes the build for the same reason `volleyLife` does: the bolt's speed is
+ * the engine's figure, and a walk that wrote it out again would keep measuring
+ * the old cannon after the engine's changed.
  */
-export function ghostFlight(game, { x, y, targetZ, dt }) {
+export function ghostFlight(build, game, { x, y, targetZ, dt }) {
   const s = game.state;
+  // Two different 60s. This one is units of depth per unit of speed, the
+  // engine's own literal in `updateObstacles`, and belongs to the run's speed
+  // rather than to the shot.
   const advance = s.speed * 60 * dt;
-  const travel = 60 * dt;
+  const travel = build.BULLET_SPEED * dt;
   let bz = MUZZLE_Z;
   let oz = targetZ;
   for (let frame = 0; frame < 400; frame++) {
@@ -569,7 +576,7 @@ export function stagedShot(build, grid, { x, y, targetZ, dt, aimedAt, aimDt = 1 
   // The aim is taken at a fixed rate whatever rate the flight is then flown at,
   // so a walk across frame rates is one shot answered five times rather than
   // five different shots.
-  const ghost = ghostFlight(game, { x, y, targetZ, dt: aimDt });
+  const ghost = ghostFlight(build, game, { x, y, targetZ, dt: aimDt });
   if (!ghost) return 'no-contact';
 
   // A column of the grid, in the world units the bullet is placed in, at the
@@ -814,8 +821,10 @@ export function watchEngagement(build, grid, { x, y, z, volley = true, dt = FRAM
   let targetY = null;
 
   if (outcome === 'hit' && snapshot) {
+    // The advance's 60 is units of depth per unit of speed, the engine's own
+    // literal; the travel is the bolt's speed, which the build holds.
     const advance = s.speed * 60 * dt;
-    const travel = 60 * dt;
+    const travel = build.BULLET_SPEED * dt;
     // The shot holds its screen ray, so x is carried forward by the ratio of
     // the two scales exactly as updateBullets carries it.
     const raised = snapshot.bullets.length
@@ -1357,9 +1366,11 @@ function flyFreely(build, grid, { frames, holdY, dt, fireInterval, seed }) {
     // The frame, rebuilt. `s.speed` is set once a frame and then used for the
     // advance, so reading it back after the update gives what the frame ran on;
     // the shot holds its screen ray, so x is carried forward by the ratio of
-    // the two scales exactly as updateBullets carries it.
+    // the two scales exactly as updateBullets carries it. The advance's 60 is
+    // units of depth per unit of speed, the engine's own literal, and is not
+    // the bolt's speed - that is the build's, and is read off it.
     const advance = s.speed * 60 * dt;
-    const travel = 60 * dt;
+    const travel = build.BULLET_SPEED * dt;
     const drift = debrisDrift(dt, advance);
 
     // What the frame resolved, read off the debris it threw rather than off

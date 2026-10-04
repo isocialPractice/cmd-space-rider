@@ -1627,3 +1627,60 @@ still be found by name.
     two of them for lengths and one of them a probe. Correct the same claim in
     `CHANGELOG.md:47-48`.
   - From: Code Review Override - what the specificity resolver is recorded as covering
+
+## Archived 10-04-26
+
+- [x] **The functional-pseudo guard is recorded as covering the sheet and covers
+  the selectors a caller names** - `test/page-style.mjs:222` says "a sheet that
+  gains one fails here, where the gap is", and `CHANGELOG.md:63-65` has the throw
+  answering for "the first sheet to gain one".
+  - **Issue**: `specificity` is only ever reached for a selector a caller already
+    listed. `declIn` at `test/docs-site.test.mjs:529` weighs only
+    `rule.selectors.filter((sel) => selectors.includes(sel))` and skips a rule
+    naming nothing in that list, and `declarationsFor` in `test/page-style.mjs`
+    never calls `specificity` at all. So add
+    `.has-sub:not([aria-expanded]) > .sub { display: none }` to
+    `docs/assets/style.css` and the guard never fires: `declIn('narrow', '.sub')`
+    returns exactly what it returns today, a rule that really applies is left out
+    of the fold, and the suite stays green. That is the same silent wrong answer
+    the throw was added to end, reached by a selector no test names rather than by
+    one some test does. The guard is correct for what it covers; the two
+    sentences claim more than it covers.
+  - **Goal**: Either narrow both sentences to what the guard does - a selector a
+    caller weighs, not a sheet - or close the gap so they come true: walk every
+    rule in the sheet once and throw on a functional pseudo-class anywhere in it,
+    the way the breakpoint check already asserts the sheet names no width query it
+    could not place. The second is the stronger of the two and is what this module
+    already does for a length it cannot resolve.
+  - From: Code Review Override - what the specificity resolver is recorded as covering
+- [x] **Shots die short of what the tunnel shows** - A bullet's two second life
+  at 60 units a second gives it about 120 units of travel, and a target closes
+  on it at the run's speed, so the furthest a shot can reach is a little over
+  150 units. The tunnel is drawn to `maxViewZ`, which is 200. Firing straight
+  down the middle at a target parked dead ahead lands at every range from 30 to
+  150 units and misses at every range from 160 up, so the outer fifth of what
+  the player can see cannot be shot at all, with nothing on screen saying why.
+  Decide whether the reach should cover the draw distance - a longer `life`, a
+  faster shot, or a shorter `maxViewZ` - and pin it in `test/pulse-cannon.test.mjs`
+  beside the range bands. Both builds together, as `test/parity.test.mjs` expects.
+  - From: Quick Wins
+- [x] **The page's use of the fitted grid has no check** - `fitGrid` itself is
+  pinned in `test/menu-layout.test.mjs`, but what the page does with it is not:
+  `handleResize` carrying the fitted grid through to the `ScreenBuffer` the
+  renderer writes into, and `frame()` drawing the notice and returning early
+  while the window is under the floor. Both sit below the
+  `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at, so
+  nothing in the suite can reach them, and the browser is the only thing that
+  has ever checked either. Measured in a real chromium window: a run at 900x600
+  taken down to 200x120 and back came up on the same run, score 159 to 189 and
+  distance 18.0 to 21.0, with no title screen in between. Lift the re-seating
+  out of `handleResize` the way `fitGrid` was already lifted out of it - a pure
+  function taking the game and a fitted grid - and export it through
+  `test/helpers.mjs`. Then assert that re-seating a playing run at a grid under
+  the floor and again at one above it leaves `mode`, `score` and `distance`
+  untouched and leaves the buffer at the new grid's size. Browser only: a
+  terminal cannot be smaller than its own grid, so the CLI build has no
+  equivalent and `test/parity.test.mjs` has nothing to pair it with.
+  - From: Quick Wins
+- [x] **Gamepad support (browser)** — Map standard gamepad API inputs: left stick for steering, A button for fire, B for boost, triggers for barrel roll.
+  - From: Polish

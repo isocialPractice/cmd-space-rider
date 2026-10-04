@@ -35,8 +35,8 @@ function muzzleSpread(game, shipX) {
 }
 
 /** How far a target's drawn column moves between the shot leaving and meeting it. */
-function creep(game, { x, y, targetZ }) {
-  const ghost = ghostFlight(game, { x, y, targetZ, dt: FRAME });
+function creep(build, game, { x, y, targetZ }) {
+  const ghost = ghostFlight(build, game, { x, y, targetZ, dt: FRAME });
   if (!ghost) return null;
   const s = game.state;
   const colRange = (s.screenWidth - 6) / 2;
@@ -66,7 +66,7 @@ export async function run({ grids = GRIDS, builds = BUILDS, count = 24 } = {}) {
         const row = [];
         for (const targetZ of [-40, -80, -110, -140]) {
           stageTarget(game.state, x, 2, targetZ);
-          const c = creep(game, { x, y: 2, targetZ });
+          const c = creep(build, game, { x, y: 2, targetZ });
           row.push(`${-targetZ}: ${c === null ? '-' : c.toFixed(2)}`);
         }
         console.log(`  creep in columns, target at x ${x}   ${row.join('   ')}`);

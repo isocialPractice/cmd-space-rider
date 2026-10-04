@@ -686,10 +686,12 @@ test('browser: a render with no advance draws the grid exactly as it did before'
   assert.deepEqual(calls.text.map((c) => c.y), [0, 0, 0, 0]);
 });
 
-test('browser: the grid is drawn with hinted rounding off', () => {
-  // The centring is only worth having with this set. Left to itself a canvas
-  // rounds both a glyph's position and its advance to whole pixels, which snaps
-  // the inset back to zero and puts the grid back where it started.
+test('browser: the grid asks for exact glyph positions and no kerning', () => {
+  // Asked for as insurance rather than as what the centring rests on: measured
+  // against the page in chromium, the fractional position is honoured either
+  // way. The case it covers is an engine that rounds a glyph's position to a
+  // whole pixel, which would snap the inset back to zero. What is pinned here
+  // is that the page asks, since that is the part a renderer can lose.
   const { ctx } = recordingContext();
   new browser.ScreenBuffer(2, 1).render(ctx, 10, 18, '16px monospace', 9.4);
   assert.equal(ctx.textRendering, 'geometricPrecision');
