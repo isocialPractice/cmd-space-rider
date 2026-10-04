@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.8.1-alpha] - 2026-10-04
+
+### Fixed
+
+- The rationale for `geometricPrecision` claimed a mechanism this engine does
+  not have, in four places: the doc comment on `tuneText` in `index.html`, the
+  0.8.0-alpha entry below, the name and comment of `test/menu-layout.test.mjs`'s
+  `the grid is drawn with hinted rounding off`, and the published sentence in
+  `docs/how-it-works.html`. All four said the centring was only worth having
+  with the request set, on the ground that a canvas left to itself rounds a
+  glyph's position to a whole pixel and snaps the inset back to zero.
+
+  It does not, here. A six-glyph run drawn at the page's own `FONT` and `cellW`
+  came back byte-identical under `textRendering: 'auto'` and under
+  `geometricPrecision` with kerning off, for `░ ▒ ▓ █ ╣ M` at 16, 8, 7 and 6
+  pixels, left-packed and centred, in both colour schemes - 96 comparisons in
+  chromium with no pixel column differing by one level. The fractional position
+  is honoured either way, so the centring stands up on its own and the request
+  is insurance against an engine that would round it.
+
+  Both settings and both capability checks stay: nothing measured argues for
+  removing them, and the case they cover is real in another engine. What changed
+  is the four claims. The test's assertions were correct and are untouched -
+  `textRendering`, `fontKerning` and `textBaseline` are all genuinely set - so
+  only its name and the comment above it moved, and what it pins is that the
+  page asks, which is the part a renderer can lose.
+
+  The comment now also carries what the centring has to work with, which none of
+  the four said. `cellW` is the ceiling of the advance, so the slack is always
+  under a pixel and the inset, being half of it, can never reach half a pixel:
+  across the 6 to 16 font range it runs 0.100px to 0.400px. At two sizes it is
+  exactly nothing - Courier New advances at 0.6 em, so the slack is
+  `ceil(0.6s) - 0.6s`, which is zero at `s = 10` and `s = 15`.
+
+- The gamepad entry below recorded its release rule as verified by a `D` held on
+  the keyboard. `D` is not one of the nine names `PAD_CONTROL_KEYS` holds -
+  `LEFT`, `RIGHT`, `UP`, `DOWN`, `SPACE`, `ENTER`, `F`, `Q` and `E` - so the
+  poll's release loop never visits it, and that reading would have come back the
+  same with the rule deleted. Re-run on an arrow, which is a collision the
+  rule exists for: `ArrowLeft` held for half a second against a resting stubbed
+  pad stayed down and carried the ship 4.27 units left, and with
+  `padWasHeld?.[k]` dropped from the release branch so every reported up is fed
+  straight through, the same reading came back with the key cleared and the ship
+  unmoved. A `D` survives both pages. The rule itself was never in doubt - it is
+  pinned at the seam the suite can reach by `the page polls the pad once a frame
+  and releases only what it pressed` - and what is corrected is the sentence
+  saying how it was checked live.
+
+### Internal
+
+- The engagement harness steps a bolt at the engine's speed rather than a figure
+  of its own. `BULLET_SPEED` arrived in both builds in 0.8.0-alpha and `BUILDS`
+  has carried it for each since, but three sites in `test/engagement.mjs` still
+  wrote the travel out as `60 * dt`, in `ghostFlight`, `watchEngagement` and
+  `flyFreely`. Nothing failed, because 60 is what the constant holds; the cost
+  was that the rebuilt frame those three compute is what every reach, band and
+  pairing reading is measured against, so moving `BULLET_SPEED` would have left
+  the harness measuring the old cannon while the parity check on the pair still
+  passed. All three read `build.BULLET_SPEED` now, the way `volleyLife` already
+  reads the life off `build.BULLET_LIFE_SLACK`. `ghostFlight` takes the build to
+  do it, and `creep` in `test/probes/column.mjs` passes it through.
+
+  The `advance` 60 beside each one is a different figure - units of depth per
+  unit of speed, the engine's own literal in `updateObstacles`, read against
+  `s.speed` - and is left alone, with a word at each site saying which figure it
+  is.
+
+  Pinned two ways, because one site flown is not three sites covered. A walk
+  flown with the speed doubled has to meet its target before it closes as far,
+  which fails on the written-out figure and passes on the constant; and the
+  harness is read as source for a bare `60 * dt` on any line, which reaches all
+  three at once.
+
 ## [0.8.0-alpha] - 2026-10-03
 
 ### Added
@@ -45,8 +118,16 @@
 
   Verified in a chromium window against a stubbed `navigator.getGamepads`: the
   stick moved the ship and let go of it, `A` raised a volley of three, `B` set
-  the boost and cleared it, the left trigger rolled to `rollDir -1`, and a `D`
-  held on the keyboard survived a resting pad.
+  the boost and cleared it, the left trigger rolled to `rollDir -1`, and an
+  arrow held on the keyboard survived a resting pad. An arrow is a collision the
+  release rule exists for, since `PAD_CONTROL_KEYS` is `LEFT`, `RIGHT`, `UP`,
+  `DOWN`, `SPACE`, `ENTER`, `F`, `Q` and `E` - the keys the release loop visits,
+  and `mapKey` reaches all nine, the four directions through the arrows rather
+  than through `WASD`. `ArrowLeft` held for half a second against a resting pad
+  stayed down and carried the ship 4.27 units left; with `padWasHeld?.[k]`
+  dropped from the release branch so every reported up is fed straight through,
+  the same reading came back with the key cleared and the ship unmoved. A `D`
+  survives both pages, which is why it is not the key this is checked on.
 
 ### Changed
 
@@ -85,14 +166,16 @@
   the box characters the tunnel walls are built from, since those are drawn to
   tile edge to edge. Centred, the seam between two of them is halved.
 
-  The canvas is asked for `geometricPrecision` text and no kerning, which is
-  what makes the centring worth having: left to itself a canvas rounds both a
-  glyph's position and its advance to whole pixels, snapping the inset back to
-  zero. The cell is measured under the same tuning it is drawn under, or the
-  figure would be the hinted width while the drawing used the precise one. Both
-  properties are set behind a capability check and neither has a fallback,
-  because neither has anything to fall back to: a context without them draws the
-  grid exactly as this build drew it before.
+  The canvas is asked for `geometricPrecision` text and no kerning. That is
+  insurance rather than what makes the centring worth having: chromium honours
+  the fractional position either way, so an engine that rounded a glyph's
+  position to a whole pixel - and snapped the inset back to zero - is the case
+  the request covers rather than the case this build is in. The cell is measured
+  under the same tuning it is drawn under, or the figure would be the hinted
+  width while the drawing used the precise one. Both properties are set behind a
+  capability check and neither has a fallback, because neither has anything to
+  fall back to: a context without them draws the grid exactly as this build drew
+  it before.
 
 ### Fixed
 
