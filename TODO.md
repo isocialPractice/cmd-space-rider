@@ -108,6 +108,35 @@ its origin survives archiving into `## Complete`.
     admitted - it is the same question of a figure that only chromium can
     produce.
   - From: UI/UX Override - the inset figures the glyph comment states
+- [ ] The probe call into the harness that changed signature this turn is run
+  by nothing in `npm test`
+  - **Issue**: `ghostFlight` gained a leading `build` parameter at
+    `test/engagement.mjs:536`, and its only caller outside that file is
+    `creep` at `test/probes/column.mjs:38`, which was updated to match and is
+    correct today. Nothing in the suite runs it. `npm test` globs
+    `test/*.test.mjs`, so `test/probes/column.mjs` is reached only by
+    `npm run probe -- column`, and `test/probes.test.mjs` imports each probe to
+    read what its `run()` destructures without ever calling it. So the pairing
+    is unverified in the direction that just moved: pass the old argument list
+    and `build` binds to the `game` object, `build.BULLET_SPEED` is
+    `undefined`, `travel` is `NaN`, every row comparison in the walk is false,
+    and `ghostFlight` returns `null` after its 400 frames. Checked by calling
+    `ghostFlight(game, game, ...)` against a staged target at x 4.5, z -80:
+    the correct call reports contact at z -66.2 and the old one returns
+    `null`, which `creep` prints as `-`. All eight creep figures in the probe
+    table would read `-` with 536 tests passing - the failure
+    `test/probes.test.mjs` opens by naming, "Nothing failed, because nothing
+    looked."
+  - **Goal**: One assertion that reaches a probe's call into the harness
+    rather than only its flag contract with the rig. `creep` is not exported,
+    so the two openings are to invoke the probe's `run()` itself on a narrowed
+    workload - one grid, one build, `count` 1 - and assert it resolves without
+    throwing, which reaches every probe's harness calls at once; or to export
+    `creep` and assert it returns a finite column figure for a staged target.
+    The first covers more and is the better buy if a probe can be run quietly,
+    since the rig prints as it goes. A probe reports and never asserts, so
+    either way the assertion belongs in `test/probes.test.mjs`.
+  - From: UI/UX Override - the inset figures the glyph comment states
 
 ### Create and Deploy GitHub Pages Override
 
