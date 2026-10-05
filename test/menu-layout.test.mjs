@@ -572,7 +572,10 @@ function recordingContext() {
 
 test('browser: a glyph is centred in the slack its cell has over the advance', () => {
   // The whole of the placement, stated as the arithmetic. Half the slack each
-  // side is the same ink with the seam between two box glyphs halved.
+  // side is the same ink placed a half-slack further into its cell. What that
+  // does to the seam between two tiling box glyphs follows how wide the slack
+  // is, and is not the halving this comment used to claim at every size - the
+  // measurement is in the comment on the placement in `index.html`.
   // Compared to a tolerance because the slack is a float: (4 - 3.6) / 2 is
   // 0.19999999999999996 in binary, and it is a pixel offset rather than a
   // figure anything counts in.

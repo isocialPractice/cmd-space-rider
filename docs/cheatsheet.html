@@ -54,7 +54,7 @@ npm run probe -- overlay-anchor    # no grid, no build: it walks viewports</code
 <p>A flag the named probe does not read is refused rather than discarded, so
 <code>npm run probe -- overlay-anchor --grid 80x24</code> exits non-zero instead of reporting a figure from a walk that never used the grid.</p>
 <p>The table the rig checks against lives in <code>test/probes/probes.mjs</code>, and
-<code>test/probes.test.mjs</code> reads it against the probes themselves: every probe takes exactly the flags listed for it, so a probe that stops reading an argument fails the suite rather than going on accepting the flag in silence.</p>
+<code>test/probes.test.mjs</code> reads it against the probes themselves: every probe takes exactly the flags listed for it, so a probe that stops reading an argument fails the suite rather than going on accepting the flag in silence. Every probe that calls the shared engagement is run there too, on one grid, one build and one placement, because reading a probe's argument list never reaches the calls the probe makes.</p>
 <p>A probe reports; it never asserts. Every walk is seeded, so the same command gives the same numbers every time.</p>
 <h2 id="test-grids">Test grids</h2>
 <p>The pulse cannon checks run at three sizes, because the hit test is not size-neutral:</p>
