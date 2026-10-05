@@ -264,9 +264,30 @@ let PALETTE=ANSI256;
 // At a comfortable font that is a fraction of a pixel nobody sees. At
 // MIN_FONT_SIZE it is a real share of the cell, and this game spends most of a
 // frame drawing the box characters the tunnel walls are built from - glyphs
-// designed to tile edge to edge. Left-packed, the seam between two of them is
-// the whole of that difference in one gap. Centred, it is half of it on each
-// side, which is the same ink with the break halved.
+// designed to tile edge to edge. Left-packed, the whole of that difference
+// sits in one gap on the glyph's right. Centred, it is half of it on each
+// side, which is the same ink placed a half-slack further in.
+//
+// What that buys follows the slack rather than the setting, and it is not the
+// same at every size. Measured in chromium at a junction between two tiling
+// wall glyphs, against this same buffer rendered left-packed, as a level out of
+// 255: where the slack is widest - the 0.5px inset at font 15 and font 10 - the
+// darkest column across the junction rises 41.7 to 68.7 and the spread across
+// it falls 82.3 to 23.3, and those two sizes are where the seam read worst to
+// begin with. At 0.4px, fonts 12 and 7, it is the halving this was written for:
+// 55.3 to 72.0, the spread 68.7 to 36.3. At 0.3px, fonts 14 and 9, the reading
+// mirrors - the deficit swaps sides and the spread is unchanged. At 0.1px,
+// fonts 13 and 8, nothing moves. At 0.2px, fonts 16, 11 and 6, it goes a little
+// the wrong way: left-packed was already nearly even there, so the inset tips it
+// past centre and the spread widens 12.7 to 31.3. So this lifts the seam most
+// where the slack is widest, which is where it was worst, and does nothing or a
+// little harm where the slack is narrow.
+//
+// There is also no gap between two of these glyphs to close. Of the 28
+// glyph-and-size pairs the walls are drawn from, 24 ink wider than their cell
+// and four ink exactly it, and the three shade blocks each reach a whole pixel
+// left of the origin they are drawn at, so two adjacent cells overlap. What the
+// inset moves is where the soft edge of that overlap falls.
 //
 // Browser only. The CLI build writes characters into a terminal, which places
 // them in its own cells, so there is nothing here for test/parity.test.mjs to
@@ -283,6 +304,27 @@ let PALETTE=ANSI256;
  * has no measurement to hand and passes the cell width itself: a glyph as wide
  * as its cell, or wider, has no slack to share and is drawn where it always
  * was.
+ *
+ * A known limit at the two narrowest-slack sizes, recorded rather than fixed.
+ * The three shade blocks each reach a whole pixel left of the origin they are
+ * drawn at, at every font size, read off `actualBoundingBoxLeft`. The inset
+ * normally covers that left bearing, and at nine of the eleven sizes `fitGrid`
+ * can settle on nothing is drawn left of a run's first cell. At font 13, where
+ * the inset is 0.099px, and font 8, where it is 0.100px, a tenth of a pixel is
+ * not enough: a run of the full block with an empty cell to its left inks the
+ * column left of that cell at level 39 of 255, which is the level the
+ * left-packed grid put there too. So the centring neither caused it nor was
+ * expected to clear it, and at those two sizes the grid does bleed one column
+ * outside the cells it is laid out on.
+ *
+ * Left as it is deliberately. Flooring the inset so it always cleared the
+ * bearing would cost the placement its symmetry - the two margins being equal
+ * is what `the inset never pushes a glyph out of its own cell` in
+ * test/menu-layout.test.mjs pins - and it would buy that at the cost of a
+ * defect nobody has reported seeing, at level 39 on two of eleven sizes, which
+ * the grid had before the centring arrived. Rebuilding the figure needs a
+ * rasterizer, so it sits with the other browser-only figures in the
+ * `## Measurement` item in TODO.md rather than beside the probes.
  */
 function glyphInset(cellW,advance){
   if(!(advance>0)||!(cellW>0)||advance>=cellW)return 0;
@@ -307,10 +349,19 @@ function glyphInset(cellW,advance){
  *
  * What the centring has to work with is small and bounded. `cellW` is the
  * ceiling of the advance, so the slack is always under a pixel and the inset,
- * being half of it, can never reach half a pixel: across the font range it runs
- * 0.100px to 0.400px. At two sizes it is exactly nothing - Courier New advances
- * at 0.6 em, so the slack is `ceil(0.6s) - 0.6s`, which is zero at `s = 10`
- * and `s = 15` - and there a centred row is the left-packed one.
+ * being half of it, can never reach half a pixel. Read in chromium through this
+ * page's own `measureCell`, at every size `fitGrid` can settle on: across the 6
+ * to 16 range the inset runs 0.099px to 0.500px, and at no size in it is the
+ * inset zero.
+ *
+ * Courier New advances at `1229/2048` em, not at the flat 0.6 em it is near
+ * enough to be taken for, and that near-miss is what puts both ends of the
+ * range where they are. `0.6 * size` is a whole number at size 10 and size 15,
+ * so under a flat 0.6 those two sizes would have no slack at all - and under the
+ * font's real metric they have the most of any, 0.500px and 0.499px. A ceiling
+ * is at its most sensitive a ten-thousandth either side of an integer: at font
+ * 10 an advance of 6.001 ceils to 7 where 6.000 would ceil to 6. The insets
+ * repeat in a cycle of five because `1229/2048` is so nearly three fifths.
  *
  * Both are set behind a capability check and neither has a fallback, because
  * neither has anything to fall back to: a context without them draws the grid

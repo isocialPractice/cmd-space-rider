@@ -1,5 +1,121 @@
 # Changelog
 
+## [0.8.2-alpha] - 2026-10-05
+
+### Fixed
+
+- The paragraph 0.8.1-alpha added to `tuneText`'s doc comment gave the inset's
+  range and named two sizes where it is zero, and all three of its figures were
+  derived rather than measured, from an advance of 0.6 em Courier New does not
+  have. The font advances at `1229/2048` em, which is 0.6000977: read through
+  the page's own `measureCell` in chromium, the measurement matches
+  `1229/2048 * size` at all eleven sizes `fitGrid` can settle on to within half
+  a thousandth of a pixel, and matches `0.6 * size` at none of them.
+
+  Four ten-thousandths of an em would be beneath notice except that `cellW` is
+  the ceiling of the advance, and a ceiling is at its most sensitive a
+  ten-thousandth either side of an integer. `0.6 * size` is a whole number at
+  exactly size 10 and size 15, so those are the two sizes the near-miss decides:
+  at font 10 an advance of 6.001 ceils to 7 where 6.000 would ceil to 6, and at
+  font 15 9.001 ceils to 10 where 9.000 would ceil to 9. So the two sizes the
+  comment recorded as having no inset at all carry the largest insets in the
+  range, 0.500px and 0.499px, and no size in the range has an inset of zero. The
+  range itself is 0.099px to 0.500px rather than 0.100px to 0.400px, and the
+  insets repeat in a cycle of five because `1229/2048` is so nearly three fifths.
+
+  What the paragraph had right is kept: `cellW` is the ceiling of the advance at
+  every size, the inset is exactly half the slack at every size, and it never
+  reaches half a pixel. The arithmetic was never at fault - `glyphInset`,
+  `tuneText`, `fitGrid` and `measureCell` all do what they are written to do, and
+  the suite's assertions about them hold. `test/menu-layout.test.mjs` is
+  untouched: its `modelCell` takes `Math.ceil(size * 0.6)`, which is the
+  assumption corrected here, but it is a stand-in cell for testing `fitGrid`'s
+  walk rather than a claim about Courier New, and no test in it asserts a zero
+  inset at any size. The 0.8.1-alpha entry below is corrected in place.
+
+- "Centred, the seam between two of them is halved" claimed a uniform effect the
+  raster does not show, in four places: the comment on the placement in
+  `index.html`, the 0.8.0-alpha entry below, the comment above
+  `a glyph is centred in the slack its cell has over the advance` in
+  `test/menu-layout.test.mjs`, and the published sentence in
+  `docs/how-it-works.html`.
+
+  Measured at the junction between two tiling wall glyphs by repainting the live
+  buffer twice in one synchronous pass, once through `ScreenBuffer.render` with
+  the page's own `cellAdvance` and once with `advance = cellW`, which is the
+  left-packed grid the centring replaced. Taking the darkest of the two pixel
+  columns either side of a junction, as a level out of 255: at an inset of 0.5px,
+  fonts 15 and 10, it rises 41.7 to 68.7 and the spread across the junction falls
+  82.3 to 23.3. At 0.4px, fonts 12 and 7, it rises 55.3 to 72.0 and the spread
+  falls 68.7 to 36.3, which is the halving as it was described. At 0.3px, fonts
+  14 and 9, the reading is mirrored exactly: 97.0/124.0 becomes 124.0/97.0, the
+  deficit swapping sides with the darkest column and the spread unchanged to a
+  tenth of a level. At 0.1px, fonts 13 and 8, nothing moves. At 0.2px, fonts 16,
+  11 and 6, it goes the wrong way - the darkest column falls 111.7 to 102.0 and
+  the spread widens 12.7 to 31.3, because left-packed was already nearly even
+  there and the inset tips it past centre.
+
+  So the four now say what the measurement supports: the centring lifts the seam
+  most where the slack is widest, which is where it read worst, and does nothing
+  or a little harm where the slack is narrow. The feature is worth
+  having on those numbers - the worst seam in the build is at fonts 15 and 10,
+  and that is where it helps most - and `docs/how-it-works.html`'s "a fifth of a
+  pixel nobody sees" is right as it stands, since the inset at font 16 is
+  0.199px. The comment in `index.html` also records that there is no gap between
+  two of these glyphs to close in the first place: of the 28 glyph-and-size pairs
+  the walls are drawn from, 24 ink wider than their cell and four ink exactly it,
+  and the three shade blocks each reach a whole pixel left of the origin they are
+  drawn at, so two adjacent cells overlap and what the inset moves is where the
+  soft edge of that overlap falls.
+
+- The `column` probe's call into the engagement harness was run by nothing in
+  `npm test`. `ghostFlight` gained a leading `build` parameter in 0.8.1-alpha and
+  `creep` in `test/probes/column.mjs` was updated to pass it, correctly, but the
+  suite globs `test/*.test.mjs`, so a probe is reached only by `npm run probe`,
+  and `test/probes.test.mjs` imported each probe to read what its `run()`
+  destructures without ever calling it. `ghostFlight`'s own side of the move is
+  watched - `the harness steps a bolt at the engine's speed, not a figure of its
+  own` in `test/pulse-cannon.test.mjs` calls it at two speeds and fails if the
+  parameter goes away - so what nothing reached was the call in the probe. Left
+  on its old two-argument form, `creep` would have taken the whole probe down
+  with a `TypeError` on the first staged target, with 536 tests passing and
+  `npm test` green, because the only thing that runs a probe is `npm run probe`:
+  nothing failed, because nothing looked.
+
+  Two assertions now reach past the flag table. Every probe that imports
+  `test/engagement.mjs` is run on the smallest workload the rig can describe -
+  one grid, one build, one placement, one pass - with what it prints collected
+  rather than printed, and has to come back with a report; and the `column`
+  probe's two creep rows have to carry a column figure at each of the four
+  distances rather than a dash. Which probes are run is read off their own
+  source, so a probe that starts calling the harness is covered without a line
+  being added, and `overlay-anchor` is the one left out: it imports no harness to
+  reach and reads no flags to be narrowed by. Checked against both mispairings,
+  and both are throws rather than dashes: the old two-argument call leaves
+  `ghostFlight`'s third parameter undefined and it cannot destructure `x` out of
+  it, and the swapped argument list reads `state` off the build. Either one
+  fails both assertions, since running the probe at all is what meets them. The
+  dash the second assertion reads for is the other way a creep row goes wrong -
+  `ghostFlight` finding no contact in its 400 frames - which is the one the rig
+  prints and exits zero on.
+
+### Internal
+
+- The limit the centring does not cover is recorded beside `glyphInset` rather
+  than fixed. The three shade blocks each reach a whole pixel left of the origin
+  they are drawn at, at every font size, read off `actualBoundingBoxLeft`. The
+  inset normally covers that bearing and at nine of the eleven sizes nothing is
+  drawn left of a run's first cell, but at font 13, inset 0.099px, and font 8,
+  inset 0.100px, a tenth of a pixel is not enough: a run of the full block with
+  an empty cell to its left inks the column left of that cell at level 39 of 255,
+  which is the level the left-packed grid put there too. The centring neither
+  caused it nor was expected to clear it. Flooring the inset so it always cleared
+  the bearing would cost the placement its symmetry, which
+  `the inset never pushes a glyph out of its own cell` pins, and would buy that
+  at the cost of a defect nobody has reported seeing on two of eleven sizes, so
+  the arithmetic is left alone and the bleed is written down where the next
+  person to touch the placement will read it.
+
 ## [0.8.1-alpha] - 2026-10-04
 
 ### Fixed
@@ -30,9 +146,10 @@
   The comment now also carries what the centring has to work with, which none of
   the four said. `cellW` is the ceiling of the advance, so the slack is always
   under a pixel and the inset, being half of it, can never reach half a pixel:
-  across the 6 to 16 font range it runs 0.100px to 0.400px. At two sizes it is
-  exactly nothing - Courier New advances at 0.6 em, so the slack is
-  `ceil(0.6s) - 0.6s`, which is zero at `s = 10` and `s = 15`.
+  across the 6 to 16 font range it runs 0.099px to 0.500px, and it is never zero.
+  The three figures this paragraph first carried were derived from an advance of
+  0.6 em the font does not have, and are corrected in the 0.8.2-alpha entry
+  above.
 
 - The gamepad entry below recorded its release rule as verified by a `D` held on
   the keyboard. `D` is not one of the nine names `PAD_CONTROL_KEYS` holds -
@@ -164,7 +281,12 @@
   cell, and at the small end 6.60 in a 7-pixel cell: a fifth of a pixel either
   way, which is a real share of a cell at `MIN_FONT_SIZE` and matters most to
   the box characters the tunnel walls are built from, since those are drawn to
-  tile edge to edge. Centred, the seam between two of them is halved.
+  tile edge to edge. Centred, the seam between two of them reads best where that
+  difference is widest, which is where it read worst left-packed; where the
+  difference is narrow the centring does nothing, or a little harm. The figures
+  are in the comment on the placement in `index.html` and in the 0.8.2-alpha
+  entry above, which is where the uniform claim this sentence used to make was
+  narrowed.
 
   The canvas is asked for `geometricPrecision` text and no kerning. That is
   insurance rather than what makes the centring worth having: chromium honours
