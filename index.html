@@ -283,11 +283,27 @@ let PALETTE=ANSI256;
 // where the slack is widest, which is where it was worst, and does nothing or a
 // little harm where the slack is narrow.
 //
-// There is also no gap between two of these glyphs to close. Of the 28
-// glyph-and-size pairs the walls are drawn from, 24 ink wider than their cell
-// and four ink exactly it, and the three shade blocks each reach a whole pixel
-// left of the origin they are drawn at, so two adjacent cells overlap. What the
-// inset moves is where the soft edge of that overlap falls.
+// There is also no gap between two of these glyphs to close. The three shade
+// blocks each reach a whole pixel left of the origin they are drawn at and one
+// to two pixels right of the advance, read off actualBoundingBoxLeft and
+// actualBoundingBoxRight at every size fitGrid can settle on, so two adjacent
+// cells overlap. What the inset moves is where the soft edge of that overlap
+// falls.
+//
+// A count stood beside that until 0.8.3-alpha - 24 of 28 glyph-and-size pairs
+// inking wider than their cell and four inking exactly it - and it answers a
+// different question from the one the sentence asks. The walls are drawn from
+// four glyphs, picked in drawTunnel, at the eleven sizes between FONT_SIZE and
+// MIN_FONT_SIZE, which is 44 pairs. 28 is those four glyphs against the seven
+// distinct cell widths the eleven sizes produce, ceil(1229/2048 * size) running
+// 10, 10, 9, 8, 8, 7, 7, 6, 5, 5, 4 so that four of the sizes share a cell with
+// a larger one. Ink width follows the advance rather than the cell, and two
+// sizes sharing a cell can differ by most of a pixel of advance - fonts 8 and 7
+// share a 5px cell off 4.801px and 4.201px - so a reading taken at one of them
+// does not stand for the other. Re-taking it over all eleven needs a
+// rasterizer, so it sits with the other browser-only figures in the
+// `## Measurement` item in TODO.md. The overlap above does not rest on it:
+// the left bearing it follows from was read at every size.
 //
 // Browser only. The CLI build writes characters into a terminal, which places
 // them in its own cells, so there is nothing here for test/parity.test.mjs to

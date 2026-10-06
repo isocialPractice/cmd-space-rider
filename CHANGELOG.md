@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.8.3-alpha] - 2026-10-06
+
+### Fixed
+
+- "Of the 28 glyph-and-size pairs the walls are drawn from, 24 ink wider than
+  their cell and four ink exactly it" counted pairs the walls are not drawn
+  from. `drawTunnel` picks its wall glyph from four characters, and `fitGrid`
+  settles on eleven font sizes between `FONT_SIZE` and `MIN_FONT_SIZE`, which is
+  44 glyph-and-size pairs. 28 is those four glyphs against the seven distinct
+  cell widths the eleven sizes produce: `ceil(1229/2048 * size)` runs 10, 10, 9,
+  8, 8, 7, 7, 6, 5, 5, 4, so four of the sizes share a cell with a larger one
+  and the reading merged them.
+
+  Grouping by cell is the wrong grouping for this question, because ink width
+  follows the advance and the cell is the ceiling of it. Two sizes sharing a
+  cell can differ by most of a pixel of advance - fonts 8 and 7 share a 5px cell
+  off 4.801px and 4.201px - so a reading taken at one of them says nothing about
+  the other, and sixteen of the 44 pairs went unmeasured rather than covered.
+
+  Re-taking the ink widths needs a rasterizer, which this repository has so far
+  declined, so the count is removed from both places that published it rather
+  than corrected: the comment above `glyphInset` in `index.html` and the
+  0.8.2-alpha entry below. What those two keep is the part the conclusion
+  actually rests on, which was read at every size and not at every cell: the
+  three shade blocks each reach a whole pixel left of the origin they are drawn
+  at and one to two pixels right of the advance, so two adjacent cells overlap
+  and what the inset moves is where the soft edge of that overlap falls. The
+  overlap claim is unchanged and so is `glyphInset`. The unrebuilt figure joins
+  the browser-only half of the `## Measurement` item in `TODO.md`, beside the
+  junction levels and the left bearing.
+
+- The narrowed workload `test/probes.test.mjs` runs each probe on was described
+  as "one grid, one build and one placement" in four places - `NARROWED`'s own
+  doc comment, `CHEATSHEET.md`, `docs/cheatsheet.html` and
+  `docs/development.html` - and a placement is not what `count` narrows in every
+  probe. It is the placement walk in `column`, `frame-rate` and
+  `seen-versus-kill`; `free-flight` reads the same flag as frames, so `count: 1`
+  flies one frame there, and a single frame fires nothing, so that probe's
+  flight rows come back with no volleys and no kills. What actually reaches the
+  harness for it is the rate walk at `FREE_RATE_FRAMES` and the dark walk,
+  neither of which `count` or `passes` narrows - `--grid` and `--build` do,
+  cutting both from six build-and-grid pairs to one. The coverage was never in
+  doubt; the sentence was wrong for a quarter of the probes it covered, in two
+  published pages.
+
+  The four now name the workload by its flags - one grid, one build, and the
+  smallest `--count` and `--passes` the rig takes - and say what `count` narrows
+  per probe rather than claiming a unit three of the four happen to share.
+
+### Added
+
+- An assertion that `NARROWED` carries a value for every property `FLAG_ARG`
+  maps, beside the check that `FLAG_ARG` matches the rig's `parseArgs`.
+  `narrowedArgs` resolves a probe's flags through `FLAG_ARG` into `NARROWED`,
+  and the two checks already in the file pinned the links either side of that
+  one: the table against `parseArgs`, and the table against each `run()`.
+  Nothing pinned `NARROWED` itself. A flag added to all three - the shape this
+  rig has grown twice - would have handed its probe `undefined`, which a probe
+  reads as the flag not having been passed and answers with its own default, the
+  full walk, with every assertion still passing and the workload quietly no
+  longer narrow. `free-flight` is where that costs most: its `passes` default is
+  every seed in `FREE_SEEDS`. Checked by adding a fourth entry to `FLAG_ARG`
+  without one in `NARROWED`, which fails the new assertion. 539 tests pass.
+
 ## [0.8.2-alpha] - 2026-10-05
 
 ### Fixed
@@ -62,11 +126,13 @@
   and that is where it helps most - and `docs/how-it-works.html`'s "a fifth of a
   pixel nobody sees" is right as it stands, since the inset at font 16 is
   0.199px. The comment in `index.html` also records that there is no gap between
-  two of these glyphs to close in the first place: of the 28 glyph-and-size pairs
-  the walls are drawn from, 24 ink wider than their cell and four ink exactly it,
-  and the three shade blocks each reach a whole pixel left of the origin they are
-  drawn at, so two adjacent cells overlap and what the inset moves is where the
-  soft edge of that overlap falls.
+  two of these glyphs to close in the first place: the three shade blocks each
+  reach a whole pixel left of the origin they are drawn at and one to two pixels
+  right of the advance, at every size, so two adjacent cells overlap and what the
+  inset moves is where the soft edge of that overlap falls. This entry carried a
+  count beside that - 24 of 28 glyph-and-size pairs inking wider than their cell
+  and four inking exactly it - which 0.8.3-alpha removed from both copies as a
+  figure answering a different question; the overlap itself is unaffected.
 
 - The `column` probe's call into the engagement harness was run by nothing in
   `npm test`. `ghostFlight` gained a leading `build` parameter in 0.8.1-alpha and
@@ -84,8 +150,9 @@
 
   Two assertions now reach past the flag table. Every probe that imports
   `test/engagement.mjs` is run on the smallest workload the rig can describe -
-  one grid, one build, one placement, one pass - with what it prints collected
-  rather than printed, and has to come back with a report; and the `column`
+  one grid, one build, and the smallest `--count` and `--passes` it takes - with
+  what it prints collected rather than printed, and has to come back with a
+  report; and the `column`
   probe's two creep rows have to carry a column figure at each of the four
   distances rather than a dash. Which probes are run is read off their own
   source, so a probe that starts calling the harness is covered without a line
