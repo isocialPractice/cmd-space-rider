@@ -13,76 +13,89 @@ its origin survives archiving into `## Complete`.
 - [ ] **Replay ghost** — Record the player's inputs during a run. On the next run, show a ghosted version of the previous ship flying the same path. Motivates beating your own performance.
   - From: Bigger Features
 
-### Create and Deploy GitHub Pages Override
-
-### Code Review Override - the seam count and the narrowed probe workload
-
-- [ ] The narrowed probe workload is not pinned to the flag table it is keyed by
-  - **Issue**: `NARROWED` at `test/probes.test.mjs:57` carries one value per
-    argument property, and `narrowedArgs` resolves a probe's flags through it -
-    `args[FLAG_ARG[flag]] = NARROWED[FLAG_ARG[flag]]`. Two checks in the same
-    file pin the pieces either side of it: `the table names every flag the rig
-    parses, and no others` pins `FLAG_ARG` against `parseArgs`, and `every probe
-    takes exactly the flags the table lists for it` pins the table against each
-    `run()`. Nothing pins `NARROWED` against `FLAG_ARG`. Add a flag to
-    `parseArgs`, to `FLAG_ARG` and to a probe - the shape the rig has grown
-    twice already - and `NARROWED` hands that probe `undefined` for it, which
-    the probe reads as "not passed" and answers with its own default, the full
-    walk. Every assertion still passes, and the workload the two new checks
-    promise to narrow stops being narrow with nothing saying so. `free-flight`
-    is the one that would hurt: its `passes` default is every seed in
-    `FREE_SEEDS`.
-  - **Goal**: Assert that `NARROWED` holds a value for every property
-    `FLAG_ARG` maps, beside the check that `FLAG_ARG` matches `parseArgs`, so a
-    flag added without a narrowed value fails the suite rather than widening the
-    walk inside it.
-  - From: Code Review Override - the seam count and the narrowed probe workload
-- [ ] "One placement" names a workload `free-flight` does not run
-  - **Issue**: `NARROWED`'s doc comment at `test/probes.test.mjs:46`, the
-    paragraph added to `CHEATSHEET.md`, and the matching sentences in
-    `docs/cheatsheet.html` and `docs/development.html` all describe the new run
-    as "one grid, one build and one placement". `count` is a placement walk for
-    `column`, `frame-rate` and `seen-versus-kill`, and `free-flight` reads the
-    same flag as frames - `const frames = count ?? FREE_FRAMES` at
-    `test/probes/free-flight.mjs:57` - so `count: 1` flies one frame there. Its
-    flight table comes back all zeroes, since no volley is fired in a single
-    frame, and what actually reaches the harness for that probe is the rate walk
-    at `FREE_RATE_FRAMES` and `darkWalk`, neither of which `count` narrows. The
-    coverage holds; the sentence describing it is wrong for a quarter of the
-    probes it covers, in two published pages.
-  - **Goal**: Say what the narrowed `count` means per probe, or name the
-    workload by what it is - one grid, one build, the smallest `count` the rig
-    takes - rather than by a unit only three of the four probes share.
-  - From: Code Review Override - the seam count and the narrowed probe workload
+### UI/UX Override - the figures the overlap sentence states
 
 #### Resolve Issues
 
-- [ ] Seam Measurement 1 - the 28 glyph-and-size pairs behind the overlap claim
-  are not the pairs the walls are drawn from
-  - **Issue**: The narrowing landed, and the junction levels behind it are
-    recorded where a reader can find them. What it added beside them is a count
-    the repository contradicts. `index.html:286-290` says "Of the 28
-    glyph-and-size pairs the walls are drawn from, 24 ink wider than their cell
-    and four ink exactly it", and the 0.8.2-alpha `CHANGELOG.md` entry repeats
-    it. `drawTunnel` picks the wall glyph from four characters - `░ ▒ ▓ █` at
-    `index.html:1555-1558` - and `fitGrid` settles on eleven font sizes,
-    `FONT_SIZE` 16 down to `MIN_FONT_SIZE` 6 in whole steps. That is 44
-    glyph-and-size pairs, not 28. 28 is four glyphs against the seven distinct
-    cell widths those eleven sizes produce: `ceil(1229/2048 * size)` runs 4, 5,
-    5, 6, 7, 7, 8, 8, 9, 10, 10, so four of the sizes share a cell with another.
-    Grouping by cell instead of by size merges sizes whose advance differs by
-    most of a pixel - fonts 7 and 8 share a 5-pixel cell off advances of 4.201px
-    and 4.801px - and ink width follows the advance, not the cell. So either
-    sixteen pairs went unmeasured or the reading answers a different question
-    from the one the sentence asks. The conclusion it supports is probably safe,
-    since the left bearing the `glyphInset` comment records separately is read
-    at every size; the number a reader can check is the part that is wrong.
-  - **Goal**: Re-take the ink widths over all eleven sizes, or say which sizes
-    the 28 covers and why, and correct both copies. If the count stays
-    unrebuildable, add it to the browser-only half of the `## Measurement` item
-    below, which already carries the junction levels and the left bearing but
-    not this.
+- [ ] Seam Measurement 2 - the right-of-advance figure that replaced the removed
+  count reaches one pixel at five of the eleven sizes
+  - **Issue**: The removal landed. The 24-of-28 count is gone from both places
+    that published it, what 28 actually counted is explained, and the re-take is
+    recorded as open work in `## Measurement`. The sentence written in its place
+    states a figure that was not there before and that does not hold: `index.html:286-291`
+    and `CHANGELOG.md:26-29` say the shade blocks reach "one to two pixels right
+    of the advance, read off ... actualBoundingBoxRight at every size fitGrid can
+    settle on". Measured in chromium through the page's own `measureCell` and
+    `tuneText` at every one of those sizes, `actualBoundingBoxRight - advance`
+    runs 1.3984, 0.9985, 0.5986, 1.1987, 0.7988, 1.3989, 0.9990, 0.5991, 1.1992,
+    0.7993, 1.3994 for fonts 16 down to 6. The range is 0.5986px to 1.3994px: it
+    reaches one pixel at five of the eleven sizes and two pixels at none of them,
+    so the claim is wrong at both ends and at six sizes outright. No other
+    reading saves it - `right - cell` is 0 at six sizes and never 2, and the
+    whole ink width past the advance exceeds 2px at five. The conclusion the
+    figure is offered for does hold and was checked separately: ink past the
+    right edge of its own cell, `inset + right - cell`, is positive at all
+    eleven sizes, and the page's own `ScreenBuffer.render` driven at all eleven
+    shows no unpainted column between two inked cells across 44 glyph-and-size
+    pairs, byte-identical to the same reading off `HEAD`. `glyphInset` is
+    unchanged and correct.
+  - **Goal**: Resolve to [seam-measurement-2.prompt.md](.claude/prompts/seam-measurement-2.prompt.md)
   - From: UI/UX Override - the inset figures the glyph comment states
+
+#### Found Issues
+
+- [ ] The three glyphs that reach left of their origin are not the three shade
+  blocks
+  - **Issue**: Five places say "the three shade blocks each reach a whole pixel
+    left of the origin they are drawn at" - `index.html:286-291` and
+    `CHANGELOG.md:26-29`, both written this turn, and `index.html:325-327`,
+    `CHANGELOG.md:128` and `CHANGELOG.md:171`, which are older. Measured off
+    `actualBoundingBoxLeft` in chromium at every size `fitGrid` can settle on,
+    the light shade `░` reads 0.0000 at all eleven, while `▒`, `▓` and the full
+    block `█` read 1.0000 at all eleven. So the set of three that reach left is
+    `▒ ▓ █`, not the three shades, and the sentence both names a glyph that does
+    not qualify and omits the one outside its category that does. Corroborated
+    off the grid rather than only the metrics: rendering four inked cells with an
+    empty cell either side inks the column left of the run at font 13 and font 8
+    only, and there only for `▒`, `▓` and `█`, never for `░` at any size - which
+    is the same two-size limit `glyphInset`'s doc comment already records.
+    `index.html:325-327` is the worst of the five, because the sentence after it
+    cites "a run of the full block" as the case that bleeds, contradicting the
+    category its own paragraph opens with. The repository already holds the
+    correct reading: the completed item "A run of block glyphs still inks the
+    column left of its first cell at the two sizes with the smallest inset", in
+    `## Complete`, names `▒`, `▓` and `█`.
+  - **Goal**: Resolve to [shade-block-left-bearing.prompt.md](.claude/prompts/shade-block-left-bearing.prompt.md)
+  - From: UI/UX Override - the figures the overlap sentence states
+- [ ] Nothing in the suite pins the four glyphs every wall figure is counted from
+  - **Issue**: The figures in the `glyphInset` comment are all built on the walls
+    being drawn from four characters - 44 glyph-and-size pairs is four by eleven,
+    28 is four by seven, and the left bearing and the overlap are both stated per
+    glyph. `drawTunnel` picks that character from a four-branch depth ramp at
+    `index.html:1571-1574`. Nothing asserts the ramp has four branches. The one
+    place the suite names the characters is `WALL_CHARS` at
+    `test/warp.test.mjs:36`, and it is a filter, not an assertion: it collects the
+    cells a wall column is allowed to hold so the warp checks can read their
+    colours, and it is deliberately wider than the ramp, carrying the two ring
+    characters as well. Add a fifth shade to the ramp and that set simply does
+    not collect it, every one of the 539 tests still passes, and four figures in a
+    published comment become wrong with nothing saying so. This is the same shape
+    as the count the turn just removed - a figure whose premise moved out from
+    under it - and the removal cost two releases to find.
+  - **Goal**: One assertion, no browser needed, in whichever of
+    `test/browser-engine.test.mjs` or `test/warp.test.mjs` already has a
+    full-height tunnel to hand. Drive a quiet run tall enough that `t` crosses
+    all four of the ramp's bands, collect the distinct characters `drawTunnel`
+    leaves on the wall columns with the ring characters and the floor dot
+    excluded, and assert the set is exactly `░ ▒ ▓ █` - so a fifth band, or a
+    substituted glyph, fails the suite and sends someone to the figures that
+    counted the old four. Worth running in both builds, since `drawTunnel` is
+    shared and the parity suite would otherwise be the only thing watching it.
+    Leave `WALL_CHARS` as it is; it is doing a different job and widening the
+    assertion to match it would defeat the point.
+  - From: UI/UX Override - the figures the overlap sentence states
+
+### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
 
@@ -131,15 +144,25 @@ repository alone instead of from scratch files in `.tmp`. Probes report; the
 assertions stay in `test/`.
 
 - [ ] **A probe for the glyph tuning's own figures** - the glyph tuning quotes
-  four sets of numbers that only a scratch script can rebuild: the 96
+  five sets of numbers that only a scratch script can rebuild: the 96
   hinted-against-precise comparisons behind "the fractional position is honoured
   either way", the per-size table behind the inset's 0.099px to 0.500px range
   and the `1229/2048` em advance it follows from, the junction levels behind
-  "lifts the seam most where the slack is widest", and the left bearing recorded
-  beside `glyphInset` as a known limit at font 13 and font 8. The first set is
-  from 0.8.1-alpha and the last three from 0.8.2-alpha, which corrected the
-  figures the first version of this item quoted; every one of them was read in
-  chromium and none is reproducible from the repository. The arithmetic half
+  "lifts the seam most where the slack is widest", the left bearing recorded
+  beside `glyphInset` as a known limit at font 13 and font 8, and the ink widths
+  of the four wall glyphs against their cells. That last one was published as
+  "24 of 28 glyph-and-size pairs ink wider than their cell and four ink exactly
+  it" and 0.8.3-alpha removed it: the walls are drawn from four glyphs at eleven
+  sizes, which is 44 pairs, and 28 is those glyphs against the seven distinct
+  cell widths the sizes produce. Ink width follows the advance rather than the
+  cell, so the sixteen merged pairs are unmeasured rather than covered - fonts 8
+  and 7 share a 5px cell off advances of 4.801px and 4.201px. Re-taking it over
+  all eleven sizes is the browser-only half of this item; the overlap conclusion
+  it was quoted under does not depend on it, resting on the left bearing, which
+  was read at every size. The first set is from 0.8.1-alpha and the other four
+  from 0.8.2-alpha, which corrected the figures the first version of this item
+  quoted; every one of them was read in chromium and none is reproducible from
+  the repository. The arithmetic half
   needs no browser and belongs beside the other probes; the rasterizer half
   needs chromium, which the project has so far declined, so this wants a
   decision on whether a browser probe lives here at all or whether the figure is
@@ -153,90 +176,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 104 earlier items in `TODO-archive.md`, newest last.
+> 107 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The pad's release rule is recorded as verified by a key the pad cannot hold
-  - **Issue**: `CHANGELOG.md:0.8.0-alpha` closes the gamepad entry with "Verified
-    in a chromium window against a stubbed `navigator.getGamepads`: ... and a `D`
-    held on the keyboard survived a resting pad." `D` is not one of the nine
-    names `PAD_CONTROL_KEYS` holds - the pad steers on `LEFT`, `RIGHT`, `UP` and
-    `DOWN`, and the keyboard reaches those through the arrow keys rather than
-    through `WASD`. So the poll's loop never visits `D` whatever `padWasHeld`
-    says, and that reading would have come back the same with the release rule
-    deleted. The rule itself holds, and is pinned at the seam the suite can reach
-    by `the page polls the pad once a frame and releases only what it pressed` in
-    `test/browser-shell.test.mjs`. What is wrong is the sentence recording how it
-    was checked live, which is what a reader consults when deciding whether the
-    rule still needs watching.
-  - **Goal**: Either re-run that check on a key the pad does reach - an arrow
-    held on the keyboard while a pad rests, which is the collision the rule
-    exists for - and record the result, or narrow the sentence to what the `D`
-    reading can show, which is that the poll does not clear keys outside
-    `PAD_CONTROL_KEYS`.
-  - From: UI/UX Override - what the glyph tuning is recorded as doing
-- [x] Inset Figures 1 - the range and the two zeroes the narrowed comment adds
-  are derived from an advance Courier New does not have
-  - **Issue**: The narrowing itself landed - the `geometricPrecision` mechanism
-    claim is gone from all four places. What it added in its place is a new
-    paragraph in `tuneText`'s doc comment at `index.html:308-313`, repeated in
-    `CHANGELOG.md:30-35`, giving the inset's range and two sizes where it is
-    said to be zero. All three of its figures are wrong, measured in chromium
-    against the page's own `measureCell` at every size `fitGrid` can settle on.
-    Courier New advances at `1229/2048` em, which is `0.6000977`, not at `0.6`
-    em: the measured advance matches `1229/2048 * size` at all eleven sizes to
-    within half a thousandth of a pixel and matches `0.6 * size` at none of
-    them. Because `cellW` is the ceiling of that advance, the four
-    ten-thousandths of an em decide the cell at exactly the two sizes the
-    comment singles out - at font 10 an advance of `6.001` ceils to `7` where
-    `6.000` would ceil to `6`, and at font 15 `9.001` ceils to `10` where
-    `9.000` would ceil to `9`. So the two sizes recorded as having no inset at
-    all carry the largest insets in the range, `0.500px` and `0.499px`, and no
-    size in the range has an inset of zero. The stated range of `0.100px to
-    0.400px` is really `0.099px to 0.500px`. The claim is not merely off; at
-    the two sizes it names it is inverted, and those are the two sizes where
-    the centring does the most good. The bound the same paragraph states - the
-    slack always under a pixel, the inset always half of it and never reaching
-    half a pixel - was checked and holds.
-  - **Goal**: Resolve to [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
-  - From: UI/UX Override - what the glyph tuning is recorded as doing
-- [x] **Seam Measurement**: "Halves the seam" holds at four of the eleven font
-  sizes, does nothing at four and reverses at three
-  - **Issue**: `docs/how-it-works.html` publishes that centring the glyph
-    "halves the seam between two of the box characters the tunnel walls are
-    built from", and `index.html`'s comment and `CHANGELOG.md` say the same.
-    Measured at the junction between two tiling wall glyphs - the wall is a ring
-    outline two cells thick, so the tunnel holds pairs rather than runs, four of
-    each glyph on screen at every size - by repainting the live buffer twice in
-    one synchronous pass, once through `ScreenBuffer.render` with the page's own
-    `cellAdvance` and once with `advance = cellW`, which is the left-packed grid
-    this replaced. Taking the darkest of the two pixel columns either side of a
-    junction, as a level out of 255: at an inset of 0.5px (fonts 15, 10) it
-    rises 41.7 to 68.7 and the spread across the junction falls 82.3 to 23.3;
-    at 0.4px (fonts 12, 7) it rises 55.3 to 72.0 and the spread falls 68.7 to
-    36.3, which is the halving as described. At 0.3px (fonts 14, 9) the reading
-    is exactly mirrored - 97.0/124.0 becomes 124.0/97.0, the deficit swapping
-    sides with the darkest column and the spread unchanged to a tenth of a
-    level. At 0.1px (fonts 13, 8) nothing moves at all. At 0.2px (fonts 16, 11,
-    6) it goes the wrong way: the darkest column falls 111.7 to 102.0 and the
-    spread widens 12.7 to 31.3, because left-packed was already nearly even
-    there and the inset tips it past centre. Related: there is no gap between
-    two of these glyphs to remove in the first place - of 28 glyph-and-size
-    pairs, 24 ink wider than their cell and four ink exactly it, and `▒ ▓ █`
-    each reach a whole pixel left of the origin they are drawn at, so two
-    adjacent cells overlap. What the inset moves is where the soft edge of that
-    overlap falls. The feature is worth having and the numbers say so - the
-    worst seam in the build is at fonts 15 and 10 and that is where it helps
-    most - but the sentence claims a uniform effect the raster does not show.
-  - **Goal**: Narrow the three copies to what the measurement supports: the
-    centring lifts the seam most where the slack is widest, which is where it
-    was worst, and does nothing or a little harm where the slack is narrow. The
-    figures are in [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
-    and in the `2026-10-04` entry of
-    `test-results/ui-ux-tester.agent/ui-ux-tester.log`. The published sentence
-    is the one that matters most, since it is the only one a visitor reads.
-    Leave `docs/how-it-works.html`'s "a fifth of a pixel nobody sees" alone - at
-    font 16 the inset is 0.199px and that is right.
-  - From: UI/UX Override - the inset figures the glyph comment states
 - [x] A run of block glyphs still inks the column left of its first cell at the
   two sizes with the smallest inset
   - **Issue**: `▒`, `▓` and `█` reach a whole pixel left of the origin they are
@@ -290,4 +231,67 @@ the roadmap section each one came from.
     The first covers more and is the better buy if a probe can be run quietly,
     since the rig prints as it goes. A probe reports and never asserts, so
     either way the assertion belongs in `test/probes.test.mjs`.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] The narrowed probe workload is not pinned to the flag table it is keyed by
+  - **Issue**: `NARROWED` at `test/probes.test.mjs:57` carries one value per
+    argument property, and `narrowedArgs` resolves a probe's flags through it -
+    `args[FLAG_ARG[flag]] = NARROWED[FLAG_ARG[flag]]`. Two checks in the same
+    file pin the pieces either side of it: `the table names every flag the rig
+    parses, and no others` pins `FLAG_ARG` against `parseArgs`, and `every probe
+    takes exactly the flags the table lists for it` pins the table against each
+    `run()`. Nothing pins `NARROWED` against `FLAG_ARG`. Add a flag to
+    `parseArgs`, to `FLAG_ARG` and to a probe - the shape the rig has grown
+    twice already - and `NARROWED` hands that probe `undefined` for it, which
+    the probe reads as "not passed" and answers with its own default, the full
+    walk. Every assertion still passes, and the workload the two new checks
+    promise to narrow stops being narrow with nothing saying so. `free-flight`
+    is the one that would hurt: its `passes` default is every seed in
+    `FREE_SEEDS`.
+  - **Goal**: Assert that `NARROWED` holds a value for every property
+    `FLAG_ARG` maps, beside the check that `FLAG_ARG` matches `parseArgs`, so a
+    flag added without a narrowed value fails the suite rather than widening the
+    walk inside it.
+  - From: Code Review Override - the seam count and the narrowed probe workload
+- [x] "One placement" names a workload `free-flight` does not run
+  - **Issue**: `NARROWED`'s doc comment at `test/probes.test.mjs:46`, the
+    paragraph added to `CHEATSHEET.md`, and the matching sentences in
+    `docs/cheatsheet.html` and `docs/development.html` all describe the new run
+    as "one grid, one build and one placement". `count` is a placement walk for
+    `column`, `frame-rate` and `seen-versus-kill`, and `free-flight` reads the
+    same flag as frames - `const frames = count ?? FREE_FRAMES` at
+    `test/probes/free-flight.mjs:57` - so `count: 1` flies one frame there. Its
+    flight table comes back all zeroes, since no volley is fired in a single
+    frame, and what actually reaches the harness for that probe is the rate walk
+    at `FREE_RATE_FRAMES` and `darkWalk`, neither of which `count` narrows. The
+    coverage holds; the sentence describing it is wrong for a quarter of the
+    probes it covers, in two published pages.
+  - **Goal**: Say what the narrowed `count` means per probe, or name the
+    workload by what it is - one grid, one build, the smallest `count` the rig
+    takes - rather than by a unit only three of the four probes share.
+  - From: Code Review Override - the seam count and the narrowed probe workload
+- [x] Seam Measurement 1 - the 28 glyph-and-size pairs behind the overlap claim
+  are not the pairs the walls are drawn from
+  - **Issue**: The narrowing landed, and the junction levels behind it are
+    recorded where a reader can find them. What it added beside them is a count
+    the repository contradicts. `index.html:286-290` says "Of the 28
+    glyph-and-size pairs the walls are drawn from, 24 ink wider than their cell
+    and four ink exactly it", and the 0.8.2-alpha `CHANGELOG.md` entry repeats
+    it. `drawTunnel` picks the wall glyph from four characters - `░ ▒ ▓ █` at
+    `index.html:1555-1558` - and `fitGrid` settles on eleven font sizes,
+    `FONT_SIZE` 16 down to `MIN_FONT_SIZE` 6 in whole steps. That is 44
+    glyph-and-size pairs, not 28. 28 is four glyphs against the seven distinct
+    cell widths those eleven sizes produce: `ceil(1229/2048 * size)` runs 4, 5,
+    5, 6, 7, 7, 8, 8, 9, 10, 10, so four of the sizes share a cell with another.
+    Grouping by cell instead of by size merges sizes whose advance differs by
+    most of a pixel - fonts 7 and 8 share a 5-pixel cell off advances of 4.201px
+    and 4.801px - and ink width follows the advance, not the cell. So either
+    sixteen pairs went unmeasured or the reading answers a different question
+    from the one the sentence asks. The conclusion it supports is probably safe,
+    since the left bearing the `glyphInset` comment records separately is read
+    at every size; the number a reader can check is the part that is wrong.
+  - **Goal**: Re-take the ink widths over all eleven sizes, or say which sizes
+    the 28 covers and why, and correct both copies. If the count stays
+    unrebuildable, add it to the browser-only half of the `## Measurement` item
+    below, which already carries the junction levels and the left bearing but
+    not this.
   - From: UI/UX Override - the inset figures the glyph comment states
