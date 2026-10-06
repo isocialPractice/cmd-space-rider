@@ -112,9 +112,12 @@ The table the rig checks against lives in `test/probes/probes.mjs`, and
 `test/probes.test.mjs` reads it against the probes themselves: every probe takes
 exactly the flags listed for it, so a probe that stops reading an argument fails
 the suite rather than going on accepting the flag in silence. Every probe that
-calls the shared engagement is run there too, on one grid, one build and one
-placement, because reading a probe's argument list never reaches the calls the
-probe makes.
+calls the shared engagement is run there too, on one grid, one build and the
+smallest `--count` and `--passes` the rig takes, because reading a probe's
+argument list never reaches the calls the probe makes. What `--count 1` narrows
+to depends on the probe: one placement for `column`, `frame-rate` and
+`seen-versus-kill`, and a single frame for `free-flight`, which reads the flag
+as frames.
 
 A probe reports; it never asserts. Every walk is seeded, so the same command
 gives the same numbers every time.

@@ -43,8 +43,18 @@ const RUNNER = join(REPO_ROOT, 'test', 'probes', 'run.mjs');
 const runner = (...argv) => spawnSync(process.execPath, [RUNNER, ...argv], { encoding: 'utf8' });
 
 /**
- * The smallest workload the rig can hand a probe: one grid, one build, one
- * placement, one pass.
+ * The smallest workload the rig can hand a probe: one grid, one build, and the
+ * smallest `count` and `passes` it takes.
+ *
+ * Named by the flags rather than by what they narrow, because `count` is not
+ * one unit across the four probes that read it. In `column`, `frame-rate` and
+ * `seen-versus-kill` it is the placement walk, so `count: 1` is one placement.
+ * `free-flight` reads the same flag as frames - `const frames = count ??
+ * FREE_FRAMES` - so `count: 1` flies a single frame, and its flight rows come
+ * back with no volleys and no kills, nothing having been fired in one frame.
+ * What reaches the harness there is the rate walk at FREE_RATE_FRAMES and the
+ * dark walk, neither of which `count` narrows - so it is much the slowest probe
+ * here, and this is still the smallest workload the rig can ask it for.
  *
  * Keyed by the property each flag arrives in rather than by the flag's own
  * word, so a probe is handed exactly what FLAG_ARG says it destructures and the
@@ -235,6 +245,32 @@ test('probes: the table names every flag the rig parses, and no others', () => {
   const parsed = [...source.matchAll(/arg === '--([\w-]+)'/g)].map((m) => m[1]).sort();
   assert.ok(parsed.length, 'the rig parses named flags');
   assert.deepEqual(parsed, Object.keys(FLAG_ARG).sort(), 'the rig parses the flags FLAG_ARG maps');
+});
+
+test('probes: the narrowed workload carries a value for every argument the table maps', () => {
+  // The third link in the chain the two checks above pin either side of.
+  // FLAG_ARG is pinned against parseArgs, and the table is pinned against each
+  // run(), but narrowedArgs resolves a probe's flags through FLAG_ARG into
+  // NARROWED, and nothing pinned that. Add a flag to parseArgs, to FLAG_ARG and
+  // to a probe - the shape this rig has grown twice - and NARROWED hands that
+  // probe `undefined` for it, which the probe reads as the flag not having been
+  // passed and answers with its own default, the full walk. Every assertion
+  // still passes, and the workload the check above promises to narrow stops
+  // being narrow with nothing saying so. `free-flight` is the one that would
+  // hurt: its `passes` default is every seed in FREE_SEEDS.
+  const mapped = [...new Set(Object.values(FLAG_ARG))].sort();
+  assert.deepEqual(
+    Object.keys(NARROWED).sort(), mapped,
+    'NARROWED is keyed by the properties FLAG_ARG maps - a property either side of that is'
+    + ' a flag handed no narrowed value, or a narrowed value no flag arrives in'
+  );
+  for (const prop of mapped) {
+    assert.notEqual(
+      NARROWED[prop], undefined,
+      `NARROWED carries no value for ${prop}, so a probe reading it is handed undefined`
+      + ' and walks its own default instead'
+    );
+  }
 });
 
 test('probes: a flag the named probe does not read is refused, not discarded', () => {

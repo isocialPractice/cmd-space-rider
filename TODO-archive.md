@@ -1753,3 +1753,88 @@ still be found by name.
     `textBaseline` are all genuinely set; it is the comment above them and the
     test's name that claim the mechanism.
   - From: UI/UX Override - what the glyph tuning is recorded as doing
+
+## Archived 10-06-26
+
+- [x] The pad's release rule is recorded as verified by a key the pad cannot hold
+  - **Issue**: `CHANGELOG.md:0.8.0-alpha` closes the gamepad entry with "Verified
+    in a chromium window against a stubbed `navigator.getGamepads`: ... and a `D`
+    held on the keyboard survived a resting pad." `D` is not one of the nine
+    names `PAD_CONTROL_KEYS` holds - the pad steers on `LEFT`, `RIGHT`, `UP` and
+    `DOWN`, and the keyboard reaches those through the arrow keys rather than
+    through `WASD`. So the poll's loop never visits `D` whatever `padWasHeld`
+    says, and that reading would have come back the same with the release rule
+    deleted. The rule itself holds, and is pinned at the seam the suite can reach
+    by `the page polls the pad once a frame and releases only what it pressed` in
+    `test/browser-shell.test.mjs`. What is wrong is the sentence recording how it
+    was checked live, which is what a reader consults when deciding whether the
+    rule still needs watching.
+  - **Goal**: Either re-run that check on a key the pad does reach - an arrow
+    held on the keyboard while a pad rests, which is the collision the rule
+    exists for - and record the result, or narrow the sentence to what the `D`
+    reading can show, which is that the poll does not clear keys outside
+    `PAD_CONTROL_KEYS`.
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [x] Inset Figures 1 - the range and the two zeroes the narrowed comment adds
+  are derived from an advance Courier New does not have
+  - **Issue**: The narrowing itself landed - the `geometricPrecision` mechanism
+    claim is gone from all four places. What it added in its place is a new
+    paragraph in `tuneText`'s doc comment at `index.html:308-313`, repeated in
+    `CHANGELOG.md:30-35`, giving the inset's range and two sizes where it is
+    said to be zero. All three of its figures are wrong, measured in chromium
+    against the page's own `measureCell` at every size `fitGrid` can settle on.
+    Courier New advances at `1229/2048` em, which is `0.6000977`, not at `0.6`
+    em: the measured advance matches `1229/2048 * size` at all eleven sizes to
+    within half a thousandth of a pixel and matches `0.6 * size` at none of
+    them. Because `cellW` is the ceiling of that advance, the four
+    ten-thousandths of an em decide the cell at exactly the two sizes the
+    comment singles out - at font 10 an advance of `6.001` ceils to `7` where
+    `6.000` would ceil to `6`, and at font 15 `9.001` ceils to `10` where
+    `9.000` would ceil to `9`. So the two sizes recorded as having no inset at
+    all carry the largest insets in the range, `0.500px` and `0.499px`, and no
+    size in the range has an inset of zero. The stated range of `0.100px to
+    0.400px` is really `0.099px to 0.500px`. The claim is not merely off; at
+    the two sizes it names it is inverted, and those are the two sizes where
+    the centring does the most good. The bound the same paragraph states - the
+    slack always under a pixel, the inset always half of it and never reaching
+    half a pixel - was checked and holds.
+  - **Goal**: Resolve to [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
+  - From: UI/UX Override - what the glyph tuning is recorded as doing
+- [x] **Seam Measurement**: "Halves the seam" holds at four of the eleven font
+  sizes, does nothing at four and reverses at three
+  - **Issue**: `docs/how-it-works.html` publishes that centring the glyph
+    "halves the seam between two of the box characters the tunnel walls are
+    built from", and `index.html`'s comment and `CHANGELOG.md` say the same.
+    Measured at the junction between two tiling wall glyphs - the wall is a ring
+    outline two cells thick, so the tunnel holds pairs rather than runs, four of
+    each glyph on screen at every size - by repainting the live buffer twice in
+    one synchronous pass, once through `ScreenBuffer.render` with the page's own
+    `cellAdvance` and once with `advance = cellW`, which is the left-packed grid
+    this replaced. Taking the darkest of the two pixel columns either side of a
+    junction, as a level out of 255: at an inset of 0.5px (fonts 15, 10) it
+    rises 41.7 to 68.7 and the spread across the junction falls 82.3 to 23.3;
+    at 0.4px (fonts 12, 7) it rises 55.3 to 72.0 and the spread falls 68.7 to
+    36.3, which is the halving as described. At 0.3px (fonts 14, 9) the reading
+    is exactly mirrored - 97.0/124.0 becomes 124.0/97.0, the deficit swapping
+    sides with the darkest column and the spread unchanged to a tenth of a
+    level. At 0.1px (fonts 13, 8) nothing moves at all. At 0.2px (fonts 16, 11,
+    6) it goes the wrong way: the darkest column falls 111.7 to 102.0 and the
+    spread widens 12.7 to 31.3, because left-packed was already nearly even
+    there and the inset tips it past centre. Related: there is no gap between
+    two of these glyphs to remove in the first place - of 28 glyph-and-size
+    pairs, 24 ink wider than their cell and four ink exactly it, and `▒ ▓ █`
+    each reach a whole pixel left of the origin they are drawn at, so two
+    adjacent cells overlap. What the inset moves is where the soft edge of that
+    overlap falls. The feature is worth having and the numbers say so - the
+    worst seam in the build is at fonts 15 and 10 and that is where it helps
+    most - but the sentence claims a uniform effect the raster does not show.
+  - **Goal**: Narrow the three copies to what the measurement supports: the
+    centring lifts the seam most where the slack is widest, which is where it
+    was worst, and does nothing or a little harm where the slack is narrow. The
+    figures are in [inset-figures.prompt.md](.claude/prompts/inset-figures.prompt.md)
+    and in the `2026-10-04` entry of
+    `test-results/ui-ux-tester.agent/ui-ux-tester.log`. The published sentence
+    is the one that matters most, since it is the only one a visitor reads.
+    Leave `docs/how-it-works.html`'s "a fifth of a pixel nobody sees" alone - at
+    font 16 the inset is 0.199px and that is right.
+  - From: UI/UX Override - the inset figures the glyph comment states
