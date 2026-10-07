@@ -224,6 +224,88 @@ for (const build of BUILDS) {
   });
 }
 
+// ----- The ramp the figures are counted from -----
+
+/**
+ * The four depths drawTunnel ramps its wall glyph through, far to near.
+ *
+ * Every wall figure in the `glyphInset` comment in `index.html` is counted from
+ * this set being exactly these four: 44 glyph-and-size pairs is four glyphs by
+ * the eleven sizes `fitGrid` settles on, and the left bearing and the overhang
+ * past the cell are each stated per glyph. Nothing asserted the set itself, so
+ * one ramp glyph substituted for another, or a band dropped, left four
+ * published figures counting a ramp that had moved with the suite still green.
+ *
+ * A glyph from outside the ramp was already caught, by `a tracer never eats the
+ * wall it is clipped against` in test/pulse-cannon.test.mjs, which requires
+ * every wall-span cell to be a member of the WALL_CHARS exported from
+ * test/engagement.mjs. What a set handed to a check in advance cannot see is a
+ * swap inside it, which is what this adds. A fifth band drawn with a glyph the
+ * ramp already holds is uncovered here too, since it leaves the distinct set
+ * alone.
+ *
+ * Not WALL_CHARS, which is deliberately wider - it carries the ring ends so the
+ * warp checks above can collect a whole wall column's colours. Widening this to
+ * match it would defeat the check.
+ */
+const WALL_RAMP = ['░', '▒', '▓', '█'];
+
+/** What else drawTunnel lays on or between the walls, and is not the ramp. */
+const NOT_RAMP = new Set(['╣', '╠', FLOOR_DOT]);
+
+/**
+ * The distinct glyphs standing on the wall columns, counted per glyph.
+ *
+ * The columns are located from `tunnelSpan` and walked outward through the
+ * thickness until the row goes blank, rather than collected by matching against
+ * a set of characters. That is the point: a glyph this file does not know about
+ * is collected rather than filtered away, which is the failure a character
+ * filter cannot see.
+ */
+function rampGlyphs(build, screen) {
+  const gameTop = HUD_ROWS;
+  const gameBottom = screen.height - FOOTER_ROWS;
+  const found = new Map();
+  for (let row = gameTop; row < gameBottom; row++) {
+    const text = rowText(screen, row);
+    const { left, right } = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
+    for (const [from, step] of [[left, -1], [right, 1]]) {
+      for (let x = from; x >= 0 && x < screen.width; x += step) {
+        const char = text[x];
+        if (char === ' ' || char === undefined) break;
+        if (NOT_RAMP.has(char)) continue;
+        found.set(char, (found.get(char) ?? 0) + 1);
+      }
+    }
+  }
+  return found;
+}
+
+for (const build of BUILDS) {
+  test(`${build.name}: the walls are drawn from the four glyphs every wall figure counts`, () => {
+    // A 24-row play area crosses all four of the ramp's bands - t runs 0 to
+    // 0.95 over 19 rows against boundaries at 0.2, 0.5 and 0.8 - so one quiet
+    // render reaches every branch. Checked by the counts below being non-zero
+    // rather than by trusting the arithmetic.
+    const game = quietRun(build);
+    const screen = new build.ScreenBuffer(80, 24);
+    build.renderGame(screen, game.state);
+
+    const found = rampGlyphs(build, screen);
+
+    assert.deepEqual(
+      [...found.keys()].sort(), [...WALL_RAMP].sort(),
+      'drawTunnel left ' + JSON.stringify([...found.keys()]) + ' on the wall columns rather than'
+      + ' the four the figures in index.html count - 44 glyph-and-size pairs, the left bearing'
+      + ' and the overhang past the cell are all four-by-eleven, and a ramp of any other size'
+      + ' makes every one of them wrong'
+    );
+    for (const glyph of WALL_RAMP) {
+      assert.ok(found.get(glyph) > 0, `the ramp's ${glyph} band was not reached at 80x24`);
+    }
+  });
+}
+
 // ----- The banner -----
 
 for (const build of BUILDS) {

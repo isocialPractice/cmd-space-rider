@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.8.4-alpha] - 2026-10-07
+
+### Fixed
+
+- The "three shade blocks" that reach a whole pixel left of the origin they are
+  drawn at are not the three shade blocks. Read off `actualBoundingBoxLeft` in
+  chromium at every size `fitGrid` can settle on, the light shade `░` reads
+  0.0000 at all eleven sizes while `▒`, `▓` and the full block `█` read 1.0000
+  at all eleven - so the set of three that reach left is `▒ ▓ █`, and the
+  sentence both named a glyph that does not qualify and left out the one outside
+  its category that does.
+
+  Corroborated off the grid rather than only off the font metrics: rendering
+  four inked cells with an empty cell either side inks the column left of the
+  run at font 13 and font 8 only, and there only for `▒`, `▓` and `█`, never for
+  `░` at any size - the same two-size limit the `glyphInset` doc comment already
+  records. That comment was the worst of the places this was written, because
+  the sentence after it cites "a run of the full block" as the case that bleeds,
+  contradicting the category its own paragraph opened with. Three of the five
+  places now name the glyphs rather than the category: the file comment above
+  `glyphInset`, `glyphInset`'s own doc comment, and the 0.8.2-alpha `Internal`
+  entry below. The other two - the 0.8.3-alpha entry above and the first
+  0.8.2-alpha entry below - carry no left-bearing sentence any more: the next
+  fix in this entry replaced it with the overhang, so there is nothing left in
+  either one to name a glyph in.
+
+  The two shipped 0.8.2-alpha entries are corrected in place rather than left as
+  the record of what was believed then, following the precedent 0.8.3-alpha set
+  when it removed the 28-pair count from one of them.
+
+- "One to two pixels right of the advance" held at neither end. Measured through
+  the page's own `measureCell` and `tuneText` at every size,
+  `actualBoundingBoxRight - advance` runs 1.3984, 0.9985, 0.5986, 1.1987,
+  0.7988, 1.3989, 0.9990, 0.5991, 1.1992, 0.7993 and 1.3994 for fonts 16 down to
+  6: a range of 0.5986px to 1.3994px, which reaches one pixel at five of the
+  eleven sizes and two at none of them. No other reading rescues it -
+  `right - cell` is 0 at six sizes and never 2, and the whole ink width past the
+  advance exceeds 2px at five.
+
+  The clause is replaced by the figure that is stable and that the conclusion
+  actually rests on: `actualBoundingBoxRight` is a whole number at every size
+  and never less than the cell, so all four wall glyphs end their ink box at or
+  past the right edge of the cell they are laid out on, and once the inset is
+  counted that overhang runs 0.299px to 1.200px across all 44 glyph-and-size
+  pairs. Two adjacent cells overlap at every size, which is what the sentence
+  was for. `glyphInset` is unchanged and was never wrong.
+
+  The figure had gone into a third place the item that found it did not name -
+  the 0.8.2-alpha entry, where it read "at every size", more emphatic than the
+  0.8.3-alpha copy. All three carry the replacement, and the "at every size" the
+  other two never had is dropped. Both readings are recorded in the comment as
+  chromium measurements that need a rasterizer, and the overhang joins the
+  `## Measurement` item in `TODO.md` as a sixth set of figures the repository
+  cannot rebuild, beside the junction levels and the left bearing.
+
+- The assertion added in 0.8.3-alpha to stop `NARROWED` widening the probe walk
+  checked for `undefined` while the probes it guards read with `??`. The file
+  imports `node:assert/strict`, where `notEqual` is `notStrictEqual`, so `null`
+  satisfied it - and `count ?? FREE_FRAMES` and `passes ?? FREE_SEEDS.length`
+  treat `null` exactly as absent. Writing `passes: null`, the natural way to
+  spell "nothing narrows this one yet", passed both of the new assertions and
+  silently restored the full walk at every seed in `FREE_SEEDS`, which is the
+  outcome the assertion exists to prevent. The key-set `deepEqual` above it does
+  not help: the key is present. The guard is now
+  `assert.ok(NARROWED[prop] != null)`, which covers both nullish values in one
+  check, with a line in the comment saying it is nullish because `??` is.
+
+- Reflowing the probe paragraph in the 0.8.2-alpha entry left "report; and the
+  `column`" on a line of its own, 26 characters in a file that wraps at 80. That
+  paragraph and the two others this entry rewords are reflowed to the file's
+  width, with no wording change.
+
+### Added
+
+- Nothing in the suite pinned the four glyphs every wall figure is counted from.
+  The figures in the `glyphInset` comment are all built on the walls being drawn
+  from four characters - 44 glyph-and-size pairs is four by eleven, and the left
+  bearing and the overhang are both stated per glyph - but `drawTunnel` picks
+  that character from a four-branch depth ramp and nothing asserted the ramp has
+  four branches. Two copies of a `WALL_CHARS` set name the characters, in
+  `test/warp.test.mjs` and in `test/engagement.mjs`, and both are deliberately
+  wider than the ramp, carrying the two ring ends as well. One of them is read
+  as an assertion rather than as a filter - `a tracer never eats the wall it is
+  clipped against` in `test/pulse-cannon.test.mjs` requires every wall-span cell
+  to hold a member of it - so a ramp glyph from outside that set does fail the
+  suite, and always did. What nothing pinned is the set being exactly the four:
+  substitute one ramp glyph for another, or drop a band, and every assertion
+  passes while four figures in a published comment become wrong with nothing
+  saying so.
+
+  One assertion now drives a quiet tunnel at 80x24 - tall enough that `t`
+  crosses all four of the ramp's bands - and collects the distinct glyphs
+  standing on the wall columns, which are located from `tunnelSpan` and walked
+  outward through the thickness rather than matched against a list of
+  characters. Collecting by position is the whole point: a list of characters
+  handed to a check in advance settles in advance what it can notice. The set
+  has to be exactly `░ ▒ ▓ █`, and every band has to have been reached. It runs
+  in both builds, since `drawTunnel` is shared. Checked against both mutations -
+  a fifth band drawn with a glyph the ramp has never held, and the dark shade
+  band substituted with the medium one - and each fails in both builds; the
+  substitution is the one only this assertion catches, the other failing the
+  tracer check as well. A fifth band drawn with a glyph the ramp already holds
+  is the case still open, since it leaves the distinct set alone. `WALL_CHARS`
+  is left exactly as it was, in both copies.
+
 ## [0.8.3-alpha] - 2026-10-06
 
 ### Fixed
@@ -23,10 +128,11 @@
   declined, so the count is removed from both places that published it rather
   than corrected: the comment above `glyphInset` in `index.html` and the
   0.8.2-alpha entry below. What those two keep is the part the conclusion
-  actually rests on, which was read at every size and not at every cell: the
-  three shade blocks each reach a whole pixel left of the origin they are drawn
-  at and one to two pixels right of the advance, so two adjacent cells overlap
-  and what the inset moves is where the soft edge of that overlap falls. The
+  actually rests on, which was read at every size and not at every cell: all
+  four wall glyphs end their ink box on the same whole pixel at a given size,
+  at or past the right edge of the cell they are laid out on, 0.299px to
+  1.200px past it once the inset is counted, so two adjacent cells overlap and
+  what the inset moves is where the soft edge of that overlap falls. The
   overlap claim is unchanged and so is `glyphInset`. The unrebuilt figure joins
   the browser-only half of the `## Measurement` item in `TODO.md`, beside the
   junction levels and the left bearing.
@@ -121,18 +227,18 @@
 
   So the four now say what the measurement supports: the centring lifts the seam
   most where the slack is widest, which is where it read worst, and does nothing
-  or a little harm where the slack is narrow. The feature is worth
-  having on those numbers - the worst seam in the build is at fonts 15 and 10,
-  and that is where it helps most - and `docs/how-it-works.html`'s "a fifth of a
-  pixel nobody sees" is right as it stands, since the inset at font 16 is
-  0.199px. The comment in `index.html` also records that there is no gap between
-  two of these glyphs to close in the first place: the three shade blocks each
-  reach a whole pixel left of the origin they are drawn at and one to two pixels
-  right of the advance, at every size, so two adjacent cells overlap and what the
-  inset moves is where the soft edge of that overlap falls. This entry carried a
-  count beside that - 24 of 28 glyph-and-size pairs inking wider than their cell
-  and four inking exactly it - which 0.8.3-alpha removed from both copies as a
-  figure answering a different question; the overlap itself is unaffected.
+  or a little harm where the slack is narrow. The feature is worth having on
+  those numbers - the worst seam in the build is at fonts 15 and 10, and that is
+  where it helps most - and `docs/how-it-works.html`'s "a fifth of a pixel
+  nobody sees" is right as it stands, since the inset at font 16 is 0.199px. The
+  comment in `index.html` also records that there is no gap between two of these
+  glyphs to close in the first place: all four wall glyphs end their ink box on
+  a whole pixel at or past the right edge of the cell they are laid out on, so
+  two adjacent cells overlap and what the inset moves is where the soft edge of
+  that overlap falls. This entry carried a count beside that - 24 of 28
+  glyph-and-size pairs inking wider than their cell and four inking exactly it -
+  which 0.8.3-alpha removed from both copies as a figure answering a different
+  question; the overlap itself is unaffected.
 
 - The `column` probe's call into the engagement harness was run by nothing in
   `npm test`. `ghostFlight` gained a leading `build` parameter in 0.8.1-alpha and
@@ -152,36 +258,36 @@
   `test/engagement.mjs` is run on the smallest workload the rig can describe -
   one grid, one build, and the smallest `--count` and `--passes` it takes - with
   what it prints collected rather than printed, and has to come back with a
-  report; and the `column`
-  probe's two creep rows have to carry a column figure at each of the four
-  distances rather than a dash. Which probes are run is read off their own
-  source, so a probe that starts calling the harness is covered without a line
-  being added, and `overlay-anchor` is the one left out: it imports no harness to
-  reach and reads no flags to be narrowed by. Checked against both mispairings,
-  and both are throws rather than dashes: the old two-argument call leaves
-  `ghostFlight`'s third parameter undefined and it cannot destructure `x` out of
-  it, and the swapped argument list reads `state` off the build. Either one
-  fails both assertions, since running the probe at all is what meets them. The
-  dash the second assertion reads for is the other way a creep row goes wrong -
-  `ghostFlight` finding no contact in its 400 frames - which is the one the rig
-  prints and exits zero on.
+  report; and the `column` probe's two creep rows have to carry a column figure
+  at each of the four distances rather than a dash. Which probes are run is read
+  off their own source, so a probe that starts calling the harness is covered
+  without a line being added, and `overlay-anchor` is the one left out: it
+  imports no harness to reach and reads no flags to be narrowed by. Checked
+  against both mispairings, and both are throws rather than dashes: the old
+  two-argument call leaves `ghostFlight`'s third parameter undefined and it
+  cannot destructure `x` out of it, and the swapped argument list reads `state`
+  off the build. Either one fails both assertions, since running the probe at
+  all is what meets them. The dash the second assertion reads for is the other
+  way a creep row goes wrong - `ghostFlight` finding no contact in its 400
+  frames - which is the one the rig prints and exits zero on.
 
 ### Internal
 
 - The limit the centring does not cover is recorded beside `glyphInset` rather
-  than fixed. The three shade blocks each reach a whole pixel left of the origin
-  they are drawn at, at every font size, read off `actualBoundingBoxLeft`. The
-  inset normally covers that bearing and at nine of the eleven sizes nothing is
-  drawn left of a run's first cell, but at font 13, inset 0.099px, and font 8,
-  inset 0.100px, a tenth of a pixel is not enough: a run of the full block with
-  an empty cell to its left inks the column left of that cell at level 39 of 255,
-  which is the level the left-packed grid put there too. The centring neither
-  caused it nor was expected to clear it. Flooring the inset so it always cleared
-  the bearing would cost the placement its symmetry, which
-  `the inset never pushes a glyph out of its own cell` pins, and would buy that
-  at the cost of a defect nobody has reported seeing on two of eleven sizes, so
-  the arithmetic is left alone and the bleed is written down where the next
-  person to touch the placement will read it.
+  than fixed. `▒`, `▓` and `█` each reach a whole pixel left of the origin they
+  are drawn at, at every font size, read off `actualBoundingBoxLeft`, and the
+  light shade `░` reaches nothing left of it at any size. The inset normally
+  covers that bearing and at nine of the eleven sizes nothing is drawn left of a
+  run's first cell, but at font 13, inset 0.099px, and font 8, inset 0.100px, a
+  tenth of a pixel is not enough: a run of the full block with an empty cell to
+  its left inks the column left of that cell at level 39 of 255, which is the
+  level the left-packed grid put there too. The centring neither caused it nor
+  was expected to clear it. Flooring the inset so it always cleared the bearing
+  would cost the placement its symmetry, which `the inset never pushes a glyph
+  out of its own cell` pins, and would buy that at the cost of a defect nobody
+  has reported seeing on two of eleven sizes, so the arithmetic is left alone
+  and the bleed is written down where the next person to touch the placement
+  will read it.
 
 ## [0.8.1-alpha] - 2026-10-04
 
