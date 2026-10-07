@@ -1838,3 +1838,133 @@ still be found by name.
     Leave `docs/how-it-works.html`'s "a fifth of a pixel nobody sees" alone - at
     font 16 the inset is 0.199px and that is right.
   - From: UI/UX Override - the inset figures the glyph comment states
+
+## Archived 10-07-26
+
+- [x] A run of block glyphs still inks the column left of its first cell at the
+  two sizes with the smallest inset
+  - **Issue**: `▒`, `▓` and `█` reach a whole pixel left of the origin they are
+    drawn at, at every font size, measured off `actualBoundingBoxLeft`. The
+    inset normally clears it, and at nine of the eleven sizes nothing is drawn
+    left of a run's first cell. At font 13 (inset 0.099px) and font 8 (inset
+    0.100px) a tenth of a pixel is not enough: a run of `█` with an empty cell
+    to its left inks the column left of that cell at level 39 of 255, the same
+    level the left-packed grid put there. It is faint and it is not a
+    regression - the centring neither caused it nor was expected to fix it -
+    but the grid does bleed one column outside the cells it is laid out on at
+    those two sizes, and nothing in the repository says so.
+  - **Goal**: A decision rather than a change, and probably a sentence rather
+    than code. Either record it beside `glyphInset` as a known limit of the
+    placement at the narrow-slack sizes, or floor the inset so it always clears
+    the left bearing - which would cost the centring its symmetry and wants
+    weighing against a defect nobody has reported seeing. Do not change
+    `glyphInset`'s arithmetic without the second decision: the suite pins the
+    two margins being equal, in `the inset never pushes a glyph out of its own
+    cell` in `test/menu-layout.test.mjs`, and a floor would break that
+    deliberately. The open `## Measurement` item above, "A probe for the glyph
+    tuning's own figures", is where this belongs if a browser probe is ever
+    admitted - it is the same question of a figure that only chromium can
+    produce.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] The probe call into the harness that changed signature this turn is run
+  by nothing in `npm test`
+  - **Issue**: `ghostFlight` gained a leading `build` parameter at
+    `test/engagement.mjs:536`, and its only caller outside that file is
+    `creep` at `test/probes/column.mjs:38`, which was updated to match and is
+    correct today. Nothing in the suite runs it. `npm test` globs
+    `test/*.test.mjs`, so `test/probes/column.mjs` is reached only by
+    `npm run probe -- column`, and `test/probes.test.mjs` imports each probe to
+    read what its `run()` destructures without ever calling it. So the pairing
+    is unverified in the direction that just moved: pass the old argument list
+    and `build` binds to the `game` object, `build.BULLET_SPEED` is
+    `undefined`, `travel` is `NaN`, every row comparison in the walk is false,
+    and `ghostFlight` returns `null` after its 400 frames. Checked by calling
+    `ghostFlight(game, game, ...)` against a staged target at x 4.5, z -80:
+    the correct call reports contact at z -66.2 and the old one returns
+    `null`, which `creep` prints as `-`. All eight creep figures in the probe
+    table would read `-` with 536 tests passing - the failure
+    `test/probes.test.mjs` opens by naming, "Nothing failed, because nothing
+    looked."
+  - **Goal**: One assertion that reaches a probe's call into the harness
+    rather than only its flag contract with the rig. `creep` is not exported,
+    so the two openings are to invoke the probe's `run()` itself on a narrowed
+    workload - one grid, one build, `count` 1 - and assert it resolves without
+    throwing, which reaches every probe's harness calls at once; or to export
+    `creep` and assert it returns a finite column figure for a staged target.
+    The first covers more and is the better buy if a probe can be run quietly,
+    since the rig prints as it goes. A probe reports and never asserts, so
+    either way the assertion belongs in `test/probes.test.mjs`.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] **Narrowed Guard**: The narrowed probe workload is not pinned to the flag
+  table it is keyed by
+  - **Issue**: `NARROWED` at `test/probes.test.mjs:57` carries one value per
+    argument property, and `narrowedArgs` resolves a probe's flags through it -
+    `args[FLAG_ARG[flag]] = NARROWED[FLAG_ARG[flag]]`. Two checks in the same
+    file pin the pieces either side of it: `the table names every flag the rig
+    parses, and no others` pins `FLAG_ARG` against `parseArgs`, and `every probe
+    takes exactly the flags the table lists for it` pins the table against each
+    `run()`. Nothing pins `NARROWED` against `FLAG_ARG`. Add a flag to
+    `parseArgs`, to `FLAG_ARG` and to a probe - the shape the rig has grown
+    twice already - and `NARROWED` hands that probe `undefined` for it, which
+    the probe reads as "not passed" and answers with its own default, the full
+    walk. Every assertion still passes, and the workload the two new checks
+    promise to narrow stops being narrow with nothing saying so. `free-flight`
+    is the one that would hurt: its `passes` default is every seed in
+    `FREE_SEEDS`.
+  - **Goal**: Assert that `NARROWED` holds a value for every property
+    `FLAG_ARG` maps, beside the check that `FLAG_ARG` matches `parseArgs`, so a
+    flag added without a narrowed value fails the suite rather than widening the
+    walk inside it.
+  - From: Code Review Override - the seam count and the narrowed probe workload
+- [x] "One placement" names a workload `free-flight` does not run
+  - **Issue**: `NARROWED`'s doc comment at `test/probes.test.mjs:46`, the
+    paragraph added to `CHEATSHEET.md`, and the matching sentences in
+    `docs/cheatsheet.html` and `docs/development.html` all describe the new run
+    as "one grid, one build and one placement". `count` is a placement walk for
+    `column`, `frame-rate` and `seen-versus-kill`, and `free-flight` reads the
+    same flag as frames - `const frames = count ?? FREE_FRAMES` at
+    `test/probes/free-flight.mjs:57` - so `count: 1` flies one frame there. Its
+    flight table comes back all zeroes, since no volley is fired in a single
+    frame, and what actually reaches the harness for that probe is the rate walk
+    at `FREE_RATE_FRAMES` and `darkWalk`, neither of which `count` narrows. The
+    coverage holds; the sentence describing it is wrong for a quarter of the
+    probes it covers, in two published pages.
+  - **Goal**: Say what the narrowed `count` means per probe, or name the
+    workload by what it is - one grid, one build, the smallest `count` the rig
+    takes - rather than by a unit only three of the four probes share.
+  - From: Code Review Override - the seam count and the narrowed probe workload
+- [x] Seam Measurement 1 - the 28 glyph-and-size pairs behind the overlap claim
+  are not the pairs the walls are drawn from
+  - **Issue**: The narrowing landed, and the junction levels behind it are
+    recorded where a reader can find them. What it added beside them is a count
+    the repository contradicts. `index.html:286-290` says "Of the 28
+    glyph-and-size pairs the walls are drawn from, 24 ink wider than their cell
+    and four ink exactly it", and the 0.8.2-alpha `CHANGELOG.md` entry repeats
+    it. `drawTunnel` picks the wall glyph from four characters - `░ ▒ ▓ █` at
+    `index.html:1555-1558` - and `fitGrid` settles on eleven font sizes,
+    `FONT_SIZE` 16 down to `MIN_FONT_SIZE` 6 in whole steps. That is 44
+    glyph-and-size pairs, not 28. 28 is four glyphs against the seven distinct
+    cell widths those eleven sizes produce: `ceil(1229/2048 * size)` runs 4, 5,
+    5, 6, 7, 7, 8, 8, 9, 10, 10, so four of the sizes share a cell with another.
+    Grouping by cell instead of by size merges sizes whose advance differs by
+    most of a pixel - fonts 7 and 8 share a 5-pixel cell off advances of 4.201px
+    and 4.801px - and ink width follows the advance, not the cell. So either
+    sixteen pairs went unmeasured or the reading answers a different question
+    from the one the sentence asks. The conclusion it supports is probably safe,
+    since the left bearing the `glyphInset` comment records separately is read
+    at every size; the number a reader can check is the part that is wrong.
+  - **Goal**: Re-take the ink widths over all eleven sizes, or say which sizes
+    the 28 covers and why, and correct both copies. If the count stays
+    unrebuildable, add it to the browser-only half of the `## Measurement` item
+    below, which already carries the junction levels and the left bearing but
+    not this.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] The reflowed probe paragraph in the 0.8.2-alpha entry leaves a four-word
+  orphan line
+  - **Issue**: Rewording the narrowed-workload sentence at `CHANGELOG.md:153-155`
+    rewrapped the first two lines and left the remainder of the sentence on a
+    line of its own - "report; and the `column`", 26 characters in a file that
+    wraps at 80. Nothing is wrong with what it says; it reads as a dropped line
+    to anyone scanning the entry.
+  - **Goal**: Reflow that one paragraph to the file's width. No wording change.
+  - From: UI/UX Override - the figures the overlap sentence states

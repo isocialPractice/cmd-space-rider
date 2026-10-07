@@ -283,12 +283,19 @@ let PALETTE=ANSI256;
 // where the slack is widest, which is where it was worst, and does nothing or a
 // little harm where the slack is narrow.
 //
-// There is also no gap between two of these glyphs to close. The three shade
-// blocks each reach a whole pixel left of the origin they are drawn at and one
-// to two pixels right of the advance, read off actualBoundingBoxLeft and
-// actualBoundingBoxRight at every size fitGrid can settle on, so two adjacent
-// cells overlap. What the inset moves is where the soft edge of that overlap
-// falls.
+// There is also no gap between two of these glyphs to close. ▒, ▓ and █ each
+// reach a whole pixel left of the origin they are drawn at, and ░ reaches
+// nothing left of it. All four end their ink box on the same whole pixel at a
+// given size, at or past the right edge of the cell they are laid out on, and
+// once the inset is counted that overhang runs 0.299px to 1.200px across the
+// eleven sizes - so two adjacent cells overlap at every one of them, and what
+// the inset moves is where the soft edge of that overlap falls. The overhang
+// is what the overlap rests on; the left bearing is what the inset has to
+// cover, which is a different question, answered beside glyphInset below.
+//
+// Both readings are off actualBoundingBoxLeft and actualBoundingBoxRight in
+// chromium at every size fitGrid can settle on. Like the junction levels above
+// they need a rasterizer, so they are not rebuildable from this repository.
 //
 // A count stood beside that until 0.8.3-alpha - 24 of 28 glyph-and-size pairs
 // inking wider than their cell and four inking exactly it - and it answers a
@@ -303,7 +310,7 @@ let PALETTE=ANSI256;
 // does not stand for the other. Re-taking it over all eleven needs a
 // rasterizer, so it sits with the other browser-only figures in the
 // `## Measurement` item in TODO.md. The overlap above does not rest on it:
-// the left bearing it follows from was read at every size.
+// the overhang it follows from was read at every size.
 //
 // Browser only. The CLI build writes characters into a terminal, which places
 // them in its own cells, so there is nothing here for test/parity.test.mjs to
@@ -322,8 +329,9 @@ let PALETTE=ANSI256;
  * was.
  *
  * A known limit at the two narrowest-slack sizes, recorded rather than fixed.
- * The three shade blocks each reach a whole pixel left of the origin they are
- * drawn at, at every font size, read off `actualBoundingBoxLeft`. The inset
+ * ▒, ▓ and █ each reach a whole pixel left of the origin they are drawn at, at
+ * every font size, read off `actualBoundingBoxLeft`; the light shade ░ reaches
+ * nothing left of it at any size, so the limit is the other three. The inset
  * normally covers that left bearing, and at nine of the eleven sizes `fitGrid`
  * can settle on nothing is drawn left of a run's first cell. At font 13, where
  * the inset is 0.099px, and font 8, where it is 0.100px, a tenth of a pixel is

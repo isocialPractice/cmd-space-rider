@@ -258,6 +258,13 @@ test('probes: the narrowed workload carries a value for every argument the table
   // still passes, and the workload the check above promises to narrow stops
   // being narrow with nothing saying so. `free-flight` is the one that would
   // hurt: its `passes` default is every seed in FREE_SEEDS.
+  //
+  // The value check below is nullish rather than strict because the probes read
+  // these values with `??` - `count ?? FREE_FRAMES` and `passes ??
+  // FREE_SEEDS.length` in free-flight - and `??` treats `null` exactly as
+  // absent. Against `undefined` alone, writing `passes: null` here, which is a
+  // natural way to spell "nothing narrows this one yet", would pass the check
+  // and restore the full walk at every seed anyway.
   const mapped = [...new Set(Object.values(FLAG_ARG))].sort();
   assert.deepEqual(
     Object.keys(NARROWED).sort(), mapped,
@@ -265,10 +272,10 @@ test('probes: the narrowed workload carries a value for every argument the table
     + ' a flag handed no narrowed value, or a narrowed value no flag arrives in'
   );
   for (const prop of mapped) {
-    assert.notEqual(
-      NARROWED[prop], undefined,
-      `NARROWED carries no value for ${prop}, so a probe reading it is handed undefined`
-      + ' and walks its own default instead'
+    assert.ok(
+      NARROWED[prop] != null,
+      `NARROWED carries no value for ${prop}, so a probe reading it is handed a`
+      + ' nullish value and walks its own default instead'
     );
   }
 });
