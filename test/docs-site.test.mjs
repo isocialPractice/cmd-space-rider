@@ -82,6 +82,87 @@ function revealTag() {
   return named[1];
 }
 
+/**
+ * The elements HTML closes for you, which a balance walk must never push.
+ *
+ * The spec's own list. An element closed by a trailing `/>` is handled by the
+ * walk instead, which is how the brand's inline SVG writes its shapes.
+ */
+const VOID_ELEMENTS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+  'link', 'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+test('docs: every element a page opens is closed, in the order it opened them', () => {
+  // An inline tag that never closes does not break the page - it swallows the
+  // rest of the paragraph into itself. A `<code>` span left open takes the
+  // sentence after it with it, and the only thing a reader sees is prose set in
+  // the wrong face; nothing here fails, and every text check in this file goes
+  // on passing, because the stripper reads what the markup says rather than
+  // what the browser draws. So pin the markup instead: the balance is what a
+  // browser would have to be opened to notice otherwise.
+  //
+  // The pages carry no comments and no inline script or style, so a plain walk
+  // over the tags is the whole document. Guarded below, since a page that
+  // gained either would quietly turn this into a walk over a code sample.
+  for (const name of PAGES) {
+    const html = pageText(name);
+    assert.ok(!html.includes('<!--'), `${name} carries an HTML comment, which this walk does not model`);
+    assert.ok(!/<(script|style)(?=[\s>])(?![^>]*\bsrc=)/.test(html),
+      `${name} carries inline script or style, whose contents this walk would read as markup`);
+
+    const open = [];
+    const faults = [];
+    for (const [, closing, raw, selfClosing] of html.matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)) {
+      const tag = raw.toLowerCase();
+      if (VOID_ELEMENTS.has(tag) || selfClosing === '/') continue;
+      if (!closing) { open.push(tag); continue; }
+
+      const expected = open.pop();
+      if (expected !== tag) faults.push(`</${tag}> closes <${expected ?? 'nothing'}>`);
+    }
+    for (const tag of open.reverse()) faults.push(`<${tag}> is never closed`);
+
+    assert.deepEqual(faults, [], `${name} is not balanced:\n${faults.map((f) => `  ${f}`).join('\n')}`);
+  }
+});
+
+/**
+ * The elements a `<p>` cannot contain, which HTML closes the paragraph before
+ * rather than nesting. Enough of the list to cover what these pages are built
+ * from; an element the site never uses would say nothing either way.
+ */
+const BLOCK_ELEMENTS = new Set([
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'pre', 'div',
+  'table', 'section', 'article', 'nav', 'header', 'footer', 'main',
+  'blockquote', 'figure', 'hr',
+]);
+
+test('docs: no paragraph has swallowed a heading or a block below it', () => {
+  // The balance walk above cannot see this one: a `</p>` moved past the heading
+  // that follows it leaves the markup perfectly nested and the section wrong,
+  // because the heading is now inside the paragraph rather than after it. A
+  // browser closes the paragraph itself at that point and strands the `</p>`,
+  // so what a reader gets is a heading in the wrong flow and a stray tag - and
+  // every text check here goes on passing, since the words are all still there
+  // in the order they were written.
+  //
+  // Which makes this the pair of the walk above rather than more of it: that
+  // one pins what is closed, this one pins where.
+  for (const name of PAGES) {
+    const faults = [];
+    let inParagraph = false;
+
+    for (const [, closing, raw] of pageText(name).matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^>]*?\/?>/g)) {
+      const tag = raw.toLowerCase();
+      if (inParagraph && !closing && BLOCK_ELEMENTS.has(tag)) faults.push(`<${tag}> opens inside a <p>`);
+      if (tag === 'p') inParagraph = !closing;
+    }
+
+    assert.deepEqual(faults, [], `${name} nests a block inside a paragraph:\n${faults.map((f) => `  ${f}`).join('\n')}`);
+  }
+});
+
 test('docs: the nav is the same markup on every page', () => {
   // The menu is repeated verbatim in all ten pages, so a fix applied to nine of
   // them leaves the pages disagreeing about their own navigation. Compared as
