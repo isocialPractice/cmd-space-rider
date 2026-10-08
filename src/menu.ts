@@ -1,7 +1,10 @@
 // src/menu.ts — Title screen, debug menu, and game over screen rendering
 
 import { ScreenBuffer } from './screen';
-import { GameState, C, DEBUG_MODES, DEBUG_MODE_NAMES, DEBUG_MODE_DESCS } from './types';
+import {
+  GameState, C, DEBUG_MODES, DEBUG_MODE_NAMES, DEBUG_MODE_DESCS,
+  LeaderEntry, NAME_LENGTH,
+} from './types';
 
 const { sin, floor, min, max } = Math;
 
@@ -87,6 +90,167 @@ function insideBorder(y: number, h: number): boolean {
   return y >= 1 && y <= h - 2;
 }
 
+/** The heading the title screen's table is drawn under. */
+export const LEADERBOARD_HEAD = '-- TOP PILOTS --';
+
+/** Columns between two columns of entries. */
+const LEADERBOARD_GAP = 4;
+
+/** One row of the table, as the title screen draws it. */
+export function leaderText(rank: number, entry: LeaderEntry): string {
+  return `${String(rank).padStart(2)}. ${entry.name}  ${entry.score}`;
+}
+
+/** Where the title screen's table goes, and how much of it there is room for. */
+export interface LeaderboardLayout {
+  /** Row the heading sits on. */
+  headY: number;
+  /** Entry rows there is room for under it. */
+  rows: number;
+  /** Columns the entries are dealt into. */
+  columns: number;
+  /** Entries actually drawn, which is what those rows and columns hold. */
+  shown: number;
+  /** Columns one entry is given, which every entry is padded out to. */
+  width: number;
+}
+
+/**
+ * Fit the table into what the title screen has left, under the launch prompt.
+ *
+ * Under the prompt rather than above it, for two reasons that pull the same
+ * way. The band below the prompt is the one part of the screen that grows with
+ * the terminal - everything above it is placed off the title art, which is a
+ * fixed number of rows - so this is the only placement where a tall window
+ * shows the whole table. And the prompt keeps the row it has always had, so a
+ * player with no scores yet sees the screen exactly as it was.
+ *
+ * Two columns where the grid is wide enough for them, which is every supported
+ * width at any ordinary score, because rows are the scarce thing and not
+ * columns: ten entries down one column needs ten rows that an 80x24 terminal
+ * does not have, and the same ten in two columns of five needs five.
+ *
+ * What does not fit is not drawn, and on a short screen that is the whole
+ * table. Measured against the title screen's own placement, the band under the
+ * prompt is empty below 24 rows, holds the heading and one row of two at 24,
+ * and holds all ten from 29 rows up. The documented 20-row minimum therefore
+ * shows no table at all, which is the honest answer on a screen already
+ * carrying the title art, the subtitle, four lines of controls and the prompt:
+ * the alternative is dropping one of those to make room for scores the player
+ * has not set yet.
+ */
+export function leaderboardLayout(
+  w: number, h: number, promptY: number, entries: LeaderEntry[]
+): LeaderboardLayout {
+  const headY = promptY + 2;
+  const rows = max(0, (h - 2) - headY);
+
+  // Every entry is padded to the widest of them, so the second column lines up
+  // under its own heading rather than under whatever the longest score was.
+  let width = LEADERBOARD_HEAD.length;
+  for (let i = 0; i < entries.length; i++) {
+    width = max(width, leaderText(i + 1, entries[i]).length);
+  }
+
+  const columns = width * 2 + LEADERBOARD_GAP <= w - 4 ? 2 : 1;
+  const shown = min(entries.length, rows * columns);
+  return { headY, rows, columns, shown, width };
+}
+
+/**
+ * The table on the title screen, drawn only when there is something on it.
+ *
+ * An empty table draws nothing at all - not the heading either. The terminal
+ * build keeps the table for the session it was set in and starts every session
+ * with an empty one, so a heading over no rows is what a player would see most
+ * of the time.
+ */
+function drawLeaderboard(screen: ScreenBuffer, state: GameState, promptY: number): void {
+  const w = screen.width;
+  const h = screen.height;
+  const entries = state.leaderboard;
+  if (entries.length === 0) return;
+
+  const layout = leaderboardLayout(w, h, promptY, entries);
+  if (layout.shown === 0) return;
+
+  const blockW = layout.columns * layout.width + (layout.columns - 1) * LEADERBOARD_GAP;
+  const blockX = floor((w - blockW) / 2);
+
+  if (insideBorder(layout.headY, h)) {
+    screen.putStringCenter(layout.headY, LEADERBOARD_HEAD, C.BRIGHT_MAGENTA, C.BLACK);
+  }
+
+  for (let i = 0; i < layout.shown; i++) {
+    // Down the first column before across to the second, so the ranking reads
+    // in the order the cabinets printed it.
+    const column = floor(i / layout.rows);
+    const y = layout.headY + 1 + (i % layout.rows);
+    if (!insideBorder(y, h)) continue;
+    const x = blockX + column * (layout.width + LEADERBOARD_GAP);
+    screen.putString(x, y, leaderText(i + 1, entries[i]),
+      i === 0 ? C.BRIGHT_YELLOW : C.CYAN, C.BLACK);
+  }
+}
+
+/**
+ * The hint under the three characters, in the fullest form that fits.
+ *
+ * The long form is 52 columns, which clears the documented 60-column minimum
+ * with room to spare, so the short one is for a grid narrower than the game
+ * supports rather than for any supported size. Both name the same three
+ * controls, which are the whole of what this screen does.
+ */
+export function nameEntryHint(w: number): string {
+  const full = '[ \u2191\u2193 LETTER \u2022 \u2190\u2192 SLOT \u2022 ENTER CONFIRM ]';
+  const short = '[ \u2191\u2193 \u2022 \u2190\u2192 \u2022 ENTER ]';
+  return full.length <= w - 4 ? full : short;
+}
+
+/**
+ * The name entry screen: a score that made the table, and the three characters
+ * it is about to be filed under.
+ *
+ * Three cells two columns apart, with a bar under the one being edited. The
+ * bar is what makes a space spellable - a slot holding one draws no glyph at
+ * all, and without something under it the player cannot tell an empty slot from
+ * a slot that is not there.
+ */
+export function renderNameEntry(screen: ScreenBuffer, state: GameState): void {
+  const w = screen.width;
+  const h = screen.height;
+  screen.clear(C.BLACK);
+
+  // Starfield background, drawn first so the entry sits on top of it
+  drawMenuStars(screen, state, w, h);
+  drawBorder(screen, w, h);
+
+  const titleY = floor(h * 0.2);
+  screen.putStringCenter(titleY, 'N E W   H I G H   S C O R E', C.BRIGHT_YELLOW, C.BLACK);
+  screen.putStringCenter(titleY + 2, `${state.score}`, C.BRIGHT_MAGENTA, C.BLACK);
+  screen.putStringCenter(titleY + 3, 'ENTER YOUR CALLSIGN', C.BRIGHT_CYAN, C.BLACK);
+
+  // The three slots, clamped so the bar under them stays inside the border on
+  // the shortest supported screen.
+  const slotsY = min(titleY + 6, h - 4);
+  const stride = 2;
+  const nameX = floor((w - (NAME_LENGTH * stride - 1)) / 2);
+  const blink = sin(state.uiTime * 6) > 0;
+  for (let i = 0; i < NAME_LENGTH; i++) {
+    const active = i === state.entrySlot;
+    const x = nameX + i * stride;
+    screen.put(x, slotsY, state.entryName[i] || ' ',
+      active ? (blink ? C.BRIGHT_WHITE : C.BRIGHT_CYAN) : C.CYAN, C.BLACK);
+    screen.put(x, slotsY + 1, active ? '\u2580' : '\u2500',
+      active ? C.BRIGHT_CYAN : C.GRAY, C.BLACK);
+  }
+
+  const hintY = min(slotsY + 3, h - 2);
+  const pulse = sin(state.time * 3) * 0.5 + 0.5;
+  screen.putStringCenter(hintY, nameEntryHint(w),
+    pulse > 0.3 ? C.BRIGHT_GREEN : C.GREEN, C.BLACK);
+}
+
 export function renderTitleScreen(screen: ScreenBuffer, state: GameState): void {
   const w = screen.width;
   const h = screen.height;
@@ -144,6 +308,9 @@ export function renderTitleScreen(screen: ScreenBuffer, state: GameState): void 
   const promptPulse = sin(state.time * 3) * 0.5 + 0.5;
   const promptColor = promptPulse > 0.3 ? C.BRIGHT_GREEN : C.GREEN;
   screen.putStringCenter(promptY, prompt, promptColor, C.BLACK);
+
+  // The top scores, in whatever room is left under the prompt.
+  drawLeaderboard(screen, state, promptY);
 }
 
 export function renderDebugMenu(screen: ScreenBuffer, state: GameState): void {

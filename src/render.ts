@@ -3,7 +3,7 @@
 import { ScreenBuffer } from './screen';
 import {
   GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME,
-  tunnelSpan, tracerLit, POWERUP_GLYPHS,
+  tunnelSpan, tracerLit, POWERUP_GLYPHS, detailTier,
 } from './types';
 
 // The tunnel's geometry moved to types.ts, where the hit test can read the same
@@ -49,6 +49,7 @@ export function renderGame(screen: ScreenBuffer, state: GameState): void {
   drawEntitiesFar(screen, state, gameTop, gameBottom);
   drawBullets(screen, state, gameTop, gameBottom);
   drawParticles(screen, state, gameTop, gameBottom);
+  drawGhost(screen, state, gameTop, gameBottom);
   drawShip(screen, state, gameTop, gameBottom);
   // Jolt the play area only, so the HUD and border stay anchored.
   screen.shiftRows(gameTop, gameBottom, shakeColumns(state));
@@ -347,6 +348,37 @@ function drawParticles(screen: ScreenBuffer, state: GameState, gameTop: number, 
   }
 }
 
+/**
+ * The ship from the run being raced, where it was at this point of that run.
+ *
+ * Hollow where the live ship is solid, and grey where it is cyan, so the two
+ * are never mistaken for each other on a frame where they overlap - which is
+ * the frame the ghost exists for, because it is the one that says the player is
+ * level with their own best flight.
+ *
+ * Two rows rather than three. The engines and their glow are left off: a glow
+ * pulsing off the world clock would be the one part of the ghost not read from
+ * the recording, and a trace of a flight is not burning anything.
+ *
+ * Drawn before the live ship so that where they share a cell, the ship wins.
+ */
+function drawGhost(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
+  const ghost = state.ghostShip;
+  if (ghost === null) return;
+
+  const w = screen.width;
+  const h = screen.height;
+  const pos = gameToScreen(ghost.x, ghost.y, 0, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
+  const cx = pos.col;
+  const cy = pos.row;
+  if (cy - 1 < gameTop || cy >= gameBottom) return;
+
+  screen.put(cx, cy - 1, '\u25B3', C.GRAY, C.BLACK);  // △ hollow nose
+  screen.put(cx - 1, cy, '<', C.GRAY, C.BLACK);
+  screen.put(cx, cy, '\u2591', C.GRAY, C.BLACK);      // ░ the body, faded
+  screen.put(cx + 1, cy, '>', C.GRAY, C.BLACK);
+}
+
 function drawShip(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
   const w = screen.width;
   const h = screen.height;
@@ -514,6 +546,15 @@ function drawFooter(screen: ScreenBuffer, state: GameState): void {
     badgeX += badge.text.length;
   }
 
+  // The detail tier, once the ladder has stepped off the fullest one. On the
+  // same room rule as the badges above and drawn after them, so a narrow grid
+  // carrying two pickups drops this rather than a pickup: a pickup is counting
+  // down something the player is spending, and this is a notice.
+  const detail = detailBadge(state);
+  if (detail !== null && badgeX + detail.text.length <= w - 2 - muteRoom) {
+    screen.putString(badgeX, footerY + 1, detail.text, detail.color, C.BLACK);
+  }
+
   if (state.muted) {
     const mute = ' MUTED ';
     screen.putString(w - mute.length - 2, footerY + 1, mute, C.BRIGHT_YELLOW, C.BLACK);
@@ -544,6 +585,22 @@ export function powerupBadges(state: GameState): { text: string; color: number }
     });
   }
   return out;
+}
+
+/**
+ * What the status strip says about the detail ladder, or null at the fullest
+ * tier - which is every run on a device that keeps up, and is why nothing is
+ * drawn there rather than a badge reading FULL. A strip that always carried one
+ * would be a permanent reminder of a mechanism that has not done anything.
+ *
+ * Grey, beside the cyan speed and the yellow mute flag. The player did not ask
+ * for this and cannot act on it, so it is a note about what the game is doing
+ * and not a warning: a device that cannot hold 30 frames is a fact about the
+ * device, and colouring it like a fault would read as the game having broken.
+ */
+export function detailBadge(state: GameState): { text: string; color: number } | null {
+  if (state.detail <= 0) return null;
+  return { text: ` ${detailTier(state.detail).name} `, color: C.GRAY };
 }
 
 function drawPauseOverlay(screen: ScreenBuffer, state: GameState): void {

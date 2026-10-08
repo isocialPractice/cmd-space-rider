@@ -186,7 +186,7 @@ test('the dead zone is measured against the stick actually drawn', () => {
 
 test('the fire button is the trigger in a run and the confirm key elsewhere', () => {
   assert.equal(browser.touchFireKey('playing'), 'SPACE');
-  for (const mode of ['menu', 'dead', 'debugMenu']) {
+  for (const mode of ['menu', 'dead', 'debugMenu', 'nameEntry']) {
     assert.equal(browser.touchFireKey(mode), 'ENTER', `${mode} waits on ENTER`);
   }
 });
@@ -282,7 +282,7 @@ test('A fires in a run and confirms everywhere else', () => {
   // same function: the title screen, the debug menu and the game over screen
   // all wait on an ENTER the pad has no other way to send.
   assert.equal(heldNames(browser.padKeys(padSnapshot({ a: 1 }), 'playing')), 'SPACE');
-  for (const mode of ['menu', 'dead', 'debugMenu']) {
+  for (const mode of ['menu', 'dead', 'debugMenu', 'nameEntry']) {
     assert.equal(heldNames(browser.padKeys(padSnapshot({ a: 1 }), mode)), 'ENTER', mode);
   }
 });

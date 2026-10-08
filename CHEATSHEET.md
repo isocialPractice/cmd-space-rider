@@ -22,6 +22,12 @@ the documentation. The full text lives on the
 | Left stick / `A` / `B` | Gamepad: steer / fire or confirm / boost |
 | Triggers | Gamepad: barrel roll, left and right |
 
+On the name entry screen the same keys spell a name instead of steering: up and
+down walk the character under the cursor through `A-Z`, `0-9` and a space, left
+and right move between the three slots, and `Enter` files the score. `Esc` files
+it too, under whatever name is showing, because the score was earned before the
+screen came up.
+
 Press-not-hold keys are `P`, `M`, `Esc`, `Q` and `E`. They fire once per press
 and take a short deadzone after a hold.
 
@@ -79,6 +85,10 @@ Debug runs never record a best score.
 | Barrel roll | 0.5 seconds invulnerable, then a cooldown |
 | Warp step | every 60 seconds, banner for 2 seconds |
 | Grid floor | 60 columns by 20 rows |
+| Leaderboard | top 10, three characters a name |
+| Replay ghost | 10 path samples a second, 10 minutes of run |
+| Detail ladder | 40 / 24 / 12 stars, full / 60% / 30% of a burst |
+| Detail window | 30 frames; down under 24 fps, back up at 27.3 fps |
 
 ## Scripts
 
@@ -142,7 +152,11 @@ size-neutral:
 
 ## Browser-only features
 
-High score persistence, sound, the CRT overlay (`C`), light mode, touch
-controls, and a canvas-offset screen shake. The terminal build jolts the play
-area by a whole character column instead, and keeps a best score for the
-session only.
+High score and leaderboard persistence, sound, the CRT overlay (`C`), light
+mode, touch controls, and a canvas-offset screen shake. The terminal build jolts
+the play area by a whole character column instead, and keeps a best score and a
+table for the session only.
+
+The replay ghost and the detail ladder are in both builds and neither is stored:
+a ghost lasts as long as the session, and the ladder is re-measured a second
+into every run.

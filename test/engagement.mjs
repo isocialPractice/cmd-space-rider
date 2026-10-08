@@ -456,7 +456,7 @@ export function engage(game, { x, y, z, dt = FRAME, volley = true, watch = null,
     if (fired && peek) peek();
     game.update(dt, keys, justPressed);
     if (fired && watch) watch();
-    if (s.mode === 'dead') return 'dead';
+    if (s.mode !== 'playing') return 'dead';
 
     // A kill, a ram and simply sailing past the camera all recycle the
     // obstacle to the back of the tunnel. Only a ram spends shield, and only a
@@ -601,7 +601,7 @@ export function stagedShot(build, grid, { x, y, targetZ, dt, aimedAt, aimDt = 1 
     const zBefore = s.obstacles[0].z;
     const bulletsBefore = s.bullets.length;
     game.update(dt, {}, {});
-    if (s.mode === 'dead') return 'dead';
+    if (s.mode !== 'playing') return 'dead';
     // Sailing past the camera recycles the obstacle exactly as a kill does, so
     // the shot going with it is what tells the two apart. `updateObstacles`
     // recycles past z = 10, so a frame that starts short of that and ends
@@ -660,7 +660,7 @@ export function engageByEye(build, screen, { x, y, z, holdRow }) {
     const bulletsExpected = s.bullets.length + (justPressed.SPACE ? VOLLEY_SIZE : 0);
     const zBefore = s.obstacles[0].z;
     game.update(FRAME, keys, justPressed);
-    if (s.mode === 'dead') return 'dead';
+    if (s.mode !== 'playing') return 'dead';
     if (s.obstacles[0].z < zBefore - 100) {
       if (s.shield < shieldBefore) return 'ram';
       return s.bullets.length < bulletsExpected ? 'hit' : 'miss';

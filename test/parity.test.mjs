@@ -18,6 +18,7 @@ const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const terminalTypes = require(join(REPO_ROOT, 'out', 'types.js'));
 const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
 const { renderGame: terminalRender } = require(join(REPO_ROOT, 'out', 'render.js'));
+const terminalMenu = require(join(REPO_ROOT, 'out', 'menu.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
 
@@ -37,6 +38,118 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.COMBO_MAX, terminalTypes.COMBO_MAX);
   assert.equal(browser.SHOT_SLACK_COLS, terminalTypes.SHOT_SLACK_COLS);
   assert.equal(browser.SLACK_REF_WIDTH, terminalTypes.SLACK_REF_WIDTH);
+});
+
+test('both builds hold the same detail ladder', () => {
+  // The ladder is what a slow device is stepped down, so a build cutting its
+  // starfield to a different population than the other is a browser and a
+  // terminal that do not look like the same game on the same machine.
+  assert.equal(browser.TARGET_FRAME_TIME, terminalTypes.TARGET_FRAME_TIME);
+  assert.equal(browser.DETAIL_WINDOW_FRAMES, terminalTypes.DETAIL_WINDOW_FRAMES);
+  assert.equal(browser.DETAIL_DROP_FACTOR, terminalTypes.DETAIL_DROP_FACTOR);
+  assert.equal(browser.DETAIL_RAISE_FACTOR, terminalTypes.DETAIL_RAISE_FACTOR);
+  assert.deepEqual(browser.DETAIL_TIERS, terminalTypes.DETAIL_TIERS);
+
+  // And the two decisions read off it, walked rather than spot-checked: the
+  // ladder is an index and the arithmetic is a comparison, so a build that got
+  // either boundary wrong would agree on the constants and still differ here.
+  for (let detail = -1; detail <= terminalTypes.DETAIL_TIERS.length; detail++) {
+    assert.deepEqual(
+      browser.detailTier(detail), terminalTypes.detailTier(detail),
+      `the tier at level ${detail}`
+    );
+    for (let ms = 10; ms <= 120; ms++) {
+      assert.equal(
+        browser.detailFor(detail, ms / 1000), terminalTypes.detailFor(detail, ms / 1000),
+        `the decision at level ${detail} on a ${ms}ms mean`
+      );
+    }
+    for (const count of [1, 5, 8, 10, 12, 15, 20]) {
+      assert.equal(
+        browser.burstSize(count, detail), terminalTypes.burstSize(count, detail),
+        `a burst of ${count} at level ${detail}`
+      );
+    }
+  }
+});
+
+test('both builds keep the same table and spell a name the same way', () => {
+  assert.equal(browser.LEADERBOARD_SIZE, terminalTypes.LEADERBOARD_SIZE);
+  assert.equal(browser.NAME_LENGTH, terminalTypes.NAME_LENGTH);
+  assert.equal(browser.NAME_ALPHABET, terminalTypes.NAME_ALPHABET);
+  assert.equal(browser.DEFAULT_NAME, terminalTypes.DEFAULT_NAME);
+
+  // The alphabet agreeing is not the same as the two builds reading a name the
+  // same way, and the stored table is the one value in this game that a player
+  // can edit by hand - so a build that accepted a row the other dropped would
+  // show a different table from the same storage.
+  const said = [
+    'ABC', 'abc', '', 'A', 'ABCDEFGH', 'a-b', '\n\t!', 'A1 ', '  ', '123',
+  ];
+  for (const name of said) {
+    assert.equal(
+      browser.normalizeName(name), terminalTypes.normalizeName(name),
+      `the name ${JSON.stringify(name)}`
+    );
+  }
+
+  const stored = [
+    null, undefined, 0, 'nope', true, [],
+    [{ name: 'ABC', score: 300 }, { name: 'DEF', score: 900 }],
+    [null, 7, 'ABC 400', { name: 'DEF' }, { score: 800 }],
+    [{ name: 'GHI', score: 'lots' }, { name: 'JKL', score: NaN }],
+    [{ name: 'MNO', score: Infinity }, { name: 'PQR', score: -40 }, { name: 'STU', score: 0 }],
+    [{ name: 'VWX', score: 0.5 }, { name: 'YZA', score: 0.999 }, { name: 'BCD', score: 1.5 }],
+    [{ name: 'this is far too long', score: 100.7 }],
+  ];
+  for (const raw of stored) {
+    assert.deepEqual(
+      browser.sanitizeLeaderboard(raw), terminalTypes.sanitizeLeaderboard(raw),
+      `the stored table ${JSON.stringify(raw) ?? 'undefined'}`
+    );
+  }
+
+  const full = [];
+  for (let i = 0; i < terminalTypes.LEADERBOARD_SIZE; i++) full.push({ name: 'AAA', score: i + 1 });
+  for (const score of [-1, 0, 1, 5, 11, 1000]) {
+    assert.equal(
+      browser.scoreQualifies(full, score), terminalTypes.scoreQualifies(full, score),
+      `a score of ${score} against a full table`
+    );
+    assert.deepEqual(
+      browser.recordScore(full, { name: 'NEW', score }),
+      terminalTypes.recordScore(full, { name: 'NEW', score }),
+      `recording ${score}`
+    );
+  }
+});
+
+test('both builds record and read a ghost the same way', () => {
+  assert.equal(browser.GHOST_SAMPLE_TIME, terminalTypes.GHOST_SAMPLE_TIME);
+  assert.equal(browser.GHOST_MAX_SAMPLES, terminalTypes.GHOST_MAX_SAMPLES);
+
+  // The reading is an interpolation with a cursor, and the end of a recording
+  // is a boundary: a build that read it one sample wide would show a ghost the
+  // other had already retired.
+  const path = [];
+  for (let i = 0; i <= 20; i++) path.push({ t: i * 0.1, x: Math.sin(i) * 4, y: i % 3 });
+  for (let step = -5; step <= 250; step++) {
+    const t = step / 100;
+    for (const cursor of [0, 5, 19, 20, 999, -3]) {
+      assert.deepEqual(
+        browser.readGhost(path, t, cursor), terminalTypes.readGhost(path, t, cursor),
+        `a reading at ${t} from cursor ${cursor}`
+      );
+    }
+  }
+  for (const empty of [[], [{ t: 1, x: 2, y: 3 }]]) {
+    for (const t of [0, 1, 2]) {
+      assert.deepEqual(
+        browser.readGhost(empty, t, 0), terminalTypes.readGhost(empty, t, 0),
+        `a short recording of ${empty.length} at ${t}`
+      );
+    }
+  }
 });
 
 test('both builds step the difficulty on the same clock', () => {
@@ -222,6 +335,112 @@ test('both builds refuse to record a debug run as the best score', () => {
     game.endGame();
     assert.equal(game.state.bestScore, 0);
   }
+});
+
+test('both builds fly the same ghost and record the same path', () => {
+  // The recording is the one piece of per-frame state read back by the renderer
+  // rather than by a rule, so a build sampling on a different clock would show
+  // the player a ghost somewhere else while agreeing on every constant.
+  const raced = [];
+  for (let i = 0; i <= 40; i++) raced.push({ t: i * 0.1, x: Math.sin(i / 2) * 4, y: 1 + (i % 3) });
+
+  const flown = [new TerminalGame(), new browser.Game()].map((game) => {
+    const s = game.state;
+    s.screenWidth = 80;
+    s.screenHeight = 24;
+    s.leaderboard = [];
+    game.startGame();
+    s.obstacles = [];
+    s.orbs = [];
+    s.mines = [];
+    s.ghost = raced;
+    s.ghostCursor = 0;
+
+    const seen = [];
+    const script = [{ D: true }, { D: true }, {}, { A: true }, { W: true }, {}];
+    for (let i = 0; i < 120; i++) {
+      game.update(FRAME, script[i % script.length], {});
+      seen.push(s.ghostShip === null ? null : { x: s.ghostShip.x, y: s.ghostShip.y });
+    }
+    return { seen, record: s.ghostRecord, cursor: s.ghostCursor };
+  });
+
+  const [mine, theirs] = flown;
+  assert.deepEqual(theirs.seen, mine.seen, 'the ghost was somewhere else');
+  assert.deepEqual(theirs.record, mine.record, 'the recording came out different');
+  assert.equal(theirs.cursor, mine.cursor, 'the cursors parted');
+  assert.ok(mine.seen.some((p) => p !== null), 'the ghost should have been on screen');
+  assert.ok(mine.record.length > 10, 'and the run should have recorded a path');
+});
+
+test('both builds name a score through the same screen', () => {
+  const pair = [new TerminalGame(), new browser.Game()].map((game) => {
+    game.state.screenWidth = 80;
+    game.state.screenHeight = 24;
+    game.state.leaderboard = [];
+    game.startGame();
+    game.state.score = 4321;
+    game.endGame();
+    return game;
+  });
+
+  const step = (key) => pair.map((game) => {
+    game.handleMenuInput({ [key]: true });
+    const s = game.state;
+    return { mode: s.mode, entryName: s.entryName, entrySlot: s.entrySlot, table: s.leaderboard };
+  });
+
+  for (const key of ['UP', 'UP', 'RIGHT', 'DOWN', 'D', 'W', 'LEFT', 'A', 'ENTER']) {
+    const [mine, theirs] = step(key);
+    assert.deepEqual(theirs, mine, `the two builds parted on ${key}`);
+  }
+  assert.equal(pair[0].state.mode, 'dead', 'the name was filed and the screen moved on');
+  assert.equal(pair[0].state.leaderboard.length, 1, 'with a row on the table');
+});
+
+test('both builds draw the same name entry screen and the same table', () => {
+  // Both screens are new, and both are ported line for line, so the cheapest
+  // guard against a drift is the whole buffer. The starfields are drawn from
+  // Math.random and never match, so they are cleared rather than compared - the
+  // same thing the paused check below does for the same reason.
+  const W = 80;
+  const H = 40;
+  const table = [
+    { name: 'ACE', score: 90000 },
+    { name: 'BOB', score: 4200 },
+    { name: 'CAT', score: 7 },
+  ];
+
+  const drawn = [
+    { name: 'terminal', Game: TerminalGame, Screen: TerminalScreen, menu: terminalMenu },
+    { name: 'browser', Game: browser.Game, Screen: browser.ScreenBuffer, menu: browser },
+  ].map((build) => {
+    const game = new build.Game();
+    const s = game.state;
+    s.screenWidth = W;
+    s.screenHeight = H;
+    s.leaderboard = [];
+    game.startGame();
+    s.score = 4321;
+    game.endGame();
+    s.stars = [];
+    s.entrySlot = 1;
+    s.uiTime = 0.5;
+    s.time = 0.5;
+
+    const screen = new build.Screen(W, H);
+    build.menu.renderNameEntry(screen, s);
+    const entry = screenCells(screen);
+
+    s.mode = 'menu';
+    s.leaderboard = table;
+    build.menu.renderTitleScreen(screen, s);
+    return { entry, title: screenCells(screen) };
+  });
+
+  const [mine, theirs] = drawn;
+  assert.deepEqual(changedCells(mine.entry, theirs.entry), [], 'the entry screens differ');
+  assert.deepEqual(changedCells(mine.title, theirs.title), [], 'the title screens differ');
 });
 
 test('both builds freeze the same cells while paused', () => {

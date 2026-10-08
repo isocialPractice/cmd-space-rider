@@ -9,6 +9,12 @@ import {
   POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
   RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
   BULLET_SPEED, BULLET_LIFE_SLACK,
+  LeaderEntry, GhostSample,
+  detailTier, detailFor, burstSize,
+  DETAIL_WINDOW_FRAMES, TARGET_FRAME_TIME,
+  NAME_LENGTH, NAME_ALPHABET, DEFAULT_NAME,
+  normalizeName, scoreQualifies, recordScore,
+  GHOST_SAMPLE_TIME, GHOST_MAX_SAMPLES, readGhost,
   RNG,
 } from './types';
 
@@ -99,6 +105,17 @@ export class Game {
       slowMotion: 0,
       fireTimer: 0,
       sounds: [],
+      detail: 0,
+      frameSpent: 0,
+      frameSeen: 0,
+      leaderboard: [],
+      entryName: DEFAULT_NAME,
+      entrySlot: 0,
+      ghost: [],
+      ghostCursor: 0,
+      ghostShip: null,
+      ghostRecord: [],
+      ghostTimer: GHOST_SAMPLE_TIME,
       paused: false,
       muted: false,
       shake: 0,
@@ -139,19 +156,92 @@ export class Game {
     return { col: floor(col), row: floor(row), scale };
   }
 
-  initStars(width: number, height: number): void {
-    this.state.stars = [];
+  /** One star, placed anywhere on the grid. Five draws, in this order. */
+  private makeStar(width: number, height: number): Star {
     const starChars = ['.', '\u00B7', '*', '+'];
     const starColors = [8, 7, 15, 8, 7];
-    for (let i = 0; i < 40; i++) {
-      this.state.stars.push({
-        x: floor(random() * width),
-        y: floor(random() * height),
-        speed: rand(0.3, 1.5),
-        char: starChars[floor(random() * starChars.length)],
-        color: starColors[floor(random() * starColors.length)],
-      });
+    return {
+      x: floor(random() * width),
+      y: floor(random() * height),
+      speed: rand(0.3, 1.5),
+      char: starChars[floor(random() * starChars.length)],
+      color: starColors[floor(random() * starColors.length)],
+    };
+  }
+
+  initStars(width: number, height: number): void {
+    this.state.stars = [];
+    const count = detailTier(this.state.detail).stars;
+    for (let i = 0; i < count; i++) this.state.stars.push(this.makeStar(width, height));
+  }
+
+  /**
+   * Bring the starfield to the population the current tier asks for.
+   *
+   * Trimming and topping up rather than rebuilding, so a tier change does not
+   * reshuffle the stars the player is already watching: the field is parallax
+   * background, and the whole of it jumping to new positions is a more obvious
+   * event than a third of it going out.
+   *
+   * The ones that go are the ones at the end of the list, which is an arbitrary
+   * subset and the right kind of arbitrary - the list is in no order, so the
+   * survivors stay spread across the grid.
+   */
+  private fitStars(): void {
+    const s = this.state;
+    const want = detailTier(s.detail).stars;
+    if (s.stars.length > want) {
+      s.stars.length = want;
+      return;
     }
+    while (s.stars.length < want) s.stars.push(this.makeStar(s.screenWidth, s.screenHeight));
+  }
+
+  /**
+   * Feed the real time the frame just finished took, in seconds, and step the
+   * detail ladder when a window of them has closed.
+   *
+   * The shells measure it rather than the engine, because neither of them hands
+   * the engine the figure as it is: the terminal loop caps `dt` so one stalled
+   * frame cannot throw the physics, and the browser loop steps a fixed `dt` off
+   * an accumulator and does not pass the real elapsed time at all. So the thing
+   * `update` is given is deliberately not the thing this has to read, and the
+   * two arrive by different routes.
+   *
+   * Only a live run is measured. A paused screen and the title screen draw a
+   * fraction of what a run draws, so their frame times say nothing about
+   * whether the device can hold a run - and a window of them would read as
+   * headroom and climb the ladder just as the player resumes into the load that
+   * cost them the tier in the first place.
+   */
+  trackFrameRate(elapsed: number): void {
+    const s = this.state;
+    if (s.mode !== 'playing' || s.paused) return;
+    // A zero, a negative or a NaN is a clock the shell could not read, not a
+    // fast frame, and averaging it in would argue for climbing the ladder.
+    if (!(elapsed > 0)) return;
+    // A sample longer than the whole window is not a slow frame either: it is a
+    // loop that stopped. A browser tab in the background has its frames
+    // withheld until it is looked at again, a laptop sleeps, and a terminal
+    // write blocks for a quarter of a second at a time on a console that cannot
+    // keep up. None of those says anything about how fast the device draws, and
+    // one of them averaged in would cost a tier that the next window has to
+    // hand back - the starfield thinning out as a reward for coming back to the
+    // tab.
+    if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME) return;
+
+    s.frameSpent += elapsed;
+    s.frameSeen += 1;
+    if (s.frameSeen < DETAIL_WINDOW_FRAMES) return;
+
+    const mean = s.frameSpent / s.frameSeen;
+    s.frameSpent = 0;
+    s.frameSeen = 0;
+
+    const next = detailFor(s.detail, mean);
+    if (next === s.detail) return;
+    s.detail = next;
+    this.fitStars();
   }
 
   showDebugMenu(): void {
@@ -202,6 +292,23 @@ export class Game {
     s.shake = 0;
     s.newBestFlash = 0;
     s.newBestShown = false;
+    // The ladder itself is a property of the device and survives the run that
+    // measured it, so a player who dropped a tier last run opens this one at
+    // that tier rather than paying the first second of it over again. The
+    // window is what resets: its frames were spent on the run that is over.
+    s.frameSpent = 0;
+    s.frameSeen = 0;
+    s.entryName = DEFAULT_NAME;
+    s.entrySlot = 0;
+    s.ghostCursor = 0;
+    s.ghostShip = null;
+    s.ghostRecord = [];
+    s.ghostTimer = GHOST_SAMPLE_TIME;
+    // An opening sample, so the recording is anchored at the moment the run
+    // began rather than a tenth of a second into it. Without it the ghost's
+    // first reading is its first sample held still, which puts the ghost a
+    // fraction of the tunnel away from where that run actually started.
+    if (s.debugMode === null) s.ghostRecord.push({ t: 0, x: s.shipX, y: s.shipY });
 
     if (s.debugMode === 'mines') {
       for (let i = 0; i < 40; i++) this.spawnMine(-i * 10 - 30);
@@ -232,6 +339,61 @@ export class Game {
       s.bestScore = s.score;
       this.persistBestScore(s.bestScore);
     }
+
+    // The run that just ended is the one the next run races. Promoted here
+    // rather than at the start of the next run, so the ghost is always a run
+    // that was flown to its end: a flight abandoned from the pause screen or by
+    // backing out to the title screen stops recording wherever the player lost
+    // interest, which is not a performance worth chasing.
+    //
+    // Two samples is the floor. One is a path with no travel in it, and the
+    // reading of it would be a ghost parked at the start line for a single
+    // instant before vanishing.
+    if (s.debugMode === null && s.ghostRecord.length > 1) s.ghost = s.ghostRecord;
+
+    // A score that earned a row on the table goes to the entry screen for a
+    // name, and reaches the game over screen through it. Everything else -
+    // every debug scenario, and a normal run that did not make the table - goes
+    // straight there, which is the path that existed before the table did.
+    if (s.debugMode === null && scoreQualifies(s.leaderboard, s.score)) {
+      s.mode = 'nameEntry';
+      s.entryName = DEFAULT_NAME;
+      s.entrySlot = 0;
+    }
+  }
+
+  /**
+   * Write the name showing on the entry screen into the table, and carry on to
+   * the game over screen.
+   *
+   * Reached by ENTER and by ESCAPE alike. The score was earned before the
+   * screen came up, so backing out of naming it is a choice about the name and
+   * never a reason to lose the row: ESCAPE files it under whatever is on screen,
+   * which is `AAA` for a player who pressed it straight away. Leaving on
+   * ESCAPE is then the shells' own business, and they already have it - both of
+   * them send ESCAPE from the game over screen to the title screen, and that is
+   * the mode this leaves behind.
+   */
+  private commitEntry(): void {
+    const s = this.state;
+    s.leaderboard = recordScore(s.leaderboard, { name: s.entryName, score: s.score });
+    this.persistLeaderboard(s.leaderboard);
+    s.mode = 'dead';
+  }
+
+  /**
+   * Walk the character under the cursor along NAME_ALPHABET, wrapping at both
+   * ends so the letters are reachable from either direction.
+   */
+  private cycleEntry(step: number): void {
+    const s = this.state;
+    const slot = max(0, min(NAME_LENGTH - 1, s.entrySlot));
+    const at = NAME_ALPHABET.indexOf(s.entryName[slot]);
+    const from = at < 0 ? 0 : at;
+    const next = (from + step + NAME_ALPHABET.length) % NAME_ALPHABET.length;
+    s.entryName = normalizeName(
+      s.entryName.slice(0, slot) + NAME_ALPHABET[next] + s.entryName.slice(slot + 1)
+    );
   }
 
   /**
@@ -239,6 +401,13 @@ export class Game {
    * it in memory only; the browser build writes it to localStorage.
    */
   protected persistBestScore(_best: number): void { /* no persistence in the terminal build */ }
+
+  /**
+   * Hook for storing the leaderboard across sessions, alongside the best score
+   * above. The terminal build keeps the table for the session it was set in;
+   * the browser build writes it to localStorage.
+   */
+  protected persistLeaderboard(_entries: LeaderEntry[]): void { /* no persistence in the terminal build */ }
 
   private spawnObstacle(z: number): void {
     this.state.obstacles.push({
@@ -287,7 +456,12 @@ export class Game {
   }
 
   private spawnParticles(x: number, y: number, z: number, color: number, count: number): void {
-    for (let i = 0; i < count; i++) {
+    // What the caller asks for is the full-detail burst. A device that has
+    // dropped a tier gets a share of it, which is where the cut actually lands:
+    // the counts are per event and range from 5 to 20, so scaling here rather
+    // than at each call site keeps one rule over all of them.
+    const n = burstSize(count, this.state.detail);
+    for (let i = 0; i < n; i++) {
       this.state.particles.push({
         x, y, z,
         vx: rand(-3, 3), vy: rand(-3, 3), vz: rand(-1, 2),
@@ -318,6 +492,23 @@ export class Game {
           this.startGame(DEBUG_MODES[i]);
         }
       }
+    }
+
+    // The name entry screen, read last so the branch above cannot see the mode
+    // this one leaves behind: commitEntry sets 'dead', and the ENTER that
+    // committed the name is still in `justPressed` for the rest of this call.
+    // Read first, it would relaunch the run on the keypress that named it.
+    if (s.mode === 'nameEntry') {
+      // Both namings of each direction, because both builds send both: the
+      // terminal maps W/A/S/D beside the arrows, and the browser does the same
+      // and routes its stick and pad through the arrow names.
+      if (justPressed['UP'] || justPressed['W']) this.cycleEntry(1);
+      if (justPressed['DOWN'] || justPressed['S']) this.cycleEntry(-1);
+      if (justPressed['LEFT'] || justPressed['A']) s.entrySlot = max(0, s.entrySlot - 1);
+      if (justPressed['RIGHT'] || justPressed['D']) {
+        s.entrySlot = min(NAME_LENGTH - 1, s.entrySlot + 1);
+      }
+      if (justPressed['ENTER'] || justPressed['ESCAPE']) this.commitEntry();
     }
   }
 
@@ -501,6 +692,44 @@ export class Game {
     this.updateBullets(dt, advance);
     this.updateParticles(dt, advance);
     this.updateStars(dt);
+    this.updateGhost(dt);
+  }
+
+  /**
+   * Record where the ship is, and read where the run being raced was at the
+   * same moment.
+   *
+   * Both halves run off `gameTime` rather than off the frame, which is what
+   * lets a run recorded at one frame rate be raced at another: the samples go
+   * down a fixed tenth of a second apart however the frames fall, and the
+   * reading is taken at the game time this run has reached. Two runs are lined
+   * up by how long each had been flying, so the ghost is where the player was
+   * at this point of the run they are trying to beat.
+   *
+   * Neither half happens in a debug scenario. They are diagnostics rather than
+   * scored runs, and a ghost drifting through a screen that exists to count
+   * collisions is the same moving part the powerup drop is held back from. The
+   * recording from the last normal run is left untouched by one, so a normal run
+   * after a debug scenario still races it.
+   */
+  private updateGhost(dt: number): void {
+    const s = this.state;
+    if (s.debugMode !== null) return;
+
+    s.ghostTimer -= dt;
+    if (s.ghostTimer <= 0) {
+      // The timer carries its overshoot into the next interval rather than
+      // being reset, so the samples do not drift later and later by whatever
+      // each frame overshot by.
+      s.ghostTimer += GHOST_SAMPLE_TIME;
+      if (s.ghostRecord.length < GHOST_MAX_SAMPLES) {
+        s.ghostRecord.push({ t: s.gameTime, x: s.shipX, y: s.shipY });
+      }
+    }
+
+    const reading = readGhost(s.ghost, s.gameTime, s.ghostCursor);
+    s.ghostShip = reading === null ? null : { x: reading.x, y: reading.y };
+    if (reading !== null) s.ghostCursor = reading.cursor;
   }
 
   /**

@@ -51,6 +51,12 @@ terminal build outright.
   of invulnerability on a cooldown.
 - The run steps up a difficulty level every minute, and the warp banner is a few
   seconds of warning rather than decoration.
+- The grey ship flying beside you is the run you flew last, at the same point of
+  its own flight. Ahead of it is ahead of your last attempt, and it disappears
+  once you have outlasted it.
+- A run that makes the top ten asks for a three-character name before it closes.
+  Up and down pick a character, left and right move between the three, `Enter`
+  files it.
 
 ## A terminal that fits
 

@@ -208,7 +208,7 @@ test('a pause stops the world clock and leaves the presentation clock running', 
 test('the world clock keeps running outside a run, whatever the pause flag says', () => {
   // The title screen, debug menu and game over screen all animate off the world
   // clock, so the pause gate has to name the mode as well as the flag.
-  for (const mode of ['menu', 'debugMenu', 'dead']) {
+  for (const mode of ['menu', 'debugMenu', 'nameEntry', 'dead']) {
     const game = new Game();
     game.state.mode = mode;
     game.state.paused = true;

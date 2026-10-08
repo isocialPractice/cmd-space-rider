@@ -17,8 +17,11 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Ship controls** &mdash; Steer, boost, fire a pulse cannon, and barrel roll out of trouble.
 - **Three ways in** &mdash; Keyboard, touch, or a standard gamepad, all feeding the same controls.
 - **Progressive difficulty** &mdash; Speed, obstacle density and mines all escalate with distance.
+- **Leaderboard** - A run that makes the top ten is named with three characters, arcade style, and the table is drawn on the title screen.
+- **Replay ghost** - The run you just flew comes back as a grey ship on the next one, flying the path you flew, so you can see where you are ahead.
+- **Performance mode** - A device that cannot hold 30 frames a second has its starfield and its debris thinned automatically, and gets them back when it can.
 
-The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, retro sound, the CRT overlay, touch and gamepad controls, light mode, and the five debug scenarios.
+The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, the leaderboard and the replay ghost, retro sound, the CRT overlay, touch and gamepad controls, light mode, performance mode, and the five debug scenarios.
 
 ## [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html)
 
@@ -52,6 +55,7 @@ space-rider --help                   Show help
 | `F` or `Shift` (browser) | Boost |
 | `Q` / `E` | Barrel roll |
 | `P` | Pause / resume a run |
+| Arrows + `Enter` on the name entry screen | Spell a three-character name for a top-ten run |
 | Gamepad: left stick / `A` / `B` / triggers | Steer / fire or confirm / boost / barrel roll |
 
 The [Usage page](https://isocialpractice.github.io/cmd-space-rider/docs/usage.html) carries the full control table, the key repeat and deadzone behaviour, the gameplay rules, and the five debug modes. The [Cheatsheet](CHEATSHEET.md) puts every key, flag and figure on one page.

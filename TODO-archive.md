@@ -1968,3 +1968,69 @@ still be found by name.
     to anyone scanning the entry.
   - **Goal**: Reflow that one paragraph to the file's width. No wording change.
   - From: UI/UX Override - the figures the overlap sentence states
+
+## Archived 10-08-26
+
+- [x] Seam Measurement 2 - the right-of-advance figure that replaced the removed
+  count reaches one pixel at five of the eleven sizes
+  - **Issue**: The removal landed. The 24-of-28 count is gone from both places
+    that published it, what 28 actually counted is explained, and the re-take is
+    recorded as open work in `## Measurement`. The sentence written in its place
+    states a figure that was not there before and that does not hold: `index.html:286-291`
+    and `CHANGELOG.md:26-29` say the shade blocks reach "one to two pixels right
+    of the advance, read off ... actualBoundingBoxRight at every size fitGrid can
+    settle on". Measured in chromium through the page's own `measureCell` and
+    `tuneText` at every one of those sizes, `actualBoundingBoxRight - advance`
+    runs 1.3984, 0.9985, 0.5986, 1.1987, 0.7988, 1.3989, 0.9990, 0.5991, 1.1992,
+    0.7993, 1.3994 for fonts 16 down to 6. The range is 0.5986px to 1.3994px: it
+    reaches one pixel at five of the eleven sizes and two pixels at none of them,
+    so the claim is wrong at both ends and at six sizes outright. No other
+    reading saves it - `right - cell` is 0 at six sizes and never 2, and the
+    whole ink width past the advance exceeds 2px at five. The conclusion the
+    figure is offered for does hold and was checked separately: ink past the
+    right edge of its own cell, `inset + right - cell`, is positive at all
+    eleven sizes, and the page's own `ScreenBuffer.render` driven at all eleven
+    shows no unpainted column between two inked cells across 44 glyph-and-size
+    pairs, byte-identical to the same reading off `HEAD`. `glyphInset` is
+    unchanged and correct.
+  - **Goal**: Resolve to [seam-measurement-2.prompt.md](.claude/prompts/seam-measurement-2.prompt.md)
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] Seam Measurement 3 - the same right-of-advance figure went into a third
+  place, which Seam Measurement 2 does not name
+  - **Issue**: Resolving `Seam Measurement 2` as written leaves the figure
+    published. The turn put the clause into the released 0.8.2-alpha entry as
+    well, at `CHANGELOG.md:129-131`, where the sentence previously ended at the
+    left bearing: it now reads "a whole pixel left of the origin they are drawn
+    at and one to two pixels right of the advance, **at every size**" - more
+    emphatic than the 0.8.3-alpha copy, which omits "at every size". The
+    measured table in
+    [seam-measurement-2.prompt.md](.claude/prompts/seam-measurement-2.prompt.md)
+    gives `actualBoundingBoxRight - advance` as 0.5986px to 1.3994px, under one
+    pixel at six of the eleven sizes and never two, so this copy is wrong at
+    both ends. `Seam Measurement 2` names only `index.html:286-291` and
+    `CHANGELOG.md:26-29`, and the prompt file closes by saying to "apply it to
+    both" - so a run that works that item correctly still ships the figure.
+  - **Goal**: Whichever of the prompt file's three wordings is chosen, apply it
+    to this copy too, and drop the "at every size" the other two do not carry.
+    One decision, three places - do not resolve this separately from
+    `Seam Measurement 2`.
+  - From: UI/UX Override - the inset figures the glyph comment states
+- [x] Narrowed Guard 1 - the new NARROWED assertion checks for `undefined` while
+  the probes it guards read with `??`
+  - **Issue**: `test/probes.test.mjs:268-273` asserts
+    `assert.notEqual(NARROWED[prop], undefined, ...)`. The file imports
+    `node:assert/strict`, where `notEqual` is `notStrictEqual`, so the check is
+    `!==` and `null` satisfies it. The probes read these values with `??` -
+    `count ?? FREE_FRAMES` at `test/probes/free-flight.mjs:57`,
+    `passes ?? FREE_SEEDS.length` at :58 - and `??` treats `null` exactly as
+    absent. So writing `passes: null` into `NARROWED`, which is a natural way
+    to spell "nothing narrows this one yet", passes both of the new
+    assertions and silently restores the full walk at every seed in
+    `FREE_SEEDS` - the outcome the assertion's own comment says it exists to
+    prevent, with 539 tests green. The key-set `deepEqual` above it does not
+    help: the key is present.
+  - **Goal**: Match the guard to the operator it guards. `assert.ok(NARROWED[prop] != null, ...)`
+    covers both nullish values in one check; keep the message, which already
+    explains the consequence. Worth a line in the comment saying the check is
+    nullish because `??` is.
+  - From: Code Review Override - the seam count and the narrowed probe workload

@@ -4,7 +4,7 @@
 import { Game } from './game';
 import { ScreenBuffer } from './screen';
 import { renderGame } from './render';
-import { renderTitleScreen, renderDebugMenu, renderGameOver } from './menu';
+import { renderTitleScreen, renderDebugMenu, renderGameOver, renderNameEntry } from './menu';
 import { InputState } from './input';
 
 // ----- CLI argument parsing -----
@@ -124,8 +124,17 @@ let lastTime = Date.now();
 
 function frame(): void {
   const now = Date.now();
-  const dt = Math.min((now - lastTime) / 1000, 0.05); // Cap dt to avoid spiral of death
+  const elapsed = (now - lastTime) / 1000;
+  const dt = Math.min(elapsed, 0.05); // Cap dt to avoid spiral of death
   lastTime = now;
+
+  // The uncapped reading, which is the one the detail ladder needs: the cap
+  // above exists so a stalled frame cannot throw the physics, and it would hide
+  // exactly the frames the ladder is looking for. Fed before the size check
+  // below, because a frame that drew the too-small notice is still a frame the
+  // loop spent, and the engine decides for itself whether the mode it was in is
+  // one worth measuring.
+  game.trackFrameRate(elapsed);
 
   // Size check
   if (termWidth < MIN_WIDTH || termHeight < MIN_HEIGHT) {
@@ -145,7 +154,10 @@ function frame(): void {
   // Handle menu input
   game.handleMenuInput(justPressed);
 
-  // ESC key goes back to menu or quits
+  // ESC key goes back to menu or quits. The name entry screen is not named
+  // here and does not need to be: handleMenuInput above reads an ESCAPE on that
+  // screen as filing the score under the name showing, which leaves the mode at
+  // 'dead', and this then takes it to the title screen in the same frame.
   if (justPressed['ESCAPE']) {
     if (game.state.mode === 'playing' || game.state.mode === 'dead' || game.state.mode === 'debugMenu') {
       game.state.mode = 'menu';
@@ -167,6 +179,9 @@ function frame(): void {
       break;
     case 'playing':
       renderGame(screen, game.state);
+      break;
+    case 'nameEntry':
+      renderNameEntry(screen, game.state);
       break;
     case 'dead':
       renderGameOver(screen, game.state);

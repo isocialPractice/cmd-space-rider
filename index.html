@@ -650,6 +650,202 @@ const POWERUP_GLYPHS={
   slow:{char:'~',bright:C.BRIGHT_MAGENTA,dim:C.MAGENTA,label:'SLOW'},
 };
 
+// One step of the detail ladder: how much of the presentation a run draws.
+// The two figures are the ones that scale with nothing else in the game - the
+// starfield is a fixed population redrawn every frame whatever is happening, and
+// a burst's debris is the only thing in the tunnel whose count the player never
+// chose. Neither carries a rule, a hit test or a score, so dropping either costs
+// the run nothing it is played for.
+//
+// The ladder is fullest first. A run opens at index 0 and only leaves it for
+// measured frame drops, so the top tier is the game exactly as it was before any
+// of this existed - forty stars and every particle a burst asks for - and a
+// machine that keeps up never sees the rest of the ladder.
+const DETAIL_TIERS=[
+  {name:'FULL',stars:40,particles:1},
+  {name:'REDUCED',stars:24,particles:0.6},
+  {name:'MINIMAL',stars:12,particles:0.3},
+];
+
+// The tier a detail level names, clamped to the ladder at both ends.
+function detailTier(detail){
+  const i=max(0,min(floor(detail),DETAIL_TIERS.length-1));
+  return DETAIL_TIERS[i];
+}
+
+// A burst's particle count at a detail level. Never below one, however far down
+// the ladder a device has gone: a kill that threw no debris at all reads as a
+// shot that missed, and the hit is already paid for by then.
+function burstSize(count,detail){
+  return max(1,round(count*detailTier(detail).particles));
+}
+
+// The frame time both builds aim for, in seconds. The rate is written in two
+// shells already - TARGET_FPS is 30 here and in src/index.ts - and this is that
+// same figure in the unit the detail ladder measures against.
+const TARGET_FRAME_TIME=1/30;
+
+// Frames one detail decision is taken over: a second's worth at the target. A
+// single slow frame is not evidence of a slow device - a background tab coming
+// back, one long paint - and a ladder that stepped on it would spend the run
+// oscillating.
+const DETAIL_WINDOW_FRAMES=30;
+
+// How far past the target a window's mean frame time has to run before the
+// ladder steps down: 41.7ms, which is 24 frames a second. A quarter rather than
+// a tenth because the shells do not deliver the target exactly even when nothing
+// is wrong - this one steps a fixed dt off an accumulator fed by
+// requestAnimationFrame - so a window either side of 35ms is an ordinary reading
+// on a machine with headroom to spare.
+const DETAIL_DROP_FACTOR=1.25;
+
+// How close to the target a window has to come before the ladder steps back up:
+// 36.7ms, or 27.3 frames a second. The gap between this and the drop factor is
+// the hysteresis, and it has to be real in both directions - too near the drop
+// factor and the starfield visibly breathes once a second, too near the target
+// and a tab brought back to the front never climbs out of the tier one bad
+// stretch cost it.
+const DETAIL_RAISE_FACTOR=1.1;
+
+// The detail level a closed window argues for, given the level it was measured
+// at and the mean frame time it saw. One step at a time in either direction: the
+// mean says that a device is behind, not how far behind, because the measurement
+// was taken at a tier that is already cutting work.
+function detailFor(detail,meanFrameTime){
+  if(meanFrameTime>=TARGET_FRAME_TIME*DETAIL_DROP_FACTOR)return min(detail+1,DETAIL_TIERS.length-1);
+  if(meanFrameTime<=TARGET_FRAME_TIME*DETAIL_RAISE_FACTOR)return max(detail-1,0);
+  return detail;
+}
+
+// ===== The leaderboard =====
+// How many scores the table keeps, and how many characters a name carries - the
+// three the cabinets took.
+const LEADERBOARD_SIZE=10;
+const NAME_LENGTH=3;
+
+// The characters a name is spelled from, in the order the entry screen cycles
+// through them. Letters first, so the common case is a short walk from the
+// opening AAA, then digits, then the space that lets a one or two letter name be
+// spelled without padding it out. Nothing else: the grid holds one character per
+// cell and a name is read back at a glance from a table, so a character this
+// alphabet could not spell would be a name the player is unable to edit.
+const NAME_ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
+
+// What the entry screen opens on, and what a stored row with no name is filed
+// under.
+const DEFAULT_NAME='AAA';
+
+// A name as the table holds it: exactly NAME_LENGTH characters, every one of
+// them from NAME_ALPHABET. Both ends need it - the entry screen can only produce
+// a name of this shape, but the stored copy is a JSON string in storage the
+// player can edit, and a name of forty characters or one carrying a newline
+// would otherwise be drawn straight into the title screen's table.
+function normalizeName(name){
+  let out='';
+  for(let i=0;i<NAME_LENGTH;i++){
+    const ch=(name[i]||' ').toUpperCase();
+    out+=NAME_ALPHABET.includes(ch)?ch:' ';
+  }
+  return out;
+}
+
+// Whether a score earns a place on the table. Making the table, rather than
+// beating the best score - which is the stricter reading of the same idea, and
+// the one that cannot fill a table: a run named only when it takes first place
+// leaves the other nine rows with no name to put on them. Every new best
+// qualifies under this rule as well. A score of zero never does, so a run that
+// ended before it had earned anything does not take a row from one that did.
+function scoreQualifies(entries,score){
+  if(score<=0)return false;
+  if(entries.length<LEADERBOARD_SIZE)return true;
+  return score>entries[entries.length-1].score;
+}
+
+// The table with one more entry on it, highest first, trimmed back to
+// LEADERBOARD_SIZE. The new entry is appended before the sort rather than
+// inserted, so a score matching one already on the table ranks below it:
+// Array.prototype.sort is stable, and the run that set the figure first keeps
+// the row.
+function recordScore(entries,entry){
+  const next=[...entries,{name:normalizeName(entry.name),score:floor(entry.score)}];
+  next.sort((a,b)=>b.score-a.score);
+  return next.slice(0,LEADERBOARD_SIZE);
+}
+
+// A stored leaderboard read back into the shape the game draws from, dropping
+// whatever is not an entry. What comes out of storage is parsed JSON from a
+// store the player owns, so it is any value at all rather than a table: not an
+// array, an array of numbers, an entry whose score is a string or NaN. Each of
+// those is dropped on its own rather than condemning the rest, because one
+// corrupt row is not a reason to throw away nine good scores. A row with no name
+// at all is the single case repaired instead of dropped - the score is the part
+// worth keeping - and it is filed under DEFAULT_NAME.
+function sanitizeLeaderboard(raw){
+  if(!Array.isArray(raw))return[];
+  const out=[];
+  for(const item of raw){
+    if(item===null||typeof item!=='object')continue;
+    const{name,score}=item;
+    if(typeof score!=='number'||!Number.isFinite(score))continue;
+    // The whole number is what the table holds, so it is the figure the floor is
+    // tested against. Testing the stored one instead lets a hand-edited 0.5
+    // through as a row scoring zero, which is the row this rule exists to keep
+    // off the table.
+    const whole=floor(score);
+    if(whole<=0)continue;
+    out.push({name:typeof name==='string'?normalizeName(name):DEFAULT_NAME,score:whole});
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return out.slice(0,LEADERBOARD_SIZE);
+}
+
+// ===== The replay ghost =====
+// Seconds of game time between two samples of the path a run is recording.
+//
+// The recording is of where the ship went rather than of which keys were held,
+// and that is the one deliberate departure from how this was asked for. A key is
+// held for some number of frames, and how far it carries the ship depends on how
+// long those frames were: replaying the keys on the next run, whose frames fall
+// differently, flies a different path - which is the one thing the ghost exists
+// not to do. Sampling the position instead reproduces the path the player
+// actually flew, at any frame rate.
+//
+// A tenth of a second is three frames at the target rate, and the ship crosses
+// the tunnel in about a second and a half, so a tenth of that travel is well
+// under a character cell once the interpolation between two samples is counted.
+const GHOST_SAMPLE_TIME=0.1;
+
+// The most samples one recording keeps: ten minutes of flying. The recording is
+// held in memory for as long as the page is open and nothing trims it, so an
+// unbounded one grows for as long as the player is good enough to keep flying.
+const GHOST_MAX_SAMPLES=6000;
+
+// Where a recorded path was at game time t, interpolated between the samples
+// either side of it, or null once t is past the end of the recording. Running
+// out is the point rather than an edge case: the recording ends where the
+// ghost's run ended, so a player still flying past that moment has outlasted the
+// run being raced, and the ghost disappearing is how the screen says so.
+//
+// cursor is where the last read left off, and walking forward from it is what
+// keeps this off a scan of the whole recording every frame. It is only ever a
+// hint: it is clamped into the recording and only ever moves forward, so a stale
+// one costs a few comparisons rather than a wrong answer.
+function readGhost(samples,t,cursor){
+  if(samples.length===0)return null;
+  let i=max(0,min(floor(cursor),samples.length-1));
+  while(i+1<samples.length&&samples[i+1].t<=t)i++;
+  const here=samples[i];
+  const next=samples[i+1];
+  if(next===undefined){
+    // The last sample. It holds for the instant it was taken at and no longer,
+    // so a run that has flown past it sees nothing.
+    return t>here.t?null:{x:here.x,y:here.y,cursor:i};
+  }
+  const span=next.t-here.t;
+  const k=span>0?max(0,min(1,(t-here.t)/span)):0;
+  return{x:here.x+(next.x-here.x)*k,y:here.y+(next.y-here.y)*k,cursor:i};
+}
+
 // ===== Best score persistence =====
 // localStorage throws rather than returning null in some privacy modes and
 // file:// sandboxes, so every access is guarded and falls back to no history.
@@ -671,6 +867,31 @@ function saveBestScore(best){
     localStorage.setItem(BEST_SCORE_KEY,String(best));
   }catch(e){
     /* score stays for this session only */
+  }
+}
+
+// ===== Leaderboard persistence =====
+// Guarded the same way the best score above is, and for the same reasons. The
+// stored value is JSON rather than a number, so there are two ways for it to be
+// unreadable - storage refusing the read, and the read returning something that
+// is not a table - and both land on an empty table rather than on an error.
+const LEADERBOARD_KEY='cmdSpaceRider.leaderboard';
+
+function loadLeaderboard(){
+  try{
+    const raw=localStorage.getItem(LEADERBOARD_KEY);
+    if(raw===null)return[];
+    return sanitizeLeaderboard(JSON.parse(raw));
+  }catch(e){
+    return[];
+  }
+}
+
+function saveLeaderboard(entries){
+  try{
+    localStorage.setItem(LEADERBOARD_KEY,JSON.stringify(entries));
+  }catch(e){
+    /* the table stays for this session only */
   }
 }
 
@@ -727,6 +948,10 @@ class Game{
       warpLevel:1,warpFlash:0,
       rapidFire:0,slowMotion:0,fireTimer:0,
       sounds:[],
+      detail:0,frameSpent:0,frameSeen:0,
+      leaderboard:loadLeaderboard(),
+      entryName:DEFAULT_NAME,entrySlot:0,
+      ghost:[],ghostCursor:0,ghostShip:null,ghostRecord:[],ghostTimer:GHOST_SAMPLE_TIME,
       paused:false,muted:false,shake:0,newBestFlash:0,newBestShown:false,
       screenWidth:80,screenHeight:24,
     };
@@ -755,18 +980,72 @@ class Game{
     const row=baseRow+rowOffset;
     return{col:floor(col),row:floor(row),scale};
   }
-  initStars(w,h){
-    this.state.stars=[];
+  // One star, placed anywhere on the grid. Five draws, in this order.
+  makeStar(w,h){
     const starChars=['.','\u00B7','*','+'];
     const starColors=[8,7,15,8,7];
-    for(let i=0;i<40;i++){
-      this.state.stars.push({
-        x:floor(random()*w),y:floor(random()*h),
-        speed:rand(0.3,1.5),
-        char:starChars[floor(random()*starChars.length)],
-        color:starColors[floor(random()*starColors.length)],
-      });
-    }
+    return{
+      x:floor(random()*w),y:floor(random()*h),
+      speed:rand(0.3,1.5),
+      char:starChars[floor(random()*starChars.length)],
+      color:starColors[floor(random()*starColors.length)],
+    };
+  }
+  initStars(w,h){
+    this.state.stars=[];
+    const count=detailTier(this.state.detail).stars;
+    for(let i=0;i<count;i++)this.state.stars.push(this.makeStar(w,h));
+  }
+  // Bring the starfield to the population the current tier asks for. Trimming
+  // and topping up rather than rebuilding, so a tier change does not reshuffle
+  // the stars the player is already watching: the field is parallax background,
+  // and the whole of it jumping to new positions is a more obvious event than a
+  // third of it going out. The ones that go are at the end of the list, which is
+  // in no order, so the survivors stay spread across the grid.
+  fitStars(){
+    const s=this.state;
+    const want=detailTier(s.detail).stars;
+    if(s.stars.length>want){s.stars.length=want;return}
+    while(s.stars.length<want)s.stars.push(this.makeStar(s.screenWidth,s.screenHeight));
+  }
+  // Feed the real time the frame just finished took, in seconds, and step the
+  // detail ladder when a window of them has closed.
+  //
+  // The shell measures it rather than the engine, because the loop does not hand
+  // the engine the figure as it is: it steps a fixed dt off an accumulator, so a
+  // browser that cannot keep up steps less often rather than stepping further,
+  // and the dt update is given is deliberately not the thing this has to read.
+  //
+  // Only a live run is measured. The title screen and a paused run draw a
+  // fraction of what a run draws, so their frame times say nothing about whether
+  // the device can hold a run - and a window of them would read as headroom and
+  // climb the ladder just as the player resumes into the load that cost them the
+  // tier in the first place.
+  trackFrameRate(elapsed){
+    const s=this.state;
+    if(s.mode!=='playing'||s.paused)return;
+    // A zero, a negative or a NaN is a clock the shell could not read, not a
+    // fast frame, and averaging it in would argue for climbing the ladder.
+    if(!(elapsed>0))return;
+    // A sample longer than the whole window is not a slow frame either: it is a
+    // loop that stopped. A background tab has its frames withheld until it is
+    // looked at again, and a laptop sleeps. Neither says anything about how fast
+    // the device draws, and one of them averaged in would cost a tier that the
+    // next window has to hand back - the starfield thinning out as a reward for
+    // coming back to the tab.
+    if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME)return;
+
+    s.frameSpent+=elapsed;
+    s.frameSeen+=1;
+    if(s.frameSeen<DETAIL_WINDOW_FRAMES)return;
+
+    const mean=s.frameSpent/s.frameSeen;
+    s.frameSpent=0;s.frameSeen=0;
+
+    const next=detailFor(s.detail,mean);
+    if(next===s.detail)return;
+    s.detail=next;
+    this.fitStars();
   }
   showDebugMenu(){this.state.mode='debugMenu';this.state.debugMenuSelected=0}
   startGame(mode){
@@ -784,6 +1063,18 @@ class Game{
     s.firstMinuteElapsed=false;s.trackerCount=0;s.chaosFireTimer=0;
     s.damageFlash=0;s.collectFlash=0;s.boosting=false;
     s.paused=false;s.shake=0;s.newBestFlash=0;s.newBestShown=false;
+    // The ladder itself is a property of the device and survives the run that
+    // measured it, so a player who dropped a tier last run opens this one at
+    // that tier rather than paying the first second of it over again. The window
+    // is what resets: its frames were spent on the run that is over.
+    s.frameSpent=0;s.frameSeen=0;
+    s.entryName=DEFAULT_NAME;s.entrySlot=0;
+    s.ghostCursor=0;s.ghostShip=null;s.ghostRecord=[];s.ghostTimer=GHOST_SAMPLE_TIME;
+    // An opening sample, so the recording is anchored at the moment the run began
+    // rather than a tenth of a second into it. Without it the ghost's first
+    // reading is its first sample held still, which puts the ghost a fraction of
+    // the tunnel away from where that run actually started.
+    if(s.debugMode===null)s.ghostRecord.push({t:0,x:s.shipX,y:s.shipY});
 
     if(s.debugMode==='mines'){
       for(let i=0;i<40;i++)this.spawnMine(-i*10-30);
@@ -813,6 +1104,53 @@ class Game{
       s.bestScore=s.score;
       saveBestScore(s.bestScore);
     }
+
+    // The run that just ended is the one the next run races. Promoted here
+    // rather than at the start of the next run, so the ghost is always a run
+    // that was flown to its end: a flight abandoned from the pause screen or by
+    // backing out to the title screen stops recording wherever the player lost
+    // interest, which is not a performance worth chasing.
+    //
+    // Two samples is the floor. One is a path with no travel in it, and the
+    // reading of it would be a ghost parked at the start line for a single
+    // instant before vanishing.
+    if(s.debugMode===null&&s.ghostRecord.length>1)s.ghost=s.ghostRecord;
+
+    // A score that earned a row on the table goes to the entry screen for a
+    // name, and reaches the game over screen through it. Everything else - every
+    // debug scenario, and a normal run that did not make the table - goes
+    // straight there, which is the path that existed before the table did.
+    if(s.debugMode===null&&scoreQualifies(s.leaderboard,s.score)){
+      s.mode='nameEntry';
+      s.entryName=DEFAULT_NAME;
+      s.entrySlot=0;
+    }
+  }
+  // Write the name showing on the entry screen into the table, and carry on to
+  // the game over screen.
+  //
+  // Reached by ENTER and by ESCAPE alike. The score was earned before the screen
+  // came up, so backing out of naming it is a choice about the name and never a
+  // reason to lose the row: ESCAPE files it under whatever is on screen, which
+  // is AAA for a player who pressed it straight away. Leaving on ESCAPE is then
+  // the shell's own business, and it already has it - an ESCAPE from the game
+  // over screen goes to the title screen, and that is the mode this leaves
+  // behind.
+  commitEntry(){
+    const s=this.state;
+    s.leaderboard=recordScore(s.leaderboard,{name:s.entryName,score:s.score});
+    saveLeaderboard(s.leaderboard);
+    s.mode='dead';
+  }
+  // Walk the character under the cursor along NAME_ALPHABET, wrapping at both
+  // ends so the letters are reachable from either direction.
+  cycleEntry(step){
+    const s=this.state;
+    const slot=max(0,min(NAME_LENGTH-1,s.entrySlot));
+    const at=NAME_ALPHABET.indexOf(s.entryName[slot]);
+    const from=at<0?0:at;
+    const next=(from+step+NAME_ALPHABET.length)%NAME_ALPHABET.length;
+    s.entryName=normalizeName(s.entryName.slice(0,slot)+NAME_ALPHABET[next]+s.entryName.slice(slot+1));
   }
   spawnObstacle(z){
     this.state.obstacles.push({
@@ -853,7 +1191,12 @@ class Game{
     s.powerups.push({x,y,z,kind});
   }
   spawnParticles(x,y,z,color,count){
-    for(let i=0;i<count;i++){
+    // What the caller asks for is the full-detail burst. A device that has
+    // dropped a tier gets a share of it, which is where the cut actually lands:
+    // the counts are per event and range from 5 to 20, so scaling here rather
+    // than at each call site keeps one rule over all of them.
+    const n=burstSize(count,this.state.detail);
+    for(let i=0;i<n;i++){
       this.state.particles.push({
         x,y,z,vx:rand(-3,3),vy:rand(-3,3),vz:rand(-1,2),
         life:rand(0.3,0.8),maxLife:0.8,color,
@@ -872,6 +1215,20 @@ class Game{
       for(let i=0;i<5;i++){
         if(justPressed['DIGIT_'+(i+1)])this.startGame(DEBUG_MODES[i]);
       }
+    }
+    // The name entry screen, read last so the branch above cannot see the mode
+    // this one leaves behind: commitEntry sets 'dead', and the ENTER that
+    // committed the name is still in justPressed for the rest of this call. Read
+    // first, it would relaunch the run on the keypress that named it.
+    if(s.mode==='nameEntry'){
+      // Both namings of each direction, because this build sends both: the
+      // keyboard maps W/A/S/D beside the arrows, and the stick and the pad are
+      // routed through the arrow names.
+      if(justPressed.UP||justPressed.W)this.cycleEntry(1);
+      if(justPressed.DOWN||justPressed.S)this.cycleEntry(-1);
+      if(justPressed.LEFT||justPressed.A)s.entrySlot=max(0,s.entrySlot-1);
+      if(justPressed.RIGHT||justPressed.D)s.entrySlot=min(NAME_LENGTH-1,s.entrySlot+1);
+      if(justPressed.ENTER||justPressed.ESCAPE)this.commitEntry();
     }
   }
   // Queue a one-shot sound for the frame being simulated. The queue is drained
@@ -1025,6 +1382,7 @@ class Game{
     this.updateBullets(dt,advance);
     this.updateParticles(dt,advance);
     this.updateStars(dt);
+    this.updateGhost(dt);
   }
   // The difficulty step the run has reached, and the transition when it moves.
   //
@@ -1483,6 +1841,40 @@ class Game{
     const speedMul=s.speed/s.baseSpeed;
     for(const star of s.stars)star.y+=star.speed*speedMul*dt*30;
   }
+  // Record where the ship is, and read where the run being raced was at the same
+  // moment.
+  //
+  // Both halves run off gameTime rather than off the frame, which is what lets a
+  // run recorded at one frame rate be raced at another: the samples go down a
+  // fixed tenth of a second apart however the frames fall, and the reading is
+  // taken at the game time this run has reached. Two runs are lined up by how
+  // long each had been flying, so the ghost is where the player was at this
+  // point of the run they are trying to beat.
+  //
+  // Neither half happens in a debug scenario. They are diagnostics rather than
+  // scored runs, and a ghost drifting through a screen that exists to count
+  // collisions is the same moving part the powerup drop is held back from. The
+  // recording from the last normal run is left untouched by one, so a normal run
+  // after a debug scenario still races it.
+  updateGhost(dt){
+    const s=this.state;
+    if(s.debugMode!==null)return;
+
+    s.ghostTimer-=dt;
+    if(s.ghostTimer<=0){
+      // The timer carries its overshoot into the next interval rather than being
+      // reset, so the samples do not drift later and later by whatever each
+      // frame overshot by.
+      s.ghostTimer+=GHOST_SAMPLE_TIME;
+      if(s.ghostRecord.length<GHOST_MAX_SAMPLES){
+        s.ghostRecord.push({t:s.gameTime,x:s.shipX,y:s.shipY});
+      }
+    }
+
+    const reading=readGhost(s.ghost,s.gameTime,s.ghostCursor);
+    s.ghostShip=reading===null?null:{x:reading.x,y:reading.y};
+    if(reading!==null)s.ghostCursor=reading.cursor;
+  }
 }
 
 // ===== Rendering (port of render.ts) =====
@@ -1508,6 +1900,7 @@ function renderGame(screen,state){
   drawEntitiesFar(screen,state,gameTop,gameBottom);
   drawBullets(screen,state,gameTop,gameBottom);
   drawParticles(screen,state,gameTop,gameBottom);
+  drawGhost(screen,state,gameTop,gameBottom);
   drawShip(screen,state,gameTop,gameBottom);
   drawHUD(screen,state);
   drawFooter(screen,state);
@@ -1750,6 +2143,31 @@ function rollWings(state){
   return state.rollDir<0?ROLL_WINGS[(turns-step)%turns]:ROLL_WINGS[step];
 }
 
+// The ship from the run being raced, where it was at this point of that run.
+//
+// Hollow where the live ship is solid, and grey where it is cyan, so the two are
+// never mistaken for each other on a frame where they overlap - which is the
+// frame the ghost exists for, because it is the one that says the player is
+// level with their own best flight.
+//
+// Two rows rather than three. The engines and their glow are left off: a glow
+// pulsing off the world clock would be the one part of the ghost not read from
+// the recording, and a trace of a flight is not burning anything.
+//
+// Drawn before the live ship so that where they share a cell, the ship wins.
+function drawGhost(screen,state,gameTop,gameBottom){
+  const ghost=state.ghostShip;
+  if(ghost===null)return;
+  const w=screen.width,h=screen.height;
+  const pos=gameToScreen(ghost.x,ghost.y,0,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+  const cx=pos.col,cy=pos.row;
+  if(cy-1<gameTop||cy>=gameBottom)return;
+  screen.put(cx,cy-1,'\u25B3',C.GRAY,C.BLACK);
+  screen.put(cx-1,cy,'<',C.GRAY,C.BLACK);
+  screen.put(cx,cy,'\u2591',C.GRAY,C.BLACK);
+  screen.put(cx+1,cy,'>',C.GRAY,C.BLACK);
+}
+
 function drawShip(screen,state,gameTop,gameBottom){
   const w=screen.width,h=screen.height;
   const pos=gameToScreen(state.shipX,state.shipY,0,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
@@ -1882,6 +2300,15 @@ function drawFooter(screen,state){
     badgeX+=badge.text.length;
   }
 
+  // The detail tier, once the ladder has stepped off the fullest one. On the
+  // same room rule as the badges above and drawn after them, so a narrow grid
+  // carrying two pickups drops this rather than a pickup: a pickup is counting
+  // down something the player is spending, and this is a notice.
+  const detail=detailBadge(state);
+  if(detail!==null&&badgeX+detail.text.length<=w-2-muteRoom){
+    screen.putString(badgeX,footerY+1,detail.text,detail.color,C.BLACK);
+  }
+
   if(state.muted){
     const mute=' MUTED ';
     screen.putString(w-mute.length-2,footerY+1,mute,C.BRIGHT_YELLOW,C.BLACK);
@@ -1906,6 +2333,20 @@ function powerupBadges(state){
     color:POWERUP_GLYPHS.slow.bright,
   });
   return out;
+}
+
+// What the status strip says about the detail ladder, or null at the fullest
+// tier - which is every run on a device that keeps up, and is why nothing is
+// drawn there rather than a badge reading FULL. A strip that always carried one
+// would be a permanent reminder of a mechanism that has not done anything.
+//
+// Grey, beside the cyan speed and the yellow mute flag. The player did not ask
+// for this and cannot act on it, so it is a note about what the game is doing
+// and not a warning: a device that cannot hold 30 frames is a fact about the
+// device, and colouring it like a fault would read as the game having broken.
+function detailBadge(state){
+  if(state.detail<=0)return null;
+  return{text:` ${detailTier(state.detail).name} `,color:C.GRAY};
 }
 
 function drawPauseOverlay(screen,state){
@@ -2026,6 +2467,127 @@ function debugMenuLayout(h){
 // True when a row is inside the border and may be drawn on.
 function insideBorder(y,h){return y>=1&&y<=h-2;}
 
+// The heading the title screen's table is drawn under, and the gap between two
+// columns of entries.
+const LEADERBOARD_HEAD='-- TOP PILOTS --';
+const LEADERBOARD_GAP=4;
+
+// One row of the table, as the title screen draws it.
+function leaderText(rank,entry){
+  return `${String(rank).padStart(2)}. ${entry.name}  ${entry.score}`;
+}
+
+// Fit the table into what the title screen has left, under the launch prompt.
+//
+// Under the prompt rather than above it, for two reasons that pull the same way.
+// The band below the prompt is the one part of the screen that grows with the
+// viewport - everything above it is placed off the title art, which is a fixed
+// number of rows - so this is the only placement where a tall window shows the
+// whole table. And the prompt keeps the row it has always had, so a player with
+// no scores yet sees the screen exactly as it was.
+//
+// Two columns where the grid is wide enough for them, which is every supported
+// width at any ordinary score, because rows are the scarce thing and not
+// columns: ten entries down one column needs ten rows that an 80x24 grid does
+// not have, and the same ten in two columns of five needs five.
+//
+// What does not fit is not drawn, and on a short grid that is the whole table.
+// Measured against the title screen's own placement, the band under the prompt is
+// empty below 24 rows, holds the heading and one row of two at 24, and holds all
+// ten from 29 rows up. The documented 20-row minimum therefore shows no table at
+// all, which is the honest answer on a screen already carrying the title art, the
+// subtitle, four lines of controls and the prompt: the alternative is dropping one
+// of those to make room for scores the player has not set yet.
+function leaderboardLayout(w,h,promptY,entries){
+  const headY=promptY+2;
+  const rows=max(0,(h-2)-headY);
+  // Every entry is padded to the widest of them, so the second column lines up
+  // under its own heading rather than under whatever the longest score was.
+  let width=LEADERBOARD_HEAD.length;
+  for(let i=0;i<entries.length;i++)width=max(width,leaderText(i+1,entries[i]).length);
+  const columns=width*2+LEADERBOARD_GAP<=w-4?2:1;
+  const shown=min(entries.length,rows*columns);
+  return{headY,rows,columns,shown,width};
+}
+
+// The table on the title screen, drawn only when there is something on it. An
+// empty table draws nothing at all - not the heading either - so a browser that
+// will not hand over its storage shows the screen as it has always been rather
+// than a heading over no rows.
+function drawLeaderboard(screen,state,promptY){
+  const w=screen.width,h=screen.height;
+  const entries=state.leaderboard;
+  if(entries.length===0)return;
+
+  const layout=leaderboardLayout(w,h,promptY,entries);
+  if(layout.shown===0)return;
+
+  const blockW=layout.columns*layout.width+(layout.columns-1)*LEADERBOARD_GAP;
+  const blockX=floor((w-blockW)/2);
+
+  if(insideBorder(layout.headY,h)){
+    screen.putStringCenter(layout.headY,LEADERBOARD_HEAD,C.BRIGHT_MAGENTA,C.BLACK);
+  }
+
+  for(let i=0;i<layout.shown;i++){
+    // Down the first column before across to the second, so the ranking reads in
+    // the order the cabinets printed it.
+    const column=floor(i/layout.rows);
+    const y=layout.headY+1+(i%layout.rows);
+    if(!insideBorder(y,h))continue;
+    const x=blockX+column*(layout.width+LEADERBOARD_GAP);
+    screen.putString(x,y,leaderText(i+1,entries[i]),i===0?C.BRIGHT_YELLOW:C.CYAN,C.BLACK);
+  }
+}
+
+// The hint under the three characters, in the fullest form that fits. The long
+// form is 52 columns, which clears the documented 60-column minimum with room to
+// spare, so the short one is for a grid narrower than the game supports rather
+// than for any supported size.
+function nameEntryHint(w){
+  const full='[ \u2191\u2193 LETTER \u2022 \u2190\u2192 SLOT \u2022 ENTER CONFIRM ]';
+  const short='[ \u2191\u2193 \u2022 \u2190\u2192 \u2022 ENTER ]';
+  return full.length<=w-4?full:short;
+}
+
+// The name entry screen: a score that made the table, and the three characters
+// it is about to be filed under.
+//
+// Three cells two columns apart, with a bar under the one being edited. The bar
+// is what makes a space spellable - a slot holding one draws no glyph at all,
+// and without something under it the player cannot tell an empty slot from a
+// slot that is not there.
+function renderNameEntry(screen,state){
+  const w=screen.width,h=screen.height;
+  screen.clear(C.BLACK);
+  // Starfield background, drawn first so the entry sits on top of it
+  drawMenuStars(screen,state,w,h);
+  drawBorder(screen,w,h);
+
+  const titleY=floor(h*0.2);
+  screen.putStringCenter(titleY,'N E W   H I G H   S C O R E',C.BRIGHT_YELLOW,C.BLACK);
+  screen.putStringCenter(titleY+2,`${state.score}`,C.BRIGHT_MAGENTA,C.BLACK);
+  screen.putStringCenter(titleY+3,'ENTER YOUR CALLSIGN',C.BRIGHT_CYAN,C.BLACK);
+
+  // The three slots, clamped so the bar under them stays inside the border on
+  // the shortest supported screen.
+  const slotsY=min(titleY+6,h-4);
+  const stride=2;
+  const nameX=floor((w-(NAME_LENGTH*stride-1))/2);
+  const blink=sin(state.uiTime*6)>0;
+  for(let i=0;i<NAME_LENGTH;i++){
+    const active=i===state.entrySlot;
+    const x=nameX+i*stride;
+    screen.put(x,slotsY,state.entryName[i]||' ',
+      active?(blink?C.BRIGHT_WHITE:C.BRIGHT_CYAN):C.CYAN,C.BLACK);
+    screen.put(x,slotsY+1,active?'\u2580':'\u2500',active?C.BRIGHT_CYAN:C.GRAY,C.BLACK);
+  }
+
+  const hintY=min(slotsY+3,h-2);
+  const pulse=sin(state.time*3)*0.5+0.5;
+  screen.putStringCenter(hintY,nameEntryHint(w),pulse>0.3?C.BRIGHT_GREEN:C.GREEN,C.BLACK);
+}
+
 function renderTitleScreen(screen,state){
   const w=screen.width,h=screen.height;
   screen.clear(C.BLACK);
@@ -2070,6 +2632,9 @@ function renderTitleScreen(screen,state){
   const promptPulse=sin(state.time*3)*0.5+0.5;
   const promptColor=promptPulse>0.3?C.BRIGHT_GREEN:C.GREEN;
   screen.putStringCenter(promptY,prompt,promptColor,C.BLACK);
+
+  // The top scores, in whatever room is left under the prompt.
+  drawLeaderboard(screen,state,promptY);
 }
 
 function renderDebugMenu(screen,state){
@@ -2960,6 +3525,12 @@ let lastTime=performance.now();
 const TARGET_FPS=30;
 const FRAME_MS=1000/TARGET_FPS;
 let accumulator=0;
+// When the engine last stepped, which is not when the loop last ran: the
+// accumulator below steps once per FRAME_MS of elapsed time, so on a 60Hz
+// display every second call returns without stepping. The detail ladder is asking
+// how long the device takes to deliver one stepped frame, and that is the gap
+// between two of these rather than between two calls.
+let lastStep=lastTime;
 
 function frame(now){
   requestAnimationFrame(frame);
@@ -2971,6 +3542,14 @@ function frame(now){
   if(accumulator>FRAME_MS*2)accumulator=0; // prevent spiral
 
   const dt=min(FRAME_MS/1000,0.05);
+
+  // The real time this stepped frame took, which the fixed dt above deliberately
+  // is not. Fed before the notice branch below, because a frame that drew the
+  // notice is still a frame the loop spent, and the engine decides for itself
+  // whether the mode it was in is one worth measuring.
+  const stepElapsed=(now-lastStep)/1000;
+  lastStep=now;
+  game.trackFrameRate(stepElapsed);
 
   // The pad has no events to listen for, so its keys are read here. Above the
   // notice branch below, because the keyboard's listeners fire whatever the
@@ -3011,7 +3590,10 @@ function frame(now){
     applyCrt();
   }
 
-  // ESC
+  // ESC. The name entry screen is not named here and does not need to be:
+  // handleMenuInput above reads an ESCAPE on that screen as filing the score
+  // under the name showing, which leaves the mode at 'dead', and this then takes
+  // it to the title screen in the same frame.
   if(justPressed.ESCAPE){
     if(game.state.mode==='playing'||game.state.mode==='dead'||game.state.mode==='debugMenu'){
       game.state.mode='menu';
@@ -3035,6 +3617,7 @@ function frame(now){
     case'menu':renderTitleScreen(screen,game.state);break;
     case'debugMenu':renderDebugMenu(screen,game.state);break;
     case'playing':renderGame(screen,game.state);break;
+    case'nameEntry':renderNameEntry(screen,game.state);break;
     case'dead':renderGameOver(screen,game.state);break;
   }
 

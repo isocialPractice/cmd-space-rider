@@ -1,5 +1,154 @@
 # Changelog
 
+## [0.9.0-alpha] - 2026-10-08
+
+### Added
+
+- **A leaderboard, and a three-character name for the runs that earn a row on
+  it.** A run that makes the top ten stops at a name entry screen on its way to
+  the game over screen: three slots two columns apart, up and down walking the
+  character under the cursor through `A-Z`, the digits and a space, left and
+  right moving between the slots, `Enter` filing the score. A bar sits under the
+  slot being edited, which is what makes a space spellable - a slot holding one
+  draws no glyph, and without the bar there is nothing to say the slot is there.
+
+  `Esc` files the score too, under whatever name is showing. The score was
+  earned before the screen came up, so backing out of the screen is a choice
+  about the name and not a reason to lose the row; the mode it leaves behind is
+  `dead`, which is what both shells already read as "go to the title screen", so
+  neither shell needed a line for it.
+
+  The table is drawn on the title screen in the band under the launch prompt, in
+  two columns, as many rows as there is room for. Under the prompt rather than
+  above it for two reasons that pull the same way: that band is the one part of
+  the screen that grows with the grid, since everything above it is placed off
+  the title art, and the prompt keeps the row it has always had, so a player
+  with no scores yet sees the screen exactly as it was. An empty table draws
+  nothing at all, not even the heading. Measured against the title screen's own
+  placement, the band is empty below 24 rows, holds the heading and one row of
+  two at 24, and holds all ten from 29 rows up.
+
+  Qualifying is making the table rather than beating the best score, which is
+  the stricter reading of the same idea and the one that cannot fill a table: a
+  run named only when it takes first place leaves the other nine rows with no
+  name to put on them. Every new best qualifies under the looser rule as well.
+  A score level with one already on the table ranks below it, because the table
+  is sorted stably after the entry is appended, so the run that set the figure
+  first keeps the row. A debug scenario never earns one, on the same rule that
+  already holds them back from the best score and from a powerup drop.
+
+  The browser build stores the table in `localStorage` beside the best score and
+  the CRT choice, behind the same guards. The stored value is JSON rather than a
+  number, so it has a second way to be unreadable and both land on an empty
+  table: storage that refuses the read, and a read that returns something that
+  is not a table. A row that is not an entry is dropped on its own rather than
+  condemning the nine good scores beside it, and a row with no name at all is
+  the one case repaired instead of dropped, since the score is the part worth
+  keeping. A score has to be a positive whole number once the table has made it
+  one, which is tested against that whole number rather than against the figure
+  in storage - a hand-edited `0.5` is a row scoring zero, and a zero row is the
+  one the rule exists to keep off the table. The terminal build keeps the table
+  for the session, which is what it already does with the best score.
+
+- **A replay ghost: the run you just flew, flying beside the one you are
+  flying.** Drawn as a hollow grey ship at the position yours held at the same
+  point of its own flight, which lines the two runs up by how long each had been
+  flying. Two rows rather than three, with the engines and their glow left off -
+  a glow pulsing off the world clock would be the one part of the ghost not read
+  from the recording - and drawn before the live ship, so the ship wins any cell
+  the two of them share. Fly past the moment the recorded run ended and the
+  ghost disappears, which is the screen saying you have outlasted it.
+
+  What is recorded is where the ship went rather than which keys were held, and
+  that is the one deliberate departure from how this was asked for. A key is
+  held for some number of frames, and how far it carries the ship depends on how
+  long those frames were, so replaying the keys on a run whose frames fall
+  differently flies a different path - which is the one thing the ghost exists
+  not to do. Sampling the position reproduces the path actually flown at any
+  frame rate, including a run recorded on a machine that was dropping frames and
+  replayed on one that is not; `test/parity.test.mjs` and
+  `test/replay-ghost.test.mjs` both pin that, the second by flying one recording
+  at five frame lengths from a sixtieth of a second to a twentieth.
+
+  Ten samples a second, taken on the run's own clock rather than per frame, with
+  the timer carrying its overshoot so the samples do not drift later and later.
+  A recording stops at ten minutes of flying, because it is held in memory for
+  the session and nothing trims it. The recording is promoted to the ghost at
+  the end of a run rather than at the start of the next one, so the ghost is
+  always a run that was flown to its end: a flight backed out of to the title
+  screen stops recording wherever the player lost interest, and the run before
+  it is the better race. Normal runs only, both for recording and for drawing,
+  and a debug scenario leaves the last normal run's ghost untouched.
+
+- **Performance mode: a detail ladder a slow device walks down on its own.**
+  Every second of a run is measured, and the mean frame time of a window of
+  thirty decides. Past 41.7ms - 24 frames a second - the ladder steps down a
+  tier; inside 36.7ms, or 27.3 frames a second, it steps back up. The gap
+  between the two is hysteresis and it is there in both directions: set too near
+  each other, a device between them climbs and falls once a second with the
+  starfield visibly breathing, and set too near the target, the ordinary jitter
+  of a `setInterval` or an accumulator becomes a ceiling and a device that
+  recovered never climbs out of the tier one bad stretch cost it.
+
+  Three tiers, and the top one is the game exactly as it was: forty stars and
+  every particle a burst asks for. Below it the starfield goes to twenty-four
+  stars and then twelve, and a burst keeps 60% and then 30% of its debris, never
+  fewer than one particle - a kill that threw no debris reads as a shot that
+  missed, and the hit is paid for by then. Those two are what scale with nothing
+  else in the game: the starfield is a fixed population redrawn every frame
+  whatever is happening, and a burst's debris is the only thing in the tunnel
+  whose count the player never chose. Nothing a run is scored on moves, which
+  `test/performance-mode.test.mjs` pins field by field.
+
+  The starfield is trimmed and topped up rather than rebuilt, so a tier change
+  does not reshuffle the stars already on screen: the field is parallax
+  background, and the whole of it jumping is a more obvious event than the third
+  of it going out. The tier names itself in the footer status strip while it is
+  below the fullest one, in grey beside the cyan speed and the yellow mute flag,
+  and on the same room rule as the powerup badges and drawn after them - so a
+  narrow grid carrying two pickups drops the notice rather than a pickup. The
+  fullest tier draws nothing rather than a badge reading FULL, because a strip
+  that always carried one would be a permanent reminder of a mechanism that has
+  not done anything. The tier survives the run that measured it, since it is a
+  reading of the device rather than of the run, and is not stored: it is
+  re-measured a second into every session.
+
+  Three things are not measured, and each of them would otherwise argue for the
+  wrong move. A window is only counted during a live, unpaused run, because the
+  title screen and a paused run draw a fraction of what a run draws and a window
+  of them would read as headroom just as the player resumes into the load that
+  cost them the tier. A zero, a negative or a `NaN` is a clock the shell could
+  not read rather than a fast frame. And a sample longer than the whole window
+  is a loop that stopped rather than a slow frame - a backgrounded tab has its
+  frames withheld, a laptop sleeps, a terminal write blocks for a quarter of a
+  second behind a console that cannot keep up - so it is dropped rather than
+  averaged in, which is what keeps the starfield from thinning out as a reward
+  for coming back to the tab. A device genuinely at two frames a second is still
+  well inside the window and still drops a tier.
+
+  The real frame time is fed in by each shell rather than read by the engine,
+  because neither shell hands the engine that figure as it is: the terminal loop
+  caps `dt` so a stalled frame cannot throw the physics, and the browser loop
+  steps a fixed `dt` off an accumulator and so steps less often rather than
+  further when it cannot keep up. The browser shell therefore times the gap
+  between two stepped frames rather than between two calls of its own loop.
+
+### Changed
+
+- The engagement harness asks whether a run ended rather than which screen it
+  landed on. `test/engagement.mjs` read a finished flight off `mode === 'dead'`
+  at three places, and a run that makes the table now reaches the game over
+  screen through the name entry screen - so a flight whose score qualified would
+  have been read as still flying. Every verdict it returns is unchanged, since
+  nothing before this could end a run anywhere but `dead`, and the probes'
+  published figures are unaffected.
+
+- `initStars` builds the field one star at a time through a `makeStar` helper, in
+  both builds, so a tier change can top the field up without rebuilding it. The
+  five draws per star are in the same order they have always been in, which is
+  what keeps a seeded starfield identical to the one the same seed drew before -
+  `test/parity.test.mjs` compares the two builds' fields off one seed.
+
 ## [0.8.4-alpha] - 2026-10-07
 
 ### Fixed
