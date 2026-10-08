@@ -185,6 +185,44 @@ its origin survives archiving into `## Complete`.
     what guarantees it. The first is the smaller surprise for the next caller.
   - From: UI/UX Override - the three 0.9.0-alpha features in the browser
 
+### Version Scheme Override - re-express the pre-release before the next bump
+
+- [ ] Move the version into the nested pre-release form
+  - **The core is doing the suffix's job.** `package.json` reads `0.9.0-alpha`,
+    so the core climbs towards a release while the suffix says the project is
+    not released. One of the two numbers should be moving and it is the wrong
+    one.
+  - **Write `1.0.0-alpha.0.9.0`.** The core becomes the release being worked
+    towards and stops moving until the suffix is dropped; the old core moves
+    into the suffix, where it keeps the record of how far the project has
+    come. The inner triple then moves the way the core used to: a patch to
+    `1.0.0-alpha.0.9.1`, a minor to `1.0.0-alpha.0.10.0`, a major to
+    `1.0.0-alpha.1.0.0`. `### Version Schemes` in the automation instructions
+    is the standing rule.
+  - **This is not a release.** It re-expresses the version the project is
+    already at, so it earns no step of its own. Items completed alongside it
+    earn their step from the corrected form, in one entry under one version.
+  - **Change it in `package.json` and in this run's `CHANGELOG.md` heading,
+    and nowhere else.** This repository names its current release in several
+    places that are not the version - an override heading, the `- From:` lines
+    under it, a roadmap paragraph, a test log. Those are history and stay as
+    they are. Rewriting an override heading or a `From:` line is the sharp
+    one: the two have to match word for word, and editing one of the pair
+    breaks the item in the middle of the run working it.
+  - **Say in the entry why the version looks smaller than yesterday's.** The
+    new version sorts below the last one published, and a reader who meets
+    that with no explanation beside it goes looking for a mistake. Name the
+    old form and the new one, and say the switch was deliberate.
+  - **Leave the three existing tags alone.** They record releases that
+    happened. Do not delete one, do not move one, and do not re-tag to make
+    the ordering look right - the next releases pass them.
+  - **Two traps.** `1.0.0-alpha.0.09.0` is not valid semver, so nothing pads
+    an identifier and nothing tidies one. And `npm version patch` is the
+    wrong command here: it strips the pre-release and yields a bare `1.0.0`.
+    Only the last identifier has a command at all, `npm version prerelease`;
+    an inner minor or major is a hand edit.
+  - From: Version Scheme Override - re-express the pre-release before the next bump
+
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
