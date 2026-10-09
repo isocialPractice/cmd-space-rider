@@ -196,10 +196,11 @@ function drawLeaderboard(screen: ScreenBuffer, state: GameState, promptY: number
 /**
  * The hint under the three characters, in the fullest form that fits.
  *
- * The long form is 52 columns, which clears the documented 60-column minimum
- * with room to spare, so the short one is for a grid narrower than the game
- * supports rather than for any supported size. Both name the same three
- * controls, which are the whole of what this screen does.
+ * The long form is 39 columns, which clears the 56 columns of interior the
+ * documented 60-column minimum leaves with room to spare, so the short one is
+ * for a grid narrower than the game supports rather than for any supported
+ * size. Both name the same three controls, which are the whole of what this
+ * screen does.
  */
 export function nameEntryHint(w: number): string {
   const full = '[ \u2191\u2193 LETTER \u2022 \u2190\u2192 SLOT \u2022 ENTER CONFIRM ]';
@@ -214,7 +215,8 @@ export function nameEntryHint(w: number): string {
  * Three cells two columns apart, with a bar under the one being edited. The
  * bar is what makes a space spellable - a slot holding one draws no glyph at
  * all, and without something under it the player cannot tell an empty slot from
- * a slot that is not there.
+ * a slot that is not there. It is also what carries the blink, for the same
+ * reason: see the comment on `ink` below.
  */
 export function renderNameEntry(screen: ScreenBuffer, state: GameState): void {
   const w = screen.width;
@@ -236,13 +238,27 @@ export function renderNameEntry(screen: ScreenBuffer, state: GameState): void {
   const stride = 2;
   const nameX = floor((w - (NAME_LENGTH * stride - 1)) / 2);
   const blink = sin(state.uiTime * 6) > 0;
+  // One ink for both halves of the cursor, so the glyph and the bar under it
+  // pulse together. The bar is the half that has to carry it: a slot holding a
+  // space draws no glyph at all, because ScreenBuffer.render skips a space
+  // outright, so a blink on the character alone paints nothing and the screen
+  // stops moving at exactly the moment the player is spelling a callsign
+  // shorter than three characters. The bar is always inked, so it always
+  // blinks.
+  //
+  // Both phases are colours already on this screen, and both read as the
+  // cursor: either one against the grey rule under the inactive slots says
+  // which slot is live, so the active slot stays identifiable whichever half of
+  // the period it is caught in. That is why the bar blinks its colour rather
+  // than its glyph - a bar that spent half the period as the inactive rule, or
+  // as nothing, would make the live slot look dead.
+  const ink = blink ? C.BRIGHT_WHITE : C.BRIGHT_CYAN;
   for (let i = 0; i < NAME_LENGTH; i++) {
     const active = i === state.entrySlot;
     const x = nameX + i * stride;
-    screen.put(x, slotsY, state.entryName[i] || ' ',
-      active ? (blink ? C.BRIGHT_WHITE : C.BRIGHT_CYAN) : C.CYAN, C.BLACK);
+    screen.put(x, slotsY, state.entryName[i] || ' ', active ? ink : C.CYAN, C.BLACK);
     screen.put(x, slotsY + 1, active ? '\u2580' : '\u2500',
-      active ? C.BRIGHT_CYAN : C.GRAY, C.BLACK);
+      active ? ink : C.GRAY, C.BLACK);
   }
 
   const hintY = min(slotsY + 3, h - 2);

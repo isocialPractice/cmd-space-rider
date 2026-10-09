@@ -1,5 +1,177 @@
 # Changelog
 
+## [1.0.0-alpha.0.9.1] - 2026-10-09
+
+### Changed
+
+- **The version is written in its nested pre-release form.** `0.9.0-alpha`
+  became `1.0.0-alpha.0.9.0`, and this entry is the patch step off it. The core
+  had been doing the suffix's job: it climbed towards a release while the suffix
+  said the project was not released, so one of the two numbers was moving and it
+  was the wrong one. In the new form the core names the release being worked
+  towards and stays where it is until the suffix is dropped, while the old core
+  moves inside the suffix, where it keeps the record of how far the project has
+  come. The inner triple now moves the way the core used to: a patch to
+  `1.0.0-alpha.0.9.1`, a minor to `1.0.0-alpha.0.10.0`, a major to
+  `1.0.0-alpha.1.0.0`.
+
+  The switch is deliberate, and it is the only thing about the version that
+  changed - the project is at the same point it was at yesterday, written
+  differently. A string opening `1.0.0` invites being read as a release, so it
+  is worth saying plainly that it is not one: everything after the hyphen is
+  what says so, and the whole version sorts below a bare `1.0.0` for exactly
+  that reason. It sorts above `0.9.0-alpha` and above all three published tags,
+  so nothing already published moves order, and `v0.8.3-alpha`, `v0.8.4-alpha`
+  and `v0.9.0-alpha` are left exactly as they are. Numeric pre-release
+  identifiers compare as numbers rather than as text, so the step after
+  `1.0.0-alpha.0.9.9` is `1.0.0-alpha.0.9.10` and it sorts above, not between
+  `.0.9.1` and `.0.9.2`.
+
+### Fixed
+
+- The name entry cursor did not blink on a slot holding a space, which is the
+  one slot it was put there for. `renderNameEntry` carried the blink on the
+  character and drew the bar under it as a constant `▀` in a constant bright
+  cyan, and `ScreenBuffer.render` skips a cell whose character is a space
+  outright - so on an empty slot the alternating foreground painted nothing and
+  the screen stopped moving entirely. Read off `ctx.getImageData` over the live
+  canvas in chromium, sampling the glyph cell of the cursor and the bar cell
+  beneath it every 50ms for 1.6s, which is more than one full period of
+  `sin(uiTime * 6)`: a slot holding a letter produced 2 distinct paintings of
+  the cell and a slot holding a space produced 1. The active slot was still
+  identifiable throughout, since its bright cyan `▀` differs from the grey `─`
+  under the other two, so this was a missing blink rather than a missing cursor.
+
+  The blink now sits on the bar as well as on the character, and the bar is the
+  half that matters, because it is inked whatever the slot holds. Both halves
+  take the same ink, so the cursor pulses as one thing, and both phases of it -
+  bright white and bright cyan - are already colours on that screen and both
+  differ from the grey of the inactive rules. That is why the bar blinks its
+  colour rather than blinking out: a bar that spent half the period as the
+  inactive rule, or as nothing, would make the live slot look dead. The suite
+  had `a space in a slot is still a slot the player can see`, which asserts the
+  `▀` and the `─` are drawn and never advances the clock, so it could not see
+  this. A sibling beside it now renders two `uiTime` values half a blink period
+  apart and holds three things: the bar changes, the rules beside it do not, and
+  neither phase reads as inactive.
+
+- Coming back to a backgrounded tab mid-run cost a detail tier, which is the
+  specific thing the stall guard in `trackFrameRate` was written to prevent.
+  Verified in a headed chromium, since a headless one never withholds frames
+  from a backgrounded page. Three spells away from a run at the fullest tier -
+  4s, 9s and 15s - each stepped the ladder `0->1` and then back `1->0`, putting
+  the grey `REDUCED` badge on the status strip for 1.00s every time.
+
+  The guard itself was working: all 25 of the ~1016ms gaps the throttled tab
+  produced were discarded by `elapsed >= DETAIL_WINDOW_FRAMES *
+  TARGET_FRAME_TIME`. What it missed was the last gap. The tab is brought
+  forward partway through one of the intervals its frames were being withheld
+  across, so the frame straddling the return is part of an interval rather than
+  a whole one - measured at 650ms, 750ms and 850ms across the three spells.
+  Each is under the 1.000s cut-off and so was accepted as an ordinary sample,
+  and one such sample carries a 30-frame window on its own: 650ms gives a window
+  mean of 53.9ms, 750ms gives 57.2ms and 850ms gives 60.6ms, against a 41.7ms
+  drop threshold. The return gap falls anywhere in the throttle interval, so
+  this was near-deterministic rather than a race.
+
+  The frame that ends a stall is now discarded along with the stall itself: a
+  run remembers that the last sample was thrown out as a stopped loop and throws
+  the next one out too. Discarding one sample rather than lowering the cut-off
+  is what keeps the other half of this true - a device genuinely at two frames a
+  second is a run of samples and not one, so it loses the first to the discard
+  and is still detected by the rest. `a loop that stopped is not a slow frame`
+  covered a 4s stall and a sustained 30 frames at 0.5s, and nothing between. A
+  test beside it now feeds a stall, then a single 0.7s sample, then a window of
+  healthy frames, and holds the tier where it was, with companions pinning that
+  a second sample in the same band is still counted and that 2 frames a second
+  still drops a tier.
+
+- `readGhost` promised that a stale cursor could not give a wrong answer, and it
+  could. The doc comment said the cursor "is only ever a hint: it is clamped
+  into the recording and only ever moves forward, so a stale one costs a few
+  comparisons rather than a wrong answer", and then that "a run starting over is
+  handed back 0". Neither was true of the function. It only walked forward, so a
+  cursor sitting ahead of `t` was never corrected: over a 21-sample path one
+  second apart, `readGhost(path, 3, 999)` returned `{x: 20, cursor: 20}` where
+  the answer at `t = 3` is `x: 3`. And it never handed back 0 for a forward
+  cursor - it is `startGame` that sets `ghostCursor = 0`, which is why nothing
+  in the shipped game ever reached this: the cursor only advances within a run
+  and is reset before the next one reads it.
+
+  The backward walk is added rather than the claims dropped, because a function
+  that reads correctly from any cursor is a smaller surprise for the next caller
+  than one that reads correctly only from a cursor the caller is trusted to have
+  reset. Both claims are now true of the code: a cursor ahead of `t` walks back
+  to the pair of samples `t` falls between, and a run starting over is handed
+  back 0 because the backward walk follows `t` to the start line. `the cursor is
+  a hint rather than an answer` exercised the exact call and asserted only that
+  it was non-null with `cursor === 20`, never the position, so the suite pinned
+  the behaviour the comment denied. It now pins the position as well, from a
+  cursor one pair ahead, from a cursor past the end of the recording, and from a
+  run starting over.
+
+- The cheatsheet said the detail ladder is re-measured every run, and it is not.
+  `CHEATSHEET.md` and `docs/cheatsheet.html` both closed with "the ladder is
+  re-measured a second into every run". `startGame` clears `frameSpent` and
+  `frameSeen` and deliberately leaves `detail` where it was, under a comment
+  saying so, and `a dropped tier survives the run that measured it` asserts
+  exactly that - feed one slow window, call `startGame`, and `detail` is still
+  1. The 0.9.0-alpha entry below had it right with "every session", so the same
+  release published the lifetime two ways and the cheatsheet was the wrong one.
+  Both copies now say the ladder survives the run that measured it and is
+  re-measured a second into every session. The figure table above it was correct
+  and is unchanged.
+
+- The quarter-second terminal write was named as a sample the stall guard
+  discards, and the guard does not reach it. The comment on the guard in
+  `trackFrameRate` listed three examples of "a loop that stopped", the third
+  being "a terminal write blocks for a quarter of a second at a time on a
+  console that cannot keep up", and concluded "None of those says anything
+  about how fast the device draws". The guard is `elapsed >=
+  DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME`, which is 30 * (1/30) = 1.000s
+  exactly, so a 0.250s frame was never discarded - it was averaged in, and two
+  of them in one window take the mean to 47.8ms against the 41.7ms drop
+  threshold and cost a tier. The same sentence was published in the 0.9.0-alpha
+  entry below. The copy of the comment in `index.html` named only the
+  backgrounded tab and the sleeping laptop, so the browser build never carried
+  the error.
+
+  Nothing was wrong at runtime: a console blocking that long arguably should
+  drop a tier. What was wrong was the claim that the guard covered it, so the
+  example is dropped from the list of what the guard discards and the behaviour
+  is stated instead - a write that blocks under a second is counted, and is
+  meant to be, which is what the cut-off being a whole window buys. The cut-off
+  is not lowered: `a loop that stopped is not a slow frame` pins that a device
+  at 2 frames a second still has to be detected.
+
+- The frame-rate figure for the ghost counted a repeated interval and named the
+  wrong longest frame. The 0.9.0-alpha entry below published the parity of the
+  ghost as flown "at five frame lengths from a sixtieth of a second to a
+  twentieth". The test it cites, `the same recording is raced identically at
+  every frame rate`, flew a base of `FRAME` and then `[1/60, 1/20, 1/12,
+  0.05]` - and `0.05` is `1/20`, the same frame length twice, so the five
+  entries were four distinct lengths: a sixtieth, a thirtieth, a twentieth and a
+  twelfth. The count was one high, the stated upper end was wrong in the
+  direction that understated the test, and one of the five slots re-checked a
+  rate already covered. The duplicate is replaced with a tenth of a second,
+  which the test did not fly and which is also the frame length that matches the
+  sample spacing of the recording, so the list now holds five distinct lengths
+  from a sixtieth to a tenth and the sentence is corrected to that. `samples go
+  down a fixed tenth of a second apart` in the same file carries four distinct
+  values already and is unchanged.
+
+- The name entry hint was published as 52 columns and is 39. The doc comment on
+  `nameEntryHint` opened "The long form is 52 columns, which clears the
+  documented 60-column minimum with room to spare", in both builds. The string
+  is `[ ↑↓ LETTER • ←→ SLOT • ENTER CONFIRM ]`, which is 39 characters. The
+  conclusion held and holds harder - 39 clears the 56 columns of interior a
+  60-column grid leaves by more than the figure claimed - but the number was
+  wrong in both copies, and the one assertion near it, `the hint is the long
+  form at every supported width`, bounded the length at 56 rather than pinning
+  it, so nothing would have caught the figure drifting again. The figure is
+  corrected in both builds and the assertion is tightened to the exact length,
+  so the comment and the suite now hold each other up.
+
 ## [0.9.0-alpha] - 2026-10-08
 
 ### Added
@@ -68,7 +240,7 @@
   frame rate, including a run recorded on a machine that was dropping frames and
   replayed on one that is not; `test/parity.test.mjs` and
   `test/replay-ghost.test.mjs` both pin that, the second by flying one recording
-  at five frame lengths from a sixtieth of a second to a twentieth.
+  at five frame lengths from a sixtieth of a second to a tenth.
 
   Ten samples a second, taken on the run's own clock rather than per frame, with
   the timer carrying its overshoot so the samples do not drift later and later.
@@ -120,11 +292,12 @@
   cost them the tier. A zero, a negative or a `NaN` is a clock the shell could
   not read rather than a fast frame. And a sample longer than the whole window
   is a loop that stopped rather than a slow frame - a backgrounded tab has its
-  frames withheld, a laptop sleeps, a terminal write blocks for a quarter of a
-  second behind a console that cannot keep up - so it is dropped rather than
-  averaged in, which is what keeps the starfield from thinning out as a reward
-  for coming back to the tab. A device genuinely at two frames a second is still
-  well inside the window and still drops a tier.
+  frames withheld, a laptop sleeps - so it is dropped rather than averaged in,
+  which is what keeps the starfield from thinning out as a reward for coming
+  back to the tab. A device genuinely at two frames a second is still well
+  inside the window and still drops a tier, and so is a console whose writes
+  block for a quarter of a second at a time: that is under the cut-off, so it
+  is counted, which is what the cut-off being a whole window buys.
 
   The real frame time is fed in by each shell rather than read by the engine,
   because neither shell hands the engine that figure as it is: the terminal loop

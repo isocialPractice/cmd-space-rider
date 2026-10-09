@@ -826,13 +826,19 @@ const GHOST_MAX_SAMPLES=6000;
 // ghost's run ended, so a player still flying past that moment has outlasted the
 // run being raced, and the ghost disappearing is how the screen says so.
 //
-// cursor is where the last read left off, and walking forward from it is what
-// keeps this off a scan of the whole recording every frame. It is only ever a
-// hint: it is clamped into the recording and only ever moves forward, so a stale
-// one costs a few comparisons rather than a wrong answer.
+// cursor is where the last read left off, and starting from it is what keeps
+// this off a scan of the whole recording every frame. It is only ever a hint: it
+// is clamped into the recording and then walked to the pair of samples t
+// actually falls between, backwards as readily as forwards, so a stale one costs
+// a walk rather than a wrong answer. A run starting over is handed back 0,
+// because the backward walk follows t when t returns to the start line.
 function readGhost(samples,t,cursor){
   if(samples.length===0)return null;
   let i=max(0,min(floor(cursor),samples.length-1));
+  // Walked both ways rather than only forward: a cursor sitting ahead of t would
+  // otherwise never be corrected, and the reading taken from it would
+  // interpolate the wrong pair of samples.
+  while(i>0&&samples[i].t>t)i--;
   while(i+1<samples.length&&samples[i+1].t<=t)i++;
   const here=samples[i];
   const next=samples[i+1];
@@ -948,7 +954,7 @@ class Game{
       warpLevel:1,warpFlash:0,
       rapidFire:0,slowMotion:0,fireTimer:0,
       sounds:[],
-      detail:0,frameSpent:0,frameSeen:0,
+      detail:0,frameSpent:0,frameSeen:0,frameStalled:false,
       leaderboard:loadLeaderboard(),
       entryName:DEFAULT_NAME,entrySlot:0,
       ghost:[],ghostCursor:0,ghostShip:null,ghostRecord:[],ghostTimer:GHOST_SAMPLE_TIME,
@@ -1033,7 +1039,24 @@ class Game{
     // the device draws, and one of them averaged in would cost a tier that the
     // next window has to hand back - the starfield thinning out as a reward for
     // coming back to the tab.
-    if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME)return;
+    if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME){s.frameStalled=true;return}
+    // And neither is the frame that ends the stall. A backgrounded tab is
+    // reactivated partway through one of the intervals its frames were being
+    // withheld across, so the frame straddling the return is a part of an
+    // interval rather than a whole one - measured at 650ms, 750ms and 850ms over
+    // three spells away from a run. Each is under the cut-off above, so each
+    // would be taken as an ordinary sample, and a single one of them carries a
+    // whole window on its own: 650ms puts a window of 30 at a mean of 53.9ms
+    // against a 41.7ms drop threshold. That is near-deterministic rather than a
+    // race, since the return lands anywhere in the interval, and it is exactly
+    // the thing the guard above was written to prevent - the player looks at
+    // another tab and comes back to a thinner starfield.
+    //
+    // Discarding one sample rather than lowering the cut-off is what keeps the
+    // other half of this true: a device genuinely at two frames a second is a
+    // run of samples and not one, so it loses the first and is still detected by
+    // the rest.
+    if(s.frameStalled){s.frameStalled=false;return}
 
     s.frameSpent+=elapsed;
     s.frameSeen+=1;
@@ -1067,7 +1090,7 @@ class Game{
     // measured it, so a player who dropped a tier last run opens this one at
     // that tier rather than paying the first second of it over again. The window
     // is what resets: its frames were spent on the run that is over.
-    s.frameSpent=0;s.frameSeen=0;
+    s.frameSpent=0;s.frameSeen=0;s.frameStalled=false;
     s.entryName=DEFAULT_NAME;s.entrySlot=0;
     s.ghostCursor=0;s.ghostShip=null;s.ghostRecord=[];s.ghostTimer=GHOST_SAMPLE_TIME;
     // An opening sample, so the recording is anchored at the moment the run began
@@ -2541,9 +2564,9 @@ function drawLeaderboard(screen,state,promptY){
 }
 
 // The hint under the three characters, in the fullest form that fits. The long
-// form is 52 columns, which clears the documented 60-column minimum with room to
-// spare, so the short one is for a grid narrower than the game supports rather
-// than for any supported size.
+// form is 39 columns, which clears the 56 columns of interior the documented
+// 60-column minimum leaves with room to spare, so the short one is for a grid
+// narrower than the game supports rather than for any supported size.
 function nameEntryHint(w){
   const full='[ \u2191\u2193 LETTER \u2022 \u2190\u2192 SLOT \u2022 ENTER CONFIRM ]';
   const short='[ \u2191\u2193 \u2022 \u2190\u2192 \u2022 ENTER ]';
@@ -2556,7 +2579,8 @@ function nameEntryHint(w){
 // Three cells two columns apart, with a bar under the one being edited. The bar
 // is what makes a space spellable - a slot holding one draws no glyph at all,
 // and without something under it the player cannot tell an empty slot from a
-// slot that is not there.
+// slot that is not there. It is also what carries the blink, for the same
+// reason: see the comment on ink below.
 function renderNameEntry(screen,state){
   const w=screen.width,h=screen.height;
   screen.clear(C.BLACK);
@@ -2575,12 +2599,24 @@ function renderNameEntry(screen,state){
   const stride=2;
   const nameX=floor((w-(NAME_LENGTH*stride-1))/2);
   const blink=sin(state.uiTime*6)>0;
+  // One ink for both halves of the cursor, so the glyph and the bar under it
+  // pulse together. The bar is the half that has to carry it: a slot holding a
+  // space draws no glyph at all, because ScreenBuffer.render skips a space
+  // outright, so a blink on the character alone paints nothing and the screen
+  // stops moving at exactly the moment the player is spelling a callsign
+  // shorter than three characters. The bar is always inked, so it always blinks.
+  //
+  // Both phases are colours already on this screen, and both read as the cursor:
+  // either one against the grey rule under the inactive slots says which slot is
+  // live. That is why the bar blinks its colour rather than its glyph - a bar
+  // that spent half the period as the inactive rule, or as nothing, would make
+  // the live slot look dead.
+  const ink=blink?C.BRIGHT_WHITE:C.BRIGHT_CYAN;
   for(let i=0;i<NAME_LENGTH;i++){
     const active=i===state.entrySlot;
     const x=nameX+i*stride;
-    screen.put(x,slotsY,state.entryName[i]||' ',
-      active?(blink?C.BRIGHT_WHITE:C.BRIGHT_CYAN):C.CYAN,C.BLACK);
-    screen.put(x,slotsY+1,active?'\u2580':'\u2500',active?C.BRIGHT_CYAN:C.GRAY,C.BLACK);
+    screen.put(x,slotsY,state.entryName[i]||' ',active?ink:C.CYAN,C.BLACK);
+    screen.put(x,slotsY+1,active?'\u2580':'\u2500',active?ink:C.GRAY,C.BLACK);
   }
 
   const hintY=min(slotsY+3,h-2);

@@ -108,6 +108,7 @@ export class Game {
       detail: 0,
       frameSpent: 0,
       frameSeen: 0,
+      frameStalled: false,
       leaderboard: [],
       entryName: DEFAULT_NAME,
       entrySlot: 0,
@@ -222,13 +223,42 @@ export class Game {
     if (!(elapsed > 0)) return;
     // A sample longer than the whole window is not a slow frame either: it is a
     // loop that stopped. A browser tab in the background has its frames
-    // withheld until it is looked at again, a laptop sleeps, and a terminal
-    // write blocks for a quarter of a second at a time on a console that cannot
-    // keep up. None of those says anything about how fast the device draws, and
-    // one of them averaged in would cost a tier that the next window has to
-    // hand back - the starfield thinning out as a reward for coming back to the
-    // tab.
-    if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME) return;
+    // withheld until it is looked at again, and a laptop sleeps. Neither says
+    // anything about how fast the device draws, and one of them averaged in
+    // would cost a tier that the next window has to hand back - the starfield
+    // thinning out as a reward for coming back to the tab.
+    //
+    // The cut-off is the whole window and is deliberately no shorter. A write
+    // that blocks for a quarter of a second behind a console that cannot keep
+    // up is under it, so it is counted rather than discarded, and two of them
+    // in one window cost a tier - which is the right answer, because a console
+    // that stalls that long is a device this game cannot be drawn on quickly.
+    // Lowering the cut-off to catch it would stop a device genuinely at two
+    // frames a second from ever being detected.
+    if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME) {
+      s.frameStalled = true;
+      return;
+    }
+    // And neither is the frame that ends the stall. A backgrounded tab is
+    // reactivated partway through one of the intervals its frames were being
+    // withheld across, so the frame straddling the return is a part of an
+    // interval rather than a whole one - measured at 650ms, 750ms and 850ms
+    // over three spells away from a run. Each is under the cut-off above, so
+    // each would be taken as an ordinary sample, and a single one of them
+    // carries a whole window on its own: 650ms puts a window of 30 at a mean of
+    // 53.9ms against a 41.7ms drop threshold. That is near-deterministic rather
+    // than a race, since the return lands anywhere in the interval, and it is
+    // exactly the thing the guard above was written to prevent - the player
+    // looks at another tab and comes back to a thinner starfield.
+    //
+    // Discarding one sample rather than lowering the cut-off is what keeps the
+    // other half of this true: a device genuinely at two frames a second is a
+    // run of samples and not one, so it loses the first and is still detected
+    // by the rest.
+    if (s.frameStalled) {
+      s.frameStalled = false;
+      return;
+    }
 
     s.frameSpent += elapsed;
     s.frameSeen += 1;
@@ -298,6 +328,7 @@ export class Game {
     // window is what resets: its frames were spent on the run that is over.
     s.frameSpent = 0;
     s.frameSeen = 0;
+    s.frameStalled = false;
     s.entryName = DEFAULT_NAME;
     s.entrySlot = 0;
     s.ghostCursor = 0;

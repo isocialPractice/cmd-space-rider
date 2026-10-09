@@ -64,7 +64,7 @@ npm run probe -- overlay-anchor    # no grid, no build: it walks viewports</code
 <ul><li>60 columns by 20 rows minimum</li><li>256-colour ANSI</li><li>Unicode box-drawing and block elements</li><li>Windows Terminal, iTerm2, GNOME Terminal, Alacritty, Kitty</li></ul>
 <h2 id="browser-only-features">Browser-only features</h2>
 <p>High score and leaderboard persistence, sound, the CRT overlay (<code>C</code>), light mode, touch controls, and a canvas-offset screen shake. The terminal build jolts the play area by a whole character column instead, and keeps a best score and a table for the session only.</p>
-<p>The replay ghost and the detail ladder are in both builds and neither is stored: a ghost lasts as long as the session, and the ladder is re-measured a second into every run.</p>
+<p>The replay ghost and the detail ladder are in both builds and neither is stored: a ghost lasts as long as the session, and the ladder survives the run that measured it and is re-measured a second into every session.</p>
 <div class="pager"><a href="how-it-works.html">&lt;&lt; How It Works</a><span></span></div>
 </main>
 </div>

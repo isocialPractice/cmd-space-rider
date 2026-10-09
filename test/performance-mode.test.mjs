@@ -298,9 +298,9 @@ test('a clock the shell could not read is not a fast frame', () => {
 });
 
 test('a loop that stopped is not a slow frame', () => {
-  // A backgrounded tab, a sleeping laptop, a terminal write blocked behind a
-  // console that cannot keep up. None of them says how fast the device draws,
-  // and one of them averaged in would cost a tier for coming back to the tab.
+  // A backgrounded tab or a sleeping laptop. Neither says how fast the device
+  // draws, and one of them averaged in would cost a tier for coming back to the
+  // tab.
   for (const build of BUILDS) {
     const { api } = build;
     const window = api.DETAIL_WINDOW_FRAMES * api.TARGET_FRAME_TIME;
@@ -310,17 +310,60 @@ test('a loop that stopped is not a slow frame', () => {
     assert.equal(game.state.frameSeen, 0, `${build.name}: a window-long frame is not a sample`);
     assert.equal(game.state.detail, 0, `${build.name}: and cost nothing`);
 
-    // One stall in an otherwise healthy window leaves the tier where it was.
+    // One stall in an otherwise healthy window leaves the tier where it was. The
+    // window is fed one frame over its length because the sample straddling the
+    // return from a stall is discarded too - see the test below - so thirty
+    // frames after a stall close a window of twenty-nine.
     const mixed = flying(build);
     mixed.trackFrameRate(window * 4);
-    feed(mixed, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES);
-    assert.equal(mixed.state.detail, 0, `${build.name}: the healthy frames decided`);
+    feed(mixed, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES + 1);
+    assert.equal(mixed.state.frameSeen, 0, `${build.name}: the window closed`);
+    assert.equal(mixed.state.detail, 0, `${build.name}: and the healthy frames decided it`);
 
     // A device genuinely at a few frames a second is still well inside the
     // window, so the guard does not hide a real shortfall.
     const bad = flying(build);
     feed(bad, 0.5, api.DETAIL_WINDOW_FRAMES);
     assert.equal(bad.state.detail, 1, `${build.name}: 2 frames a second still drops a tier`);
+  }
+});
+
+test('the partial frame on the way back from a stall is not a sample either', () => {
+  // The gap the guard above misses. A backgrounded tab is brought forward
+  // partway through one of the intervals its frames were being withheld across,
+  // so the frame that straddles the return is a part of an interval - measured
+  // at 650ms, 750ms and 850ms over three spells away from a run in a headed
+  // chromium. Each is under the whole-window cut-off and so was taken as an
+  // ordinary sample, and one of them carries a window of thirty on its own: at
+  // 650ms the mean is 53.9ms against a 41.7ms drop threshold. Every spell cost a
+  // tier, which is the thing the guard exists to prevent.
+  for (const build of BUILDS) {
+    const { api } = build;
+    const window = api.DETAIL_WINDOW_FRAMES * api.TARGET_FRAME_TIME;
+
+    const game = flying(build);
+    feed(game, window, 3);          // frames withheld while the tab was behind
+    game.trackFrameRate(0.7);       // the partial interval straddling the return
+    feed(game, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES);
+    assert.equal(game.state.frameSeen, 0, `${build.name}: a window of healthy frames closed`);
+    assert.equal(game.state.detail, 0, `${build.name}: and the return cost no tier`);
+
+    // Only the first one after the stall. A second sample in the same band is an
+    // ordinary slow frame and is counted, or a device that really is slow could
+    // hide behind one stall.
+    const twice = flying(build);
+    twice.trackFrameRate(window);
+    feed(twice, 0.7, 2);
+    assert.equal(twice.state.frameSeen, 1, `${build.name}: the second one was counted`);
+
+    // And the cut-off itself is untouched, which is the half that cannot give:
+    // a device genuinely at two frames a second is a run of samples rather than
+    // one, so it loses the first to the discard and is still detected by the
+    // rest.
+    const slow = flying(build);
+    slow.trackFrameRate(window * 4);
+    feed(slow, 0.5, api.DETAIL_WINDOW_FRAMES + 1);
+    assert.equal(slow.state.detail, 1, `${build.name}: 2 frames a second still drops a tier`);
   }
 });
 

@@ -158,5 +158,5 @@ the play area by a whole character column instead, and keeps a best score and a
 table for the session only.
 
 The replay ghost and the detail ladder are in both builds and neither is stored:
-a ghost lasts as long as the session, and the ladder is re-measured a second
-into every run.
+a ghost lasts as long as the session, and the ladder survives the run that
+measured it and is re-measured a second into every session.

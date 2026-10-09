@@ -398,6 +398,12 @@ export interface GameState {
   frameSpent: number;
   /** Frames the open detail window has counted. */
   frameSeen: number;
+  /**
+   * Whether the sample before this one was thrown out as a stopped loop. The
+   * frame straddling the return from one is a partial interval rather than a
+   * whole frame, so it is thrown out too. See trackFrameRate.
+   */
+  frameStalled: boolean;
 
   /** The top scores, highest first. Persisted by the browser build only. */
   leaderboard: LeaderEntry[];
@@ -761,16 +767,22 @@ export interface GhostReading {
  * outlasted the run being raced, and the ghost disappearing is how the screen
  * says so.
  *
- * `cursor` is where the last read left off, and walking forward from it is what
- * keeps this off a scan of the whole recording every frame. It is only ever a
- * hint: it is clamped into the recording and only ever moves forward, so a
- * stale one costs a few comparisons rather than a wrong answer. A run starting
- * over is handed back 0, because `t` has gone backwards and the cursor cannot.
+ * `cursor` is where the last read left off, and starting from it is what keeps
+ * this off a scan of the whole recording every frame. It is only ever a hint:
+ * it is clamped into the recording and then walked to the pair of samples `t`
+ * actually falls between, backwards as readily as forwards, so a stale one
+ * costs a walk rather than a wrong answer. A run starting over is handed back
+ * 0, because the backward walk follows `t` when `t` returns to the start line.
  */
 export function readGhost(samples: GhostSample[], t: number, cursor: number): GhostReading | null {
   if (samples.length === 0) return null;
 
   let i = Math.max(0, Math.min(Math.floor(cursor), samples.length - 1));
+  // Walked both ways rather than only forward. A cursor sitting ahead of `t` -
+  // left by a caller that restarted its clock without resetting the cursor, or
+  // by one reading two times out of order - would otherwise never be corrected,
+  // and the reading taken from it would interpolate the wrong pair of samples.
+  while (i > 0 && samples[i].t > t) i--;
   while (i + 1 < samples.length && samples[i + 1].t <= t) i++;
 
   const here = samples[i];

@@ -7,7 +7,7 @@
 // and how far it carries the ship depends on how long those frames were: replay
 // the keys at a different frame rate and the ghost flies a different path, which
 // is the one thing it exists not to do. The test below that flies the same
-// recording at four frame rates is the one that pins the difference.
+// recording at five frame rates is the one that pins the difference.
 //
 // Both halves run off `gameTime`, so two runs are lined up by how long each had
 // been flying rather than by how many frames each took. That is also what makes
@@ -119,7 +119,10 @@ test('an empty recording reads as nothing, and a single sample as one instant', 
   }
 });
 
-test('the cursor is a hint rather than an answer, and only ever moves forward', () => {
+test('the cursor is a hint rather than an answer, and is walked to fit the reading', () => {
+  // Both directions, because a forward-only walk cannot correct a cursor that
+  // is already past `t` - and then the position it reads is of the wrong pair of
+  // samples rather than merely slower to find.
   for (const build of BUILDS) {
     const path = [];
     for (let i = 0; i <= 20; i++) path.push({ t: i, x: i, y: 0 });
@@ -129,11 +132,25 @@ test('the cursor is a hint rather than an answer, and only ever moves forward', 
     assert.equal(fromZero.cursor, 15, `${build.name}: walked forward to sample 15`);
     assert.ok(Math.abs(fromZero.x - 15.5) < 1e-9, `${build.name}: and read the right position`);
 
-    // A cursor past the end of the recording is clamped into it rather than
-    // indexing off it.
+    // A cursor one pair ahead is the ordinary stale case, and the reading is
+    // still the point between the samples `t` falls between.
+    const ahead = build.api.readGhost(path, 7.5, 9);
+    assert.equal(ahead.cursor, 7, `${build.name}: walked back a pair, saw ${ahead.cursor}`);
+    assert.ok(Math.abs(ahead.x - 7.5) < 1e-9, `${build.name}: and interpolated, saw ${ahead.x}`);
+
+    // A cursor past the end of the recording is clamped into it and then walked
+    // back, so it reads the position at `t` rather than the last sample's.
     const wild = build.api.readGhost(path, 3, 999);
     assert.ok(wild !== null, `${build.name}: a cursor past the end still reads`);
-    assert.equal(wild.cursor, 20, `${build.name}: clamped to the last sample`);
+    assert.equal(wild.cursor, 3, `${build.name}: walked back to sample 3, saw ${wild.cursor}`);
+    assert.ok(Math.abs(wild.x - 3) < 1e-9, `${build.name}: at x 3, saw ${wild.x}`);
+
+    // A run starting over is handed back 0, which is what the doc comment on
+    // readGhost promises and what `startGame` would otherwise be the only
+    // guarantee of.
+    const restart = build.api.readGhost(path, 0, 18);
+    assert.equal(restart.cursor, 0, `${build.name}: back to the start line`);
+    assert.ok(Math.abs(restart.x) < 1e-9, `${build.name}: and at the first sample`);
 
     // A negative one is clamped too.
     assert.equal(build.api.readGhost(path, 0, -50).cursor, 0, `${build.name}: and so is a negative`);
@@ -337,7 +354,7 @@ test('the same recording is raced identically at every frame rate', () => {
 
     const base = readAt(FRAME);
     assert.ok(base !== null, `${build.name}: there is a ghost to compare`);
-    for (const dt of [1 / 60, 1 / 20, 1 / 12, 0.05]) {
+    for (const dt of [1 / 60, 1 / 20, 1 / 12, 1 / 10]) {
       const got = readAt(dt);
       assert.ok(got !== null, `${build.name} at dt ${dt}: still a ghost`);
       assert.ok(
