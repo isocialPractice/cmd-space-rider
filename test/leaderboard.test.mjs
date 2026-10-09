@@ -532,6 +532,150 @@ test('a space in a slot is still a slot the player can see', () => {
   }
 });
 
+test('the cursor blinks on a slot holding a space, because the bar carries it', () => {
+  // The blink used to sit on the character, and ScreenBuffer.render skips a
+  // space outright, so the one screen a player meets while spelling a one or
+  // two character callsign was the one screen that stopped moving. The test
+  // above cannot see that: it never advances the clock.
+  //
+  // sin(uiTime * 6) has a period of about 1.047s, so 0.1 and 0.7 are a little
+  // over half a period apart and straddle a zero crossing.
+  for (const build of BUILDS) {
+    const game = died(build, 5000);
+    game.state.stars = [];
+    game.state.entryName = '   ';
+    game.state.entrySlot = 0;
+
+    const render = (uiTime) => {
+      game.state.uiTime = uiTime;
+      const screen = new build.ScreenBuffer(80, 24);
+      build.menu.renderNameEntry(screen, game.state);
+      return screen;
+    };
+    const glyph = (screen, x, y) => screen.chars[y * screen.width + x];
+    const ink = (screen, x, y) => screen.fg[y * screen.width + x];
+    const cell = (screen, x, y) => `${glyph(screen, x, y)}|${ink(screen, x, y)}`;
+
+    const bright = render(0.1);
+    const dim = render(0.7);
+
+    let bar = null;
+    for (let y = 0; y < 24 && bar === null; y++) {
+      for (let x = 0; x < 80; x++) {
+        if (glyph(bright, x, y) === '▀') { bar = { x, y }; break; }
+      }
+    }
+    assert.ok(bar !== null, `${build.name}: the cursor's bar is on the grid`);
+
+    assert.notEqual(
+      cell(bright, bar.x, bar.y), cell(dim, bar.x, bar.y),
+      `${build.name}: the bar under an empty slot differs between the two phases`
+    );
+
+    // The rules under the other two slots are the half that already held, and
+    // they have to keep holding - a cursor only reads as one if what sits
+    // beside it is still.
+    for (const dx of [2, 4]) {
+      assert.equal(
+        glyph(bright, bar.x + dx, bar.y), '─',
+        `${build.name}: the slot ${dx} columns over draws the inactive rule`
+      );
+      assert.equal(
+        cell(bright, bar.x + dx, bar.y), cell(dim, bar.x + dx, bar.y),
+        `${build.name}: and does not change with the phase`
+      );
+    }
+
+    // Neither phase is the grey those rules are drawn in, so the live slot is
+    // identifiable whichever half of the period it is caught in. That is the
+    // reason the bar blinks its colour rather than blinking out.
+    const grey = ink(bright, bar.x + 2, bar.y);
+    assert.equal(glyph(dim, bar.x, bar.y), '▀', `${build.name}: the bar is still a bar`);
+    assert.notEqual(ink(bright, bar.x, bar.y), grey, `${build.name}: and live in one phase`);
+    assert.notEqual(ink(dim, bar.x, bar.y), grey, `${build.name}: and in the other`);
+  }
+});
+
+test('browser: and the blink survives being painted, which the buffer cannot say', () => {
+  // The test above reads the colour the engine assigned. That is the half the
+  // defect was never in: the old code alternated a colour too, on the slot's
+  // character, and `render` dropped it on the floor because the character was a
+  // space. So the premise the fix rests on - a space is never painted, and the
+  // bar always is - has to be read off what the renderer was asked to draw.
+  //
+  // Verified in chromium against the live canvas before this was written: over
+  // 2.0s sampled every 50ms, the bar cell under a space slot gave 2 distinct
+  // paintings and the slot's own glyph cell gave 0 inked pixels, in both colour
+  // schemes. This is that reading without the browser.
+  //
+  // Browser-only because `render` is: the terminal build writes through
+  // terminal-kit and has no canvas to be asked anything.
+  const CELL_W = 10, CELL_H = 18;
+  const game = died(BUILDS[1], 5000);
+  game.state.stars = [];
+  game.state.entryName = '   ';
+  game.state.entrySlot = 0;
+
+  /** What `render` asked the canvas to draw, by cell, with the ink it set. */
+  const painted = (uiTime) => {
+    game.state.uiTime = uiTime;
+    const screen = new browser.ScreenBuffer(80, 24);
+    browser.renderNameEntry(screen, game.state);
+    const cells = new Map();
+    let fillStyle = '';
+    const ctx = {
+      textBaseline: '', font: '', textRendering: '', fontKerning: '',
+      set fillStyle(v) { fillStyle = v; },
+      get fillStyle() { return fillStyle; },
+      fillText: (ch, x, y) => cells.set(`${x / CELL_W},${y / CELL_H}`, { ch, fillStyle }),
+      fillRect: () => {},
+    };
+    // No advance, so the inset is zero and a call's x is its column outright.
+    screen.render(ctx, CELL_W, CELL_H, '16px monospace');
+    return { screen, cells };
+  };
+
+  const bright = painted(0.1);
+  const dim = painted(0.7);
+
+  let bar = null;
+  for (let y = 0; y < 24 && bar === null; y++) {
+    for (let x = 0; x < 80; x++) {
+      if (bright.screen.chars[y * bright.screen.width + x] === '▀') { bar = { x, y }; break; }
+    }
+  }
+  assert.ok(bar !== null, "the cursor's bar is on the grid");
+
+  // The slot itself. Holding a space, it is never handed to the canvas at all -
+  // which is why a blink carried on it would have been invisible.
+  const slot = `${bar.x},${bar.y - 1}`;
+  assert.equal(bright.screen.chars[(bar.y - 1) * 80 + bar.x], ' ', 'the active slot holds a space');
+  assert.equal(bright.cells.get(slot), undefined, 'a space slot is never painted in one phase');
+  assert.equal(dim.cells.get(slot), undefined, 'nor in the other');
+
+  // The bar is, in both phases, and in a different colour each time. That
+  // difference is the whole of the blink a player can actually see.
+  const key = `${bar.x},${bar.y}`;
+  const a = bright.cells.get(key), b = dim.cells.get(key);
+  assert.ok(a && b, 'the bar is painted in both phases');
+  assert.equal(a.ch, '▀', 'as a bar');
+  assert.equal(b.ch, '▀', 'in both');
+  assert.notEqual(a.fillStyle, b.fillStyle,
+    `the bar is painted a different colour each phase, saw ${a.fillStyle} twice`);
+
+  // And the rules beside it are painted the same both times, so the blink reads
+  // as one cell moving rather than as the row flickering.
+  for (const dx of [2, 4]) {
+    const side = `${bar.x + dx},${bar.y}`;
+    const p = bright.cells.get(side), q = dim.cells.get(side);
+    assert.ok(p && q, `the rule ${dx} columns over is painted`);
+    assert.equal(p.ch, '─', 'as the inactive rule');
+    assert.equal(p.fillStyle, q.fillStyle, 'in one colour across both phases');
+    assert.notEqual(a.fillStyle, p.fillStyle, 'which the bar is never painted in');
+    assert.notEqual(b.fillStyle, p.fillStyle, 'in either phase');
+  }
+});
+
 test('the entry screen fits every supported size, and the hint shrinks if it must', () => {
   for (const build of BUILDS) {
     for (let w = 60; w <= 120; w += 10) {
@@ -567,7 +711,12 @@ test('the hint is the long form at every supported width', () => {
     const long = build.menu.nameEntryHint(60);
     assert.match(long, /LETTER/, 'the long form names what the keys do');
     assert.match(long, /SLOT/, 'both of them');
-    assert.ok(long.length <= 56, `${build.name}: and fits inside a 60-column border`);
+    // Pinned exactly rather than bounded, so the figure in the doc comment on
+    // nameEntryHint cannot drift away from the string again.
+    assert.equal(
+      long.length, 39,
+      `${build.name}: 39 columns, clearing the 56 of interior a 60-column grid leaves`
+    );
     for (let w = 60; w <= 200; w += 10) {
       assert.equal(build.menu.nameEntryHint(w), long, `${build.name} at ${w}: still the long form`);
     }

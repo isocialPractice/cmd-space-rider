@@ -40,188 +40,32 @@ its origin survives archiving into `## Complete`.
   `index.html`, and nothing in the repository reproduces it.
   - From: Measurement
 
-### UI/UX Override - the three 0.9.0-alpha features in the browser
-
-#### Resolve Issues
-
-- [ ] Entry Cursor Blink 1
-  - **Issue**: The blink on the name entry screen is carried by the character in
-    the slot rather than by the bar under it, so a slot holding a space has no
-    blinking cursor at all. `renderNameEntry` draws the bar as a constant `▀` in
-    a constant `BRIGHT_CYAN` and alternates only the character's foreground
-    between `BRIGHT_WHITE` and `BRIGHT_CYAN`; `ScreenBuffer.render` skips a cell
-    whose character is a space, so that alternating colour paints nothing.
-    Measured off `ctx.getImageData` over the live canvas in chromium, sampling
-    the cursor's glyph cell and the bar cell every 50ms for 1.6s - more than one
-    full period of `sin(uiTime*6)` - a slot holding a letter produced 2 distinct
-    paintings and a slot holding a space produced 1. The active slot is still
-    identifiable, since its bright cyan `▀` differs from the grey `─` under the
-    other two, so this is a missing blink rather than a missing cursor; but the
-    screen stops moving entirely while the cursor sits on a space, which is the
-    case the comment above `renderNameEntry` says the bar exists for. The suite
-    cannot see it: `a space in a slot is still a slot the player can see` in
-    `test/leaderboard.test.mjs` asserts the `▀` and `─` are drawn and never
-    advances the clock. Everything else on the screen verified clean, including
-    the alphabet walk and its wrap, the clamp at both ends, `W`/`S`/`A`/`D`, and
-    the `ENTER` that files a name without relaunching the run.
-  - **Goal**: Resolve to [name-entry-cursor-blink.prompt.md](.claude/prompts/name-entry-cursor-blink.prompt.md)
-  - From: Bigger Features
-- [ ] Return Frame Sample 1
-  - **Issue**: Coming back to the tab mid-run costs a detail tier, which is the
-    specific thing the guard in `trackFrameRate` was written to prevent. Verified
-    in a headed chromium, since a headless one never withholds frames from a
-    backgrounded page. Three spells away from a run at the fullest tier - 4s, 9s
-    and 15s - each stepped the ladder `0->1` and then back `1->0`, putting the
-    grey `REDUCED` badge on the status strip for 1.00s every time. The guard
-    itself works: all 25 of the ~1016ms gaps a throttled background tab produced
-    were discarded by `elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME`. What it
-    misses is the last gap, the partial throttle interval straddling the return,
-    measured at 650ms, 750ms and 850ms across the three spells. Each is under the
-    1.000s cut-off and so is accepted, and one such sample carries a 30-frame
-    window on its own: 650ms gives a window mean of 53.9ms, 750ms gives 57.2ms
-    and 850ms gives 60.6ms, against a 41.7ms drop threshold. The return gap falls
-    anywhere in the throttle interval, so this is near-deterministic rather than
-    a race. `a loop that stopped is not a slow frame` in
-    `test/performance-mode.test.mjs` covers a 4s stall and a sustained 30 frames
-    at 0.5s, and nothing between: a single sample in the band from 41.7ms to
-    1.000s is the whole of this defect. That second case also means the cut-off
-    cannot simply be lowered, or a device genuinely at 2 frames a second stops
-    being detected.
-  - **Goal**: Resolve to [detail-ladder-return-frame.prompt.md](.claude/prompts/detail-ladder-return-frame.prompt.md)
-  - From: Polish
+### UI/UX Override - the light palette's bright-and-base pairs
 
 #### Found Issues
 
-- [ ] The cheatsheet says the detail ladder is re-measured every run, and it is
-  not
-  - **Issue**: `CHEATSHEET.md:160-162` and `docs/cheatsheet.html:67` both close
-    with "the ladder is re-measured a second into every run". It is not:
-    `startGame` (`src/game.ts:252`) clears `frameSpent` and `frameSeen` and
-    deliberately leaves `s.detail` where it was, under a comment saying so, and
-    `a dropped tier survives the run that
-    measured it` in `test/performance-mode.test.mjs` asserts exactly that - feed
-    one slow window, call `startGame`, and `detail` is still 1. `CHANGELOG.md:114`
-    has it right with "every session", so the same release publishes the lifetime
-    two ways and the cheatsheet is the wrong one. A player reading it would expect
-    a tier dropped on one run to be gone on the next.
-  - **Goal**: Change both cheatsheet copies to say the ladder survives a run and
-    is re-measured once per session, matching the CHANGELOG's wording. The
-    cheatsheet's figure table above it is correct and wants no change.
-  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
-- [ ] The quarter-second terminal write is named as a sample the guard discards,
-  and the guard does not reach it
-  - **Issue**: The comment on the stall guard in `trackFrameRate`
-    (`src/game.ts:223-230`) lists three examples of "a loop that stopped", the
-    third being "a terminal write blocks for a quarter of a second at a time on a
-    console that cannot keep up", and concludes "None of those says anything about
-    how fast the device draws". The guard is
-    `elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME`, which is 30 * (1/30) =
-    1.000s exactly, so a 0.250s frame is not discarded - it is averaged in, and
-    two of them in one window take the mean to 47.8ms against the 41.7ms drop
-    threshold and cost a tier. The same sentence is published in
-    `CHANGELOG.md:121-124`. `index.html`'s copy of the comment names only the
-    backgrounded tab and the sleeping laptop, so the browser build does not carry
-    the error. Nothing fails at runtime: a console blocking that long arguably
-    should drop a tier. What is wrong is the claim that the guard covers it.
-  - **Goal**: Decide which the guard is meant to do and make the two agree. Either
-    drop the terminal-write example from the comment and the CHANGELOG, leaving
-    the two cases the 1.000s cut-off does catch, or say plainly that a write that
-    blocks under a second is counted and is meant to be. Do not lower the cut-off:
-    `a loop that stopped is not a slow frame` pins that a device at 2 frames a
-    second still has to be detected.
-  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
-- [ ] The ghost's frame-rate figure counts a repeated interval, and names the
-  wrong longest frame
-  - **Issue**: `CHANGELOG.md:69-71` publishes the parity of the ghost as flown
-    "at five frame lengths from a sixtieth of a second to a twentieth". The test
-    it cites, `the same recording is raced identically at every frame rate` in
-    `test/replay-ghost.test.mjs`, flies a base of `FRAME` and then
-    `[1/60, 1/20, 1/12, 0.05]` - and `0.05` is `1/20`, the same double, so the
-    five entries are four distinct frame lengths: a sixtieth, a thirtieth, a
-    twentieth and a twelfth. So the count is one high and the stated upper end is
-    wrong in the direction that understates the test: the longest frame flown is
-    a twelfth of a second, which is the stronger figure the sentence could have
-    quoted. The duplicate also costs the test a case - one of its five slots
-    re-checks a rate already covered.
-  - **Goal**: Replace the duplicated `0.05` with a frame length the test does not
-    already fly, and correct the CHANGELOG sentence to the count and range the
-    list then holds. `samples go down a fixed tenth of a second apart` in the same
-    file carries four distinct values already and wants no change.
-  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
-- [ ] The name entry hint is published as 52 columns and is 39
-  - **Issue**: The doc comment on `nameEntryHint` opens "The long form is 52
-    columns, which clears the documented 60-column minimum with room to spare",
-    in `src/menu.ts:199-202` and in `index.html:2544-2546`. The string
-    is `[ ↑↓ LETTER • ←→ SLOT • ENTER CONFIRM ]`, which is 39 characters. The
-    conclusion holds and holds harder - 39 clears a 60-column grid's 56 columns of
-    interior by more than the figure claims - but the number is wrong in both
-    builds, and the one assertion near it,
-    `the hint is the long form at every supported width`, bounds the length at 56
-    rather than pinning it, so nothing would catch the figure drifting again.
-  - **Goal**: Correct the figure to 39 in both copies of the comment, and tighten
-    the assertion from `<= 56` to the exact length so the comment and the suite
-    hold each other up.
-  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
-- [ ] `readGhost` promises a stale cursor cannot give a wrong answer, and it can
-  - **Issue**: The doc comment on `readGhost` (`src/types.ts:764-768`, and the
-    same comment above `index.html:833`) says the cursor "is only ever a hint: it is
-    clamped into the recording and only ever moves forward, so a stale one costs a
-    few comparisons rather than a wrong answer", and then that "a run starting over
-    is handed back 0". Neither is true of the function. It only walks forward, so a
-    cursor sitting ahead of `t` is never corrected: over a 21-sample path one
-    second apart, `readGhost(path, 3, 999)` returns `{x: 20, cursor: 20}` where the
-    answer at `t=3` is `x: 3`. And it never hands back 0 for a forward cursor - it
-    is `startGame` that sets `ghostCursor = 0`, which is why nothing in the shipped
-    game reaches this: the cursor only advances within a run and is reset before
-    the next one reads it. `the cursor is a hint rather than an answer` in
-    `test/replay-ghost.test.mjs` exercises the exact call and asserts only that it
-    is non-null with `cursor === 20`, never the position, so the suite pins the
-    behaviour the comment denies.
-  - **Goal**: Pick one and make the other match. Either add the backward walk -
-    `while (i > 0 && samples[i].t > t) i--;` - so the comment becomes true and the
-    reading is correct from any cursor, which means updating that assertion in both
-    builds and keeping `test/parity.test.mjs`'s cursor sweep green; or drop the two
-    claims and say that the cursor must not run ahead of `t`, naming `resetRun` as
-    what guarantees it. The first is the smaller surprise for the next caller.
-  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
-
-### Version Scheme Override - re-express the pre-release before the next bump
-
-- [ ] Move the version into the nested pre-release form
-  - **The core is doing the suffix's job.** `package.json` reads `0.9.0-alpha`,
-    so the core climbs towards a release while the suffix says the project is
-    not released. One of the two numbers should be moving and it is the wrong
-    one.
-  - **Write `1.0.0-alpha.0.9.0`.** The core becomes the release being worked
-    towards and stops moving until the suffix is dropped; the old core moves
-    into the suffix, where it keeps the record of how far the project has
-    come. The inner triple then moves the way the core used to: a patch to
-    `1.0.0-alpha.0.9.1`, a minor to `1.0.0-alpha.0.10.0`, a major to
-    `1.0.0-alpha.1.0.0`. `### Version Schemes` in the automation instructions
-    is the standing rule.
-  - **This is not a release.** It re-expresses the version the project is
-    already at, so it earns no step of its own. Items completed alongside it
-    earn their step from the corrected form, in one entry under one version.
-  - **Change it in `package.json` and in this run's `CHANGELOG.md` heading,
-    and nowhere else.** This repository names its current release in several
-    places that are not the version - an override heading, the `- From:` lines
-    under it, a roadmap paragraph, a test log. Those are history and stay as
-    they are. Rewriting an override heading or a `From:` line is the sharp
-    one: the two have to match word for word, and editing one of the pair
-    breaks the item in the middle of the run working it.
-  - **Say in the entry why the version looks smaller than yesterday's.** The
-    new version sorts below the last one published, and a reader who meets
-    that with no explanation beside it goes looking for a mistake. Name the
-    old form and the new one, and say the switch was deliberate.
-  - **Leave the three existing tags alone.** They record releases that
-    happened. Do not delete one, do not move one, and do not re-tag to make
-    the ordering look right - the next releases pass them.
-  - **Two traps.** `1.0.0-alpha.0.09.0` is not valid semver, so nothing pads
-    an identifier and nothing tidies one. And `npm version patch` is the
-    wrong command here: it strips the pre-release and yields a bare `1.0.0`.
-    Only the last identifier has a command at all, `npm version prerelease`;
-    an inner minor or major is a hand edit.
-  - From: Version Scheme Override - re-express the pre-release before the next bump
+- [ ] Every chromatic bright colour is quieter than its base in light mode
+  - **Issue**: A base-and-bright pair marks the live thing on a screen by
+    drawing it in the bright index and its neighbours in the base one, which
+    works only while the bright one reads louder against the page. Measured off
+    `themePalette('light')` and `THEME_BG` in chromium as each ink's distance
+    from its own paper, all six chromatic pairs invert: `CYAN`/`BRIGHT_CYAN`
+    goes from 340/595 in dark to 547/484 in light, and
+    `MAGENTA`/`BRIGHT_MAGENTA` from 340/595 to 507/380. Only `WHITE` and `GRAY`
+    against `BRIGHT_WHITE` still hold, which are the two the `LIGHT_INK`
+    comment says it inverts on purpose. Two drawing sites pair them: the live
+    name slot's character in `renderNameEntry`, which is the faintest of the
+    three for about half of every 1.047s blink period in light mode, and the
+    selected row's prefix in `renderDebugMenu`. Neither loses its cursor - the
+    bar under the live name slot beats the grey rule in both phases and both
+    schemes, at 484 and 676 against 304 - so this is the character reading
+    backwards rather than the marked thing going missing. Not a regression from
+    the cursor blink fix: that change left the character's colour expression
+    exactly as it was and only moved the blink onto the bar. Nothing in the
+    suite compares two inks with each other, so the six pairs were published
+    with nothing to catch them.
+  - **Goal**: Resolve to [light-palette-bright-pair-order.prompt.md](.claude/prompts/light-palette-bright-pair-order.prompt.md)
+  - From: UI/UX Override - the light palette's bright-and-base pairs
 
 ### Create and Deploy GitHub Pages Override
 
@@ -304,61 +148,116 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 116 earlier items in `TODO-archive.md`, newest last.
+> 124 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The three glyphs that reach left of their origin are not the three shade
-  blocks
-  - **Issue**: Five places say "the three shade blocks each reach a whole pixel
-    left of the origin they are drawn at" - `index.html:286-291` and
-    `CHANGELOG.md:26-29`, both written this turn, and `index.html:325-327`,
-    `CHANGELOG.md:128` and `CHANGELOG.md:171`, which are older. Measured off
-    `actualBoundingBoxLeft` in chromium at every size `fitGrid` can settle on,
-    the light shade `░` reads 0.0000 at all eleven, while `▒`, `▓` and the full
-    block `█` read 1.0000 at all eleven. So the set of three that reach left is
-    `▒ ▓ █`, not the three shades, and the sentence both names a glyph that does
-    not qualify and omits the one outside its category that does. Corroborated
-    off the grid rather than only the metrics: rendering four inked cells with an
-    empty cell either side inks the column left of the run at font 13 and font 8
-    only, and there only for `▒`, `▓` and `█`, never for `░` at any size - which
-    is the same two-size limit `glyphInset`'s doc comment already records.
-    `index.html:325-327` is the worst of the five, because the sentence after it
-    cites "a run of the full block" as the case that bleeds, contradicting the
-    category its own paragraph opens with. The repository already holds the
-    correct reading: the completed item "A run of block glyphs still inks the
-    column left of its first cell at the two sizes with the smallest inset", in
-    `## Complete`, names `▒`, `▓` and `█`.
-  - **Goal**: Resolve to [shade-block-left-bearing.prompt.md](.claude/prompts/shade-block-left-bearing.prompt.md)
-  - From: UI/UX Override - the figures the overlap sentence states
-- [x] Nothing in the suite pins the four glyphs every wall figure is counted from
-  - **Issue**: The figures in the `glyphInset` comment are all built on the walls
-    being drawn from four characters - 44 glyph-and-size pairs is four by eleven,
-    28 is four by seven, and the left bearing and the overlap are both stated per
-    glyph. `drawTunnel` picks that character from a four-branch depth ramp at
-    `index.html:1571-1574`. Nothing asserts the ramp has four branches. The one
-    place the suite names the characters is `WALL_CHARS` at
-    `test/warp.test.mjs:36`, and it is a filter, not an assertion: it collects the
-    cells a wall column is allowed to hold so the warp checks can read their
-    colours, and it is deliberately wider than the ramp, carrying the two ring
-    characters as well. Add a fifth shade to the ramp and that set simply does
-    not collect it, every one of the 539 tests still passes, and four figures in a
-    published comment become wrong with nothing saying so. This is the same shape
-    as the count the turn just removed - a figure whose premise moved out from
-    under it - and the removal cost two releases to find.
-  - **Goal**: One assertion, no browser needed, in whichever of
-    `test/browser-engine.test.mjs` or `test/warp.test.mjs` already has a
-    full-height tunnel to hand. Drive a quiet run tall enough that `t` crosses
-    all four of the ramp's bands, collect the distinct characters `drawTunnel`
-    leaves on the wall columns with the ring characters and the floor dot
-    excluded, and assert the set is exactly `░ ▒ ▓ █` - so a fifth band, or a
-    substituted glyph, fails the suite and sends someone to the figures that
-    counted the old four. Worth running in both builds, since `drawTunnel` is
-    shared and the parity suite would otherwise be the only thing watching it.
-    Leave `WALL_CHARS` as it is; it is doing a different job and widening the
-    assertion to match it would defeat the point.
-  - From: UI/UX Override - the figures the overlap sentence states
-- [x] **Return Frame Sample**: **Performance mode** — Reduce particle count and star count on low-end devices. Detect frame drops and auto-adjust.
-  - From: Polish
-- [x] **Entry Cursor Blink**: **Leaderboard with name entry** — After game over, if the player beat their best score, show a 3-character name entry screen (classic arcade style). Store top 10 scores in `localStorage`. Display on the title screen.
-  - From: Bigger Features
-- [x] **Replay ghost** — Record the player's inputs during a run. On the next run, show a ghosted version of the previous ship flying the same path. Motivates beating your own performance.
-  - From: Bigger Features
+- [x] The quarter-second terminal write is named as a sample the guard discards,
+  and the guard does not reach it
+  - **Issue**: The comment on the stall guard in `trackFrameRate`
+    (`src/game.ts:223-230`) lists three examples of "a loop that stopped", the
+    third being "a terminal write blocks for a quarter of a second at a time on a
+    console that cannot keep up", and concludes "None of those says anything about
+    how fast the device draws". The guard is
+    `elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME`, which is 30 * (1/30) =
+    1.000s exactly, so a 0.250s frame is not discarded - it is averaged in, and
+    two of them in one window take the mean to 47.8ms against the 41.7ms drop
+    threshold and cost a tier. The same sentence is published in
+    `CHANGELOG.md:121-124`. `index.html`'s copy of the comment names only the
+    backgrounded tab and the sleeping laptop, so the browser build does not carry
+    the error. Nothing fails at runtime: a console blocking that long arguably
+    should drop a tier. What is wrong is the claim that the guard covers it.
+  - **Goal**: Decide which the guard is meant to do and make the two agree. Either
+    drop the terminal-write example from the comment and the CHANGELOG, leaving
+    the two cases the 1.000s cut-off does catch, or say plainly that a write that
+    blocks under a second is counted and is meant to be. Do not lower the cut-off:
+    `a loop that stopped is not a slow frame` pins that a device at 2 frames a
+    second still has to be detected.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] The ghost's frame-rate figure counts a repeated interval, and names the
+  wrong longest frame
+  - **Issue**: `CHANGELOG.md:69-71` publishes the parity of the ghost as flown
+    "at five frame lengths from a sixtieth of a second to a twentieth". The test
+    it cites, `the same recording is raced identically at every frame rate` in
+    `test/replay-ghost.test.mjs`, flies a base of `FRAME` and then
+    `[1/60, 1/20, 1/12, 0.05]` - and `0.05` is `1/20`, the same double, so the
+    five entries are four distinct frame lengths: a sixtieth, a thirtieth, a
+    twentieth and a twelfth. So the count is one high and the stated upper end is
+    wrong in the direction that understates the test: the longest frame flown is
+    a twelfth of a second, which is the stronger figure the sentence could have
+    quoted. The duplicate also costs the test a case - one of its five slots
+    re-checks a rate already covered.
+  - **Goal**: Replace the duplicated `0.05` with a frame length the test does not
+    already fly, and correct the CHANGELOG sentence to the count and range the
+    list then holds. `samples go down a fixed tenth of a second apart` in the same
+    file carries four distinct values already and wants no change.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] The name entry hint is published as 52 columns and is 39
+  - **Issue**: The doc comment on `nameEntryHint` opens "The long form is 52
+    columns, which clears the documented 60-column minimum with room to spare",
+    in `src/menu.ts:199-202` and in `index.html:2544-2546`. The string
+    is `[ ↑↓ LETTER • ←→ SLOT • ENTER CONFIRM ]`, which is 39 characters. The
+    conclusion holds and holds harder - 39 clears a 60-column grid's 56 columns of
+    interior by more than the figure claims - but the number is wrong in both
+    builds, and the one assertion near it,
+    `the hint is the long form at every supported width`, bounds the length at 56
+    rather than pinning it, so nothing would catch the figure drifting again.
+  - **Goal**: Correct the figure to 39 in both copies of the comment, and tighten
+    the assertion from `<= 56` to the exact length so the comment and the suite
+    hold each other up.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] `readGhost` promises a stale cursor cannot give a wrong answer, and it can
+  - **Issue**: The doc comment on `readGhost` (`src/types.ts:764-768`, and the
+    same comment above `index.html:833`) says the cursor "is only ever a hint: it is
+    clamped into the recording and only ever moves forward, so a stale one costs a
+    few comparisons rather than a wrong answer", and then that "a run starting over
+    is handed back 0". Neither is true of the function. It only walks forward, so a
+    cursor sitting ahead of `t` is never corrected: over a 21-sample path one
+    second apart, `readGhost(path, 3, 999)` returns `{x: 20, cursor: 20}` where the
+    answer at `t=3` is `x: 3`. And it never hands back 0 for a forward cursor - it
+    is `startGame` that sets `ghostCursor = 0`, which is why nothing in the shipped
+    game reaches this: the cursor only advances within a run and is reset before
+    the next one reads it. `the cursor is a hint rather than an answer` in
+    `test/replay-ghost.test.mjs` exercises the exact call and asserts only that it
+    is non-null with `cursor === 20`, never the position, so the suite pins the
+    behaviour the comment denies.
+  - **Goal**: Pick one and make the other match. Either add the backward walk -
+    `while (i > 0 && samples[i].t > t) i--;` - so the comment becomes true and the
+    reading is correct from any cursor, which means updating that assertion in both
+    builds and keeping `test/parity.test.mjs`'s cursor sweep green; or drop the two
+    claims and say that the cursor must not run ahead of `t`, naming `resetRun` as
+    what guarantees it. The first is the smaller surprise for the next caller.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] Move the version into the nested pre-release form
+  - **The core is doing the suffix's job.** `package.json` reads `0.9.0-alpha`,
+    so the core climbs towards a release while the suffix says the project is
+    not released. One of the two numbers should be moving and it is the wrong
+    one.
+  - **Write `1.0.0-alpha.0.9.0`.** The core becomes the release being worked
+    towards and stops moving until the suffix is dropped; the old core moves
+    into the suffix, where it keeps the record of how far the project has
+    come. The inner triple then moves the way the core used to: a patch to
+    `1.0.0-alpha.0.9.1`, a minor to `1.0.0-alpha.0.10.0`, a major to
+    `1.0.0-alpha.1.0.0`. `### Version Schemes` in the automation instructions
+    is the standing rule.
+  - **This is not a release.** It re-expresses the version the project is
+    already at, so it earns no step of its own. Items completed alongside it
+    earn their step from the corrected form, in one entry under one version.
+  - **Change it in `package.json` and in this run's `CHANGELOG.md` heading,
+    and nowhere else.** This repository names its current release in several
+    places that are not the version - an override heading, the `- From:` lines
+    under it, a roadmap paragraph, a test log. Those are history and stay as
+    they are. Rewriting an override heading or a `From:` line is the sharp
+    one: the two have to match word for word, and editing one of the pair
+    breaks the item in the middle of the run working it.
+  - **Say in the entry why the version looks smaller than yesterday's.** The
+    new version sorts below the last one published, and a reader who meets
+    that with no explanation beside it goes looking for a mistake. Name the
+    old form and the new one, and say the switch was deliberate.
+  - **Leave the three existing tags alone.** They record releases that
+    happened. Do not delete one, do not move one, and do not re-tag to make
+    the ordering look right - the next releases pass them.
+  - **Two traps.** `1.0.0-alpha.0.09.0` is not valid semver, so nothing pads
+    an identifier and nothing tidies one. And `npm version patch` is the
+    wrong command here: it strips the pre-release and yields a bare `1.0.0`.
+    Only the last identifier has a command at all, `npm version prerelease`;
+    an inner minor or major is a hand edit.
+  - From: Version Scheme Override - re-express the pre-release before the next bump
