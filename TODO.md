@@ -67,6 +67,62 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [light-palette-bright-pair-order.prompt.md](.claude/prompts/light-palette-bright-pair-order.prompt.md)
   - From: UI/UX Override - the light palette's bright-and-base pairs
 
+- [ ] The stall test's comment counts a window of twenty-nine as one that closes
+  - **Issue**: `test/performance-mode.test.mjs:313-316` explains why the healthy
+    run in `a loop that stopped is not a slow frame` is now fed
+    `DETAIL_WINDOW_FRAMES + 1` frames, and closes "so thirty frames after a
+    stall close a window of twenty-nine". A window of twenty-nine is precisely
+    the window that does not close: `DETAIL_WINDOW_FRAMES` is 30 and
+    `trackFrameRate` returns at `s.frameSeen < DETAIL_WINDOW_FRAMES`, so thirty
+    frames after a stall leave the window one sample short and decide nothing.
+    The sentence states the reverse of the fact it was written to record, and it
+    is the only place the extra frame in the call above it is explained, so a
+    reader reconciling the two is sent to the wrong conclusion about which
+    number closes a window. Nothing fails: the test feeds 31 and the assertion
+    on `frameSeen === 0` is the thing that actually proves the window closed.
+  - **Goal**: Say what the thirty frames do rather than what they close - that
+    the sample straddling the return is discarded, so thirty frames after a
+    stall fill only twenty-nine of the window and a thirty-first is what closes
+    it. The comment on the same point in the test below it, at
+    `test/performance-mode.test.mjs:331-339`, is correct and wants no change.
+  - From: UI/UX Override - the light palette's bright-and-base pairs
+
+#### Resolve Issues
+
+- [ ] Return Frame Sample 2
+  - **Issue**: The discard that was added for the frame ending a stall
+    (`src/game.ts:258-261`, `index.html:1059`) throws out the first sample after
+    any sample at or over the cut-off, and a run whose frame times alternate
+    one-for-one across that cut-off therefore contributes no samples at all -
+    every long frame arms the flag and every short one is spent clearing it, so
+    `frameSeen` never leaves 0 and the ladder never moves in either direction.
+    Fed straight into `trackFrameRate` on a live run, 300 pairs of
+    `(1.5, 0.2)` leave `frameSeen` at 0 and `detail` at 0 in both builds; so do
+    `(1.1, 0.6)`, `(1.01, 0.99)` and `(2.0, 0.05)`. Before the discard the short
+    half of such a run was counted, and thirty of the 0.2s samples closed a
+    window at a 200ms mean against the 41.7ms drop threshold and cost a tier.
+    The hole needs a strict alternation and closes as soon as two short frames
+    fall together - `(1.1, 0.6, 0.6)` still reaches the floor tier - which is
+    also why the comment's own claim is not false: it is scoped to "a device
+    genuinely at two frames a second", and that device is a run of short samples
+    rather than every other one. What is new is that a loop stalling on every
+    other frame now reads as a device with no measurable frame rate instead of
+    as a slow one. A consistently slow device is untouched: 60 samples at 0.9s
+    still reach the floor tier.
+  - **Goal**: Decide what the discard is allowed to throw out and bound it to
+    that. The straddling frame it was written for is a fragment of a withheld
+    interval and was measured at 650ms to 850ms, which is most of the cut-off,
+    while the samples the alternation loses are ordinary frames at 0.05s to
+    0.6s - so a band on the discarded sample rather than a flag on its
+    predecessor would separate the two, and picking that band is a measurement
+    this turn could not take. Anything chosen has to keep the three assertions
+    in `the partial frame on the way back from a stall is not a sample either`
+    green, and must not lower the whole-window cut-off, which
+    `a loop that stopped is not a slow frame` pins. A case for the alternating
+    run belongs beside them either way, since nothing in the suite feeds two
+    frame lengths in turn.
+  - From: Polish
+
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
