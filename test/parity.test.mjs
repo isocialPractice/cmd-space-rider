@@ -48,6 +48,7 @@ test('both builds hold the same detail ladder', () => {
   assert.equal(browser.DETAIL_WINDOW_FRAMES, terminalTypes.DETAIL_WINDOW_FRAMES);
   assert.equal(browser.DETAIL_DROP_FACTOR, terminalTypes.DETAIL_DROP_FACTOR);
   assert.equal(browser.DETAIL_RAISE_FACTOR, terminalTypes.DETAIL_RAISE_FACTOR);
+  assert.equal(browser.DETAIL_STALL_RETURN_FACTOR, terminalTypes.DETAIL_STALL_RETURN_FACTOR);
   assert.deepEqual(browser.DETAIL_TIERS, terminalTypes.DETAIL_TIERS);
 
   // And the two decisions read off it, walked rather than spot-checked: the

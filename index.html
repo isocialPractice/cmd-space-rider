@@ -210,6 +210,23 @@ const C={
 // Only the indices the game actually draws with are re-inked. The 216-colour
 // cube and the grey ramp behind them are left as xterm defines them, since
 // nothing reaches for one by number.
+//
+// Every base-and-bright pair inverts, which is the one rule here that will read
+// as a mistake to someone scanning the hex values. A pair marks the live thing
+// on a screen - the slot being edited in renderNameEntry, the selected row's
+// prefix in renderDebugMenu - by drawing it in the bright index and its
+// neighbours in the base one, and that only works while the bright one is the
+// louder of the two against the paper it sits on. On black, louder means
+// lighter; on paper it means darker. So in light mode every bright index is a
+// deeper shade of its base rather than a paler tint of it, and `bright` names
+// which half of the pair carries the mark rather than which is nearer white.
+//
+// The six chromatic pairs were re-inked for that rather than the drawing sites
+// being taught to swap them under light mode: the renderer asks for a colour
+// index and themePalette decides what it resolves to, which is the whole point
+// of having a palette, and a scheme test inside renderNameEntry would put it
+// back. `light mode keeps a bright ink louder than its base` pins the ordering
+// for every pair the game draws with.
 const LIGHT_INK={
   // BLACK is the page under everything, so in light mode it is the paper.
   0:'#f2f2f4',
@@ -217,15 +234,15 @@ const LIGHT_INK={
   7:'#4a4a52',8:'#8a8a94',15:'#101014',
   // The tunnel: blue at the far end, cyan at the mouth, both taken down far
   // enough to read as walls against paper rather than as glare on it.
-  4:'#1b2478',12:'#2f3fc8',17:'#0d1240',6:'#00565f',14:'#00757f',23:'#0a444c',
+  4:'#1b2478',12:'#04116e',17:'#0d1240',6:'#00565f',14:'#00343a',23:'#0a444c',
   // Orbs and the shield bar.
-  2:'#0a6a22',10:'#0a8a2c',22:'#064a16',
+  2:'#0a6a22',10:'#023008',22:'#064a16',
   // Obstacles, mines and the damage flash.
-  1:'#8f1212',9:'#c11a1a',
+  1:'#8f1212',9:'#5a0909',
   // The distance readout, the roll wings and the boost lines.
-  5:'#6b0f63',13:'#a81a9a',
+  5:'#6b0f63',13:'#3d0839',
   // The pause label and the mute indicator.
-  3:'#6e5600',11:'#8f7300',
+  3:'#6e5600',11:'#403200',
   // The named neons, each to the same value as the base colour it echoes.
   51:'#00707a',46:'#0a7a24',201:'#a3129a',196:'#c01414',208:'#a35a00',
 };
@@ -691,6 +708,15 @@ const TARGET_FRAME_TIME=1/30;
 // oscillating.
 const DETAIL_WINDOW_FRAMES=30;
 
+// How much of the window cut-off a sample has to reach before the frame ending a
+// stall is read as a fragment of that stall rather than as an ordinary frame:
+// 0.65, which is 650ms against the 1.000s cut-off, and the shortest of the three
+// fragments measured. The band is on the discarded sample rather than on the one
+// before it, because a flag armed by the long frame and cleared by whatever
+// follows throws out the next sample whatever its length - and a loop
+// alternating across the cut-off then contributes nothing at all.
+const DETAIL_STALL_RETURN_FACTOR=0.65;
+
 // How far past the target a window's mean frame time has to run before the
 // ladder steps down: 41.7ms, which is 24 frames a second. A quarter rather than
 // a tenth because the shells do not deliver the target exactly even when nothing
@@ -1040,23 +1066,39 @@ class Game{
     // next window has to hand back - the starfield thinning out as a reward for
     // coming back to the tab.
     if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME){s.frameStalled=true;return}
-    // And neither is the frame that ends the stall. A backgrounded tab is
-    // reactivated partway through one of the intervals its frames were being
-    // withheld across, so the frame straddling the return is a part of an
-    // interval rather than a whole one - measured at 650ms, 750ms and 850ms over
-    // three spells away from a run. Each is under the cut-off above, so each
-    // would be taken as an ordinary sample, and a single one of them carries a
-    // whole window on its own: 650ms puts a window of 30 at a mean of 53.9ms
-    // against a 41.7ms drop threshold. That is near-deterministic rather than a
-    // race, since the return lands anywhere in the interval, and it is exactly
-    // the thing the guard above was written to prevent - the player looks at
-    // another tab and comes back to a thinner starfield.
+    // And neither is the frame that ends the stall, when it is long enough to be
+    // a piece of one. A backgrounded tab is reactivated partway through one of
+    // the intervals its frames were being withheld across, so the frame
+    // straddling the return is a part of an interval rather than a whole one -
+    // measured at 650ms, 750ms and 850ms over three spells away from a run. Each
+    // is under the cut-off above, so each would be taken as an ordinary sample,
+    // and a single one of them carries a whole window on its own: 650ms puts a
+    // window of 30 at a mean of 53.9ms against a 41.7ms drop threshold. That is
+    // near-deterministic rather than a race, since the return lands anywhere in
+    // the interval, and it is exactly the thing the guard above was written to
+    // prevent - the player looks at another tab and comes back to a thinner
+    // starfield.
+    //
+    // The length is half the test, and the flag on its own is not enough. A flag
+    // armed by the long frame and cleared by whatever follows discards the next
+    // sample whatever it measured, so a loop alternating across the cut-off
+    // spends every short frame clearing the flag and contributes nothing at all:
+    // 300 pairs of 1.5s and 0.2s leave frameSeen at 0 and the ladder where it
+    // started, and a device stalling every other frame reads as one with no
+    // measurable frame rate rather than as a slow one. So the sample has to fall
+    // in the band a fragment of a withheld interval falls in, and a shorter one
+    // is an ordinary frame that happens to follow a stall, which is counted. The
+    // flag is cleared either way: it marks one frame, not a state the run sits
+    // in.
     //
     // Discarding one sample rather than lowering the cut-off is what keeps the
     // other half of this true: a device genuinely at two frames a second is a
-    // run of samples and not one, so it loses the first and is still detected by
-    // the rest.
-    if(s.frameStalled){s.frameStalled=false;return}
+    // run of samples and not one, and at 0.5s a frame it is now under the band
+    // as well, so it loses none of them and is detected by all.
+    if(s.frameStalled){
+      s.frameStalled=false;
+      if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME*DETAIL_STALL_RETURN_FACTOR)return;
+    }
 
     s.frameSpent+=elapsed;
     s.frameSeen+=1;

@@ -2154,3 +2154,60 @@ still be found by name.
     is re-measured once per session, matching the CHANGELOG's wording. The
     cheatsheet's figure table above it is correct and wants no change.
   - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+
+## Archived 10-10-26
+
+- [x] The quarter-second terminal write is named as a sample the guard discards,
+  and the guard does not reach it
+  - **Issue**: The comment on the stall guard in `trackFrameRate`
+    (`src/game.ts:223-230`) lists three examples of "a loop that stopped", the
+    third being "a terminal write blocks for a quarter of a second at a time on a
+    console that cannot keep up", and concludes "None of those says anything about
+    how fast the device draws". The guard is
+    `elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME`, which is 30 * (1/30) =
+    1.000s exactly, so a 0.250s frame is not discarded - it is averaged in, and
+    two of them in one window take the mean to 47.8ms against the 41.7ms drop
+    threshold and cost a tier. The same sentence is published in
+    `CHANGELOG.md:121-124`. `index.html`'s copy of the comment names only the
+    backgrounded tab and the sleeping laptop, so the browser build does not carry
+    the error. Nothing fails at runtime: a console blocking that long arguably
+    should drop a tier. What is wrong is the claim that the guard covers it.
+  - **Goal**: Decide which the guard is meant to do and make the two agree. Either
+    drop the terminal-write example from the comment and the CHANGELOG, leaving
+    the two cases the 1.000s cut-off does catch, or say plainly that a write that
+    blocks under a second is counted and is meant to be. Do not lower the cut-off:
+    `a loop that stopped is not a slow frame` pins that a device at 2 frames a
+    second still has to be detected.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] The ghost's frame-rate figure counts a repeated interval, and names the
+  wrong longest frame
+  - **Issue**: `CHANGELOG.md:69-71` publishes the parity of the ghost as flown
+    "at five frame lengths from a sixtieth of a second to a twentieth". The test
+    it cites, `the same recording is raced identically at every frame rate` in
+    `test/replay-ghost.test.mjs`, flies a base of `FRAME` and then
+    `[1/60, 1/20, 1/12, 0.05]` - and `0.05` is `1/20`, the same double, so the
+    five entries are four distinct frame lengths: a sixtieth, a thirtieth, a
+    twentieth and a twelfth. So the count is one high and the stated upper end is
+    wrong in the direction that understates the test: the longest frame flown is
+    a twelfth of a second, which is the stronger figure the sentence could have
+    quoted. The duplicate also costs the test a case - one of its five slots
+    re-checks a rate already covered.
+  - **Goal**: Replace the duplicated `0.05` with a frame length the test does not
+    already fly, and correct the CHANGELOG sentence to the count and range the
+    list then holds. `samples go down a fixed tenth of a second apart` in the same
+    file carries four distinct values already and wants no change.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser
+- [x] The name entry hint is published as 52 columns and is 39
+  - **Issue**: The doc comment on `nameEntryHint` opens "The long form is 52
+    columns, which clears the documented 60-column minimum with room to spare",
+    in `src/menu.ts:199-202` and in `index.html:2544-2546`. The string
+    is `[ ↑↓ LETTER • ←→ SLOT • ENTER CONFIRM ]`, which is 39 characters. The
+    conclusion holds and holds harder - 39 clears a 60-column grid's 56 columns of
+    interior by more than the figure claims - but the number is wrong in both
+    builds, and the one assertion near it,
+    `the hint is the long form at every supported width`, bounds the length at 56
+    rather than pinning it, so nothing would catch the figure drifting again.
+  - **Goal**: Correct the figure to 39 in both copies of the comment, and tighten
+    the assertion from `<= 56` to the exact length so the comment and the suite
+    hold each other up.
+  - From: UI/UX Override - the three 0.9.0-alpha features in the browser

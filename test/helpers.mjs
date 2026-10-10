@@ -40,6 +40,7 @@ const EXPORTS = [
   'SLOW_MOTION_TIME', 'SLOW_MOTION_SCALE',
   'DETAIL_TIERS', 'detailTier', 'detailFor', 'burstSize',
   'TARGET_FRAME_TIME', 'DETAIL_WINDOW_FRAMES', 'DETAIL_DROP_FACTOR', 'DETAIL_RAISE_FACTOR',
+  'DETAIL_STALL_RETURN_FACTOR',
   'LEADERBOARD_SIZE', 'NAME_LENGTH', 'NAME_ALPHABET', 'DEFAULT_NAME',
   'normalizeName', 'scoreQualifies', 'recordScore', 'sanitizeLeaderboard',
   'LEADERBOARD_KEY', 'loadLeaderboard', 'saveLeaderboard',

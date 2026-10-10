@@ -11,7 +11,7 @@ import {
   BULLET_SPEED, BULLET_LIFE_SLACK,
   LeaderEntry, GhostSample,
   detailTier, detailFor, burstSize,
-  DETAIL_WINDOW_FRAMES, TARGET_FRAME_TIME,
+  DETAIL_WINDOW_FRAMES, TARGET_FRAME_TIME, DETAIL_STALL_RETURN_FACTOR,
   NAME_LENGTH, NAME_ALPHABET, DEFAULT_NAME,
   normalizeName, scoreQualifies, recordScore,
   GHOST_SAMPLE_TIME, GHOST_MAX_SAMPLES, readGhost,
@@ -239,25 +239,40 @@ export class Game {
       s.frameStalled = true;
       return;
     }
-    // And neither is the frame that ends the stall. A backgrounded tab is
-    // reactivated partway through one of the intervals its frames were being
-    // withheld across, so the frame straddling the return is a part of an
-    // interval rather than a whole one - measured at 650ms, 750ms and 850ms
-    // over three spells away from a run. Each is under the cut-off above, so
-    // each would be taken as an ordinary sample, and a single one of them
-    // carries a whole window on its own: 650ms puts a window of 30 at a mean of
-    // 53.9ms against a 41.7ms drop threshold. That is near-deterministic rather
-    // than a race, since the return lands anywhere in the interval, and it is
-    // exactly the thing the guard above was written to prevent - the player
-    // looks at another tab and comes back to a thinner starfield.
+    // And neither is the frame that ends the stall, when it is long enough to be
+    // a piece of one. A backgrounded tab is reactivated partway through one of
+    // the intervals its frames were being withheld across, so the frame
+    // straddling the return is a part of an interval rather than a whole one -
+    // measured at 650ms, 750ms and 850ms over three spells away from a run.
+    // Each is under the cut-off above, so each would be taken as an ordinary
+    // sample, and a single one of them carries a whole window on its own: 650ms
+    // puts a window of 30 at a mean of 53.9ms against a 41.7ms drop threshold.
+    // That is near-deterministic rather than a race, since the return lands
+    // anywhere in the interval, and it is exactly the thing the guard above was
+    // written to prevent - the player looks at another tab and comes back to a
+    // thinner starfield.
+    //
+    // The length is half the test, and the flag on its own is not enough. A
+    // flag armed by the long frame and cleared by whatever follows discards the
+    // next sample whatever it measured, so a loop alternating across the cut-off
+    // spends every short frame clearing the flag and contributes nothing at all:
+    // 300 pairs of 1.5s and 0.2s leave frameSeen at 0 and the ladder where it
+    // started, and a device stalling every other frame reads as one with no
+    // measurable frame rate rather than as a slow one. So the sample has to fall
+    // in the band a fragment of a withheld interval falls in -
+    // DETAIL_STALL_RETURN_FACTOR of the cut-off and up - and a shorter one is an
+    // ordinary frame that happens to follow a stall, which is counted. The flag
+    // is cleared either way: it marks one frame, not a state the run sits in.
     //
     // Discarding one sample rather than lowering the cut-off is what keeps the
     // other half of this true: a device genuinely at two frames a second is a
-    // run of samples and not one, so it loses the first and is still detected
-    // by the rest.
+    // run of samples and not one, and at 0.5s a frame it is now under the band
+    // as well, so it loses none of them and is detected by all.
     if (s.frameStalled) {
       s.frameStalled = false;
-      return;
+      if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME * DETAIL_STALL_RETURN_FACTOR) {
+        return;
+      }
     }
 
     s.frameSpent += elapsed;

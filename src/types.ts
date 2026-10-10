@@ -553,6 +553,37 @@ export const TARGET_FRAME_TIME = 1 / 30;
 export const DETAIL_WINDOW_FRAMES = 30;
 
 /**
+ * How much of the window cut-off a sample has to reach before the frame ending
+ * a stall is read as a fragment of that stall rather than as an ordinary frame:
+ * 0.65, which is 650ms against the 1.000s cut-off.
+ *
+ * The frame that ends a stall is discarded because it is a piece of the
+ * withheld interval rather than a frame the device drew - a backgrounded tab is
+ * brought forward partway through one of the intervals its frames were being
+ * held across. Those fragments were measured at 650ms, 750ms and 850ms over
+ * three spells away from a run, so they are most of the cut-off, and this is
+ * the shortest of them.
+ *
+ * The band is on the discarded sample rather than on the one before it, and
+ * that is the whole of why it exists. A flag set by the long frame and cleared
+ * by whatever follows throws out the next sample whatever its length, so a loop
+ * whose frame times alternate across the cut-off spends every short frame
+ * clearing the flag and contributes nothing: fed 300 pairs of 1.5s and 0.2s,
+ * `frameSeen` never leaves 0 and the ladder never moves in either direction.
+ * A device stalling on every other frame then reads as one with no measurable
+ * frame rate instead of as a slow one. With the band, 0.2s is under the floor,
+ * is counted, and takes the tier it should.
+ *
+ * It bounds the hole rather than closing it, because the two populations
+ * overlap: a 0.99s frame is an ordinary sample and is longer than any fragment
+ * measured, so a loop alternating 1.01s and 0.99s still contributes nothing.
+ * That device trips the whole-window cut-off on every other frame, which is by
+ * design read as a loop that stopped, and the cut-off is not this constant's to
+ * move.
+ */
+export const DETAIL_STALL_RETURN_FACTOR = 0.65;
+
+/**
  * How far past the target a window's mean frame time has to run before the
  * ladder steps down: 41.7ms, which is 24 frames a second.
  *

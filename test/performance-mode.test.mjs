@@ -64,6 +64,13 @@ function feed(game, seconds, count) {
 /** A frame time from a factor of the target, for readability below. */
 const atFactor = (api, factor) => api.TARGET_FRAME_TIME * factor;
 
+/** Feed `rounds` repetitions of a pattern of frame times, in turn. */
+function feedPattern(game, pattern, rounds) {
+  for (let i = 0; i < rounds; i++) {
+    for (const seconds of pattern) game.trackFrameRate(seconds);
+  }
+}
+
 // ----- The ladder itself -----
 
 test('the ladder opens on the game as it was, and only thins from there', () => {
@@ -310,13 +317,16 @@ test('a loop that stopped is not a slow frame', () => {
     assert.equal(game.state.frameSeen, 0, `${build.name}: a window-long frame is not a sample`);
     assert.equal(game.state.detail, 0, `${build.name}: and cost nothing`);
 
-    // One stall in an otherwise healthy window leaves the tier where it was. The
-    // window is fed one frame over its length because the sample straddling the
-    // return from a stall is discarded too - see the test below - so thirty
-    // frames after a stall close a window of twenty-nine.
+    // One stall in an otherwise healthy window leaves the tier where it was, and
+    // the window is exactly its own length. The sample straddling a return is
+    // discarded too - see the test below - but only when it is long enough to be
+    // a piece of the stall, and a frame at the target is three hundredths of a
+    // second. So none of these thirty is thrown away, all thirty are counted,
+    // and `frameSeen` back at 0 is what says the window closed rather than
+    // stopping one sample short of a decision.
     const mixed = flying(build);
     mixed.trackFrameRate(window * 4);
-    feed(mixed, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES + 1);
+    feed(mixed, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES);
     assert.equal(mixed.state.frameSeen, 0, `${build.name}: the window closed`);
     assert.equal(mixed.state.detail, 0, `${build.name}: and the healthy frames decided it`);
 
@@ -358,12 +368,82 @@ test('the partial frame on the way back from a stall is not a sample either', ()
 
     // And the cut-off itself is untouched, which is the half that cannot give:
     // a device genuinely at two frames a second is a run of samples rather than
-    // one, so it loses the first to the discard and is still detected by the
-    // rest.
+    // one. At 0.5s a frame it is under the discard band as well, so it loses
+    // none of them - thirty are fed, thirty are counted, and `frameSeen` back at
+    // 0 says so - and the tier goes on the window they close.
     const slow = flying(build);
     slow.trackFrameRate(window * 4);
-    feed(slow, 0.5, api.DETAIL_WINDOW_FRAMES + 1);
+    feed(slow, 0.5, api.DETAIL_WINDOW_FRAMES);
+    assert.equal(slow.state.frameSeen, 0, `${build.name}: none of the thirty was discarded`);
     assert.equal(slow.state.detail, 1, `${build.name}: 2 frames a second still drops a tier`);
+
+    // The band is what separates the two, so its edge is worth pinning. The
+    // floor is the shortest fragment measured; a sample reaching it is read as a
+    // piece of the stall, and a shorter one as a frame the device drew.
+    const floor = window * api.DETAIL_STALL_RETURN_FACTOR;
+    for (const [elapsed, counted, what] of [
+      [floor, 0, 'at the floor is a fragment'],
+      [floor * 0.999, 1, 'just under it is an ordinary frame'],
+    ]) {
+      const edge = flying(build);
+      edge.trackFrameRate(window);
+      edge.trackFrameRate(elapsed);
+      assert.equal(edge.state.frameSeen, counted, `${build.name}: a sample ${what}`);
+    }
+  }
+});
+
+test('a loop stalling on every other frame is a slow device, not an unmeasurable one', () => {
+  // Nothing else in this file feeds two frame lengths in turn, and the discard
+  // above is the reason to. It was a flag armed by a frame at or over the
+  // cut-off and cleared by whatever came next, whatever that one measured - so a
+  // run alternating across the cut-off armed the flag on every long frame and
+  // spent every short one clearing it, and contributed no samples at all. The
+  // ladder never moved in either direction, and a loop stalling every other
+  // frame read as a device with no measurable frame rate rather than as a slow
+  // one.
+  //
+  // Bounding the discard to the band a fragment of a withheld interval falls in
+  // is what counts the short halves below: each is well under the floor, so each
+  // is an ordinary frame that happens to follow a stall.
+  for (const build of BUILDS) {
+    const { api } = build;
+    const floorTier = api.DETAIL_TIERS.length - 1;
+
+    for (const pattern of [[1.5, 0.2], [1.1, 0.6], [2.0, 0.05]]) {
+      const game = flying(build);
+      feedPattern(game, pattern, 300);
+      assert.equal(game.state.detail, floorTier,
+        `${build.name}: (${pattern.join(', ')}) in turn is a device at the floor tier`);
+    }
+
+    // Two short frames falling together always closed the hole, because the
+    // second had no flag left to clear. That is why the alternation had to be
+    // strict to lose everything, and it is the case that went on working.
+    const pair = flying(build);
+    feedPattern(pair, [1.1, 0.6, 0.6], 300);
+    assert.equal(pair.state.detail, floorTier,
+      `${build.name}: two short frames together reach the floor`);
+
+    // And the limit, stated rather than left to be found: the band bounds the
+    // hole without closing it. A 0.99s frame is longer than any fragment
+    // measured, so a run alternating 1.01s and 0.99s still contributes nothing.
+    // That device trips the whole-window cut-off on every other frame, which is
+    // by design read as a loop that stopped, and the cut-off is pinned by
+    // `a loop that stopped is not a slow frame`.
+    const overlap = flying(build);
+    feedPattern(overlap, [1.01, 0.99], 300);
+    assert.equal(overlap.state.frameSeen, 0,
+      `${build.name}: a frame inside the band is still discarded`);
+    assert.equal(overlap.state.detail, 0,
+      `${build.name}: and the ladder cannot read that device`);
+
+    // A consistently slow device never arms the flag at all, and is the reading
+    // neither version of the discard touches.
+    const steady = flying(build);
+    feed(steady, 0.9, api.DETAIL_WINDOW_FRAMES * 2);
+    assert.equal(steady.state.detail, floorTier,
+      `${build.name}: 0.9s a frame throughout is the floor tier`);
   }
 });
 

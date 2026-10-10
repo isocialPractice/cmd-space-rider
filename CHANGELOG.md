@@ -1,5 +1,131 @@
 # Changelog
 
+## [1.0.0-alpha.0.9.2] - 2026-10-10
+
+### Fixed
+
+- Every chromatic base-and-bright pair read backwards in light mode, so the
+  thing a screen was marking as live was drawn fainter than the things beside
+  it. A pair marks the live thing by putting it in the bright index and its
+  neighbours in the base one, which works only while the bright one is the
+  louder of the two against the paper it sits on. Measured off the page's own
+  `themePalette('light')` and `THEME_BG` as each ink's channel distance from its
+  own paper, all six chromatic pairs inverted: `CYAN`/`BRIGHT_CYAN` went from
+  340/595 in dark to 547/484 in light, and `MAGENTA`/`BRIGHT_MAGENTA` from
+  340/595 to 507/380. Only `WHITE` and `GRAY` against `BRIGHT_WHITE` still held,
+  which are the two the `LIGHT_INK` comment says it inverts on purpose.
+
+  The chromatic indices had been taken down to read against paper, which the
+  suite already pinned, but each bright one was taken down less than its base -
+  so the light palette kept the dark palette's lightness ordering and lost the
+  contrast ordering the pairing is for. Two drawing sites pair them: the live
+  name slot's character in `renderNameEntry`, which was the faintest of the
+  three for about half of every 1.047s blink period, and the selected row's
+  prefix in `renderDebugMenu`, at 380 against 507. Neither lost its cursor - the
+  bar under the live name slot beats the grey rule in both phases and both
+  schemes, at 484 and 676 against 304 - so this was the character reading
+  backwards rather than the marked thing going missing. It was not a regression
+  from the cursor blink fix in `1.0.0-alpha.0.9.1`: that change left the
+  character's colour expression exactly as it was and only moved the blink onto
+  the bar.
+
+  The six bright indices are now deeper shades of their base rather than paler
+  tints of it, which is the rule `LIGHT_INK` already applied to `7`, `8` and
+  `15`: `9` to `#5a0909`, `10` to `#023008`, `11` to `#403200`, `12` to
+  `#04116e`, `13` to `#3d0839` and `14` to `#00343a`. Every pair now orders the
+  right way round - the six chromatic ones by margins of 52 to 95, and `WHITE`
+  and `GRAY` against `BRIGHT_WHITE`, which never inverted, at 178 and 372 - and
+  no drawing site changed: the renderer asks for a colour index and
+  `themePalette` decides what it resolves to, so teaching `renderNameEntry` to
+  swap two indices under light mode would have put a scheme test inside the
+  thing the palette exists to keep it out of.
+  Nothing in dark mode moved: `themePalette('dark')` is still the base palette
+  itself.
+
+  Nothing in the suite compared two inks with each other, which is why six
+  inverted pairs shipped unnoticed - `test/browser-shell.test.mjs` pinned that
+  the light palette is a copy, that it changes exactly the listed indices, that
+  every `C` index is re-inked, and that each is dark enough to draw rather than
+  glow, but never one ink against another. `light mode keeps a bright ink louder
+  than its base` now walks all eight pairs the game draws with and asserts the
+  ordering as a property rather than against a table of hex values, so re-inking
+  a colour later cannot quietly put it back. It fails on the old palette, naming
+  `RED`/`BRIGHT_RED` at 483 against 549.
+
+- A loop stalling on every other frame read as a device with no measurable frame
+  rate instead of as a slow one. The discard added for the frame ending a stall
+  threw out the first sample after any sample at or over the cut-off, whatever
+  that first sample measured - so a run whose frame times alternate one-for-one
+  across the cut-off armed the flag on every long frame and spent every short
+  one clearing it, and contributed no samples at all. Fed straight into
+  `trackFrameRate`, 300 pairs of 1.5s and 0.2s left `frameSeen` at 0 and the
+  ladder at the fullest tier in both builds; so did 1.1s and 0.6s, 1.01s and
+  0.99s, and 2.0s and 0.05s. Before the discard, the short half of such a run
+  was counted, and thirty 0.2s samples closed a window at a 200ms mean against
+  the 41.7ms drop threshold and cost a tier.
+
+  The discard is now bounded by a band on the sample it throws out rather than
+  by a flag on that sample's predecessor. The straddling frame it was written
+  for is a fragment of a withheld interval and was measured at 650ms, 750ms and
+  850ms, which is most of the 1.000s cut-off, while the samples the alternation
+  lost were ordinary frames at 0.05s to 0.6s - so `DETAIL_STALL_RETURN_FACTOR`,
+  0.65, is the share of the cut-off a post-stall sample has to reach before it
+  is read as a piece of the stall. It is the shortest fragment measured. A
+  shorter sample is an ordinary frame that happens to follow a stall and is
+  counted; the flag is cleared either way, because it marks one frame rather
+  than a state the run sits in.
+
+  Three of the four alternating runs now reach the floor tier in both builds.
+  The fourth is the stated limit rather than an oversight: 0.99s is longer than
+  any fragment measured, so a run alternating 1.01s and 0.99s still contributes
+  nothing, and that device trips the whole-window cut-off on every other frame -
+  which is by design read as a loop that stopped. The cut-off itself did not
+  move, which is the half that cannot give: a device genuinely at two frames a
+  second is a run of samples rather than one, and at 0.5s a frame it now sits
+  under the band as well, so it loses none of them. A consistently slow device
+  never armed the flag at all and is untouched - 60 samples at 0.9s still reach
+  the floor tier.
+
+  Nothing in the suite fed two frame lengths in turn, which is why the hole was
+  invisible. `a loop stalling on every other frame is a slow device, not an
+  unmeasurable one` now walks the three runs that recover, the two-short-frames
+  case that always worked, the overlapping run that still cannot be read, and
+  the steady slow device, in both builds. The band's edge is pinned beside the
+  existing stall assertions: a sample at the floor is discarded and one just
+  under it is counted.
+
+- The comment explaining the extra frame in `a loop that stopped is not a slow
+  frame` closed "so thirty frames after a stall close a window of twenty-nine",
+  and a window of twenty-nine is precisely the window that does not close -
+  `DETAIL_WINDOW_FRAMES` is 30 and `trackFrameRate` returns while
+  `s.frameSeen < DETAIL_WINDOW_FRAMES`, so a window one sample short decides
+  nothing. The sentence stated the reverse of the fact it was written to record,
+  and it was the only place that extra frame was explained, so a reader
+  reconciling the two was sent to the wrong conclusion about which number closes
+  a window. Nothing failed: the assertion on `frameSeen === 0` is what actually
+  proved the window had closed.
+
+  The bounded discard above then removed the extra frame altogether, since a
+  frame at the target is three hundredths of a second and no longer reads as a
+  fragment of a stall, so the comment now says what its thirty frames do: all
+  thirty are counted, and `frameSeen` back at 0 is what says the window closed
+  rather than stopping one sample short of a decision. The matching comment in
+  the test below it was correct and is unchanged.
+
+### Changed
+
+- The documentation site no longer quotes `LIGHT_INK[14]` for its link and rule
+  colours. That index is now `#00343a` at 12.10:1 on paper, which is a
+  strong-text weight: a page of prose whose every rule and cell border is drawn
+  at 12.10:1 reads as ruled in near-black. The teal those two were measured
+  against, `#00757f` at 4.88:1, is pinned on the site instead, and
+  `DESIGN_LANGUAGE.md` records it as a second measured substitution beside the
+  grey that cannot carry muted text. Nothing the site renders changed.
+
+  The brand ship is the exception: `--ship-hull` and `--ship-wing` followed the
+  game to `#00343a` and `#04116e`, because that drawing is a picture of the
+  game's ship and tracking the indices is the whole of why it is there.
+
 ## [1.0.0-alpha.0.9.1] - 2026-10-09
 
 ### Changed

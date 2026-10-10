@@ -45,9 +45,14 @@
   --mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
 }
 
-/* Light is the game's own re-inking, from LIGHT_INK. Two values are not quoted
+/* Light is the game's own re-inking, from LIGHT_INK. Four values are not quoted
    from it: --muted, because LIGHT_INK[8] reaches only 3.06:1 and cannot carry
-   text, and --surface, which the game has no equivalent for. */
+   text; --surface, which the game has no equivalent for; and --link and --rule,
+   which held LIGHT_INK[14] until the game re-inked its bright indices below
+   their base ones so a pair would still mark the live thing in light mode.
+   LIGHT_INK[14] is now #00343a at 12.10:1, which is a heading weight rather
+   than a rule weight, so the teal the prose was measured against is pinned here
+   instead. The ship still tracks the game, which is the point of drawing it. */
 @media (prefers-color-scheme: light) {
   :root {
     --page:        #f2f2f4;  /* THEME_BG.light, LIGHT_INK[0] */
@@ -55,14 +60,14 @@
     --text:        #4a4a52;  /* LIGHT_INK[7],       7.85:1   */
     --text-strong: #101014;  /* LIGHT_INK[15],     16.98:1   */
     --heading:     #00565f;  /* LIGHT_INK[6],       7.52:1   */
-    --link:        #00757f;  /* LIGHT_INK[14],      4.88:1   */
+    --link:        #00757f;  /* site teal,          4.88:1   */
     --muted:       #5f5f68;  /* compliant tone,     5.65:1   */
-    --rule:        #00757f;  /* LIGHT_INK[14]                */
+    --rule:        #00757f;  /* site teal                    */
     --edge:        #8a8a94;  /* LIGHT_INK[8], decoration     */
 
     /* Re-inked through the same indices the game re-inks: 14, 12 and 6. */
-    --ship-hull:   #00757f;  /* LIGHT_INK[14]                */
-    --ship-wing:   #2f3fc8;  /* LIGHT_INK[12]                */
+    --ship-hull:   #00343a;  /* LIGHT_INK[14]                */
+    --ship-wing:   #04116e;  /* LIGHT_INK[12]                */
     --ship-engine: #00565f;  /* LIGHT_INK[6]                 */
   }
 }

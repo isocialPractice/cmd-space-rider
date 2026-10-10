@@ -64,24 +64,37 @@ colour `#f2f2f4`.
 | Body text | `#4a4a52` | `LIGHT_INK[7]` | 7.85:1 | passes |
 | Strong text | `#101014` | `LIGHT_INK[15]` | 16.98:1 | passes |
 | Headings | `#00565f` | `LIGHT_INK[6]` | 7.52:1 | passes |
-| Links | `#00757f` | `LIGHT_INK[14]` | 4.88:1 | passes |
+| Links | `#00757f` | site teal, see below | 4.88:1 | passes |
 | Muted text | `#5f5f68` | compliant tone, see below | 5.65:1 | passes |
-| Rules, borders | `#00757f` | `LIGHT_INK[14]` | 4.88:1 | passes |
+| Rules, borders | `#00757f` | site teal, see below | 4.88:1 | passes |
 | Decoration only | `#8a8a94` | `LIGHT_INK[8]` | 3.06:1 | accents only |
 
-One substitution, measured rather than assumed the way the dark theme's two
+Two substitutions, measured rather than assumed the way the dark theme's two
 exclusions are:
 
 - **`LIGHT_INK[8]`, `#8a8a94`, reaches only 3.06:1 on paper.** It is the light
   theme's grey and it cannot carry muted text, so it is kept for decoration -
   the borders on code and table cells, and the rule above the footer - and
   muted text uses `#5f5f68`, which is the same hue taken down until it passes.
-  This is the one value on the site not quoted from the game, and it exists
-  because compliance wins over fidelity.
+  This one exists because compliance wins over fidelity.
+- **`LIGHT_INK[14]` is now `#00343a`, at 12.10:1.** It was `#00757f` at 4.88:1,
+  and the link and the rule quoted it. The game then re-inked its six chromatic
+  bright indices below their base ones, so that a base-and-bright pair still
+  marks the live thing when the paper is pale rather than drawing it fainter
+  than its neighbours - the game's reason is in the comment above `LIGHT_INK`
+  in `index.html`. The index that came back is a strong-text weight: a page of
+  prose whose every rule and cell border is drawn at 12.10:1 reads as ruled in
+  near-black. So the teal the prose was measured against is pinned on the site
+  instead, and this substitution exists because weight wins over fidelity.
+
+  The ship is the exception to the exception. `--ship-hull` and `--ship-wing`
+  followed the game to `#00343a` and `#04116e`, because that drawing is a
+  picture of the game's ship and tracking the indices is the whole of why it is
+  there.
 
 Unlike the dark theme, light splits the rule colour from the decoration colour
-the other way round: `LIGHT_INK[14]` is both the link and the rule, because the
-grey that would otherwise carry rules is the value that failed above.
+the other way round: one teal is both the link and the rule, because the grey
+that would otherwise carry rules is the value that failed above.
 
 Body text on a raised surface is checked separately, since the surface is not
 the page: `#aaaaaa` on `#0a0a0c` is 8.51:1, and `#4a4a52` on `#ffffff` is

@@ -87,6 +87,75 @@ test('light mode inverts the page: dark ink on pale paper', () => {
   }
 });
 
+// The base-and-bright pairs the game marks something with: the bright index on
+// the live thing, the base index on its neighbours. BRIGHT_WHITE appears twice
+// because two different inks are drawn beside it - WHITE for text and GRAY for
+// the rule under an inactive name slot.
+const INK_PAIRS = [
+  ['RED', 'BRIGHT_RED'],
+  ['GREEN', 'BRIGHT_GREEN'],
+  ['YELLOW', 'BRIGHT_YELLOW'],
+  ['BLUE', 'BRIGHT_BLUE'],
+  ['MAGENTA', 'BRIGHT_MAGENTA'],
+  ['CYAN', 'BRIGHT_CYAN'],
+  ['WHITE', 'BRIGHT_WHITE'],
+  ['GRAY', 'BRIGHT_WHITE'],
+];
+
+/**
+ * How far an ink departs the paper it is drawn on, summed over the channels.
+ *
+ * Higher is louder against the page. This is a comparison between two inks on
+ * one background rather than a contrast figure, so the plain channel distance
+ * is enough and the paper is what makes it mean anything - the same hex is loud
+ * on one scheme and quiet on the other.
+ */
+function loudness(hex, paper) {
+  const ink = parseInt(hex.slice(1), 16);
+  const page = parseInt(paper.slice(1), 16);
+  let sum = 0;
+  for (let shift = 0; shift <= 16; shift += 8) {
+    sum += Math.abs(((ink >> shift) & 255) - ((page >> shift) & 255));
+  }
+  return sum;
+}
+
+test('light mode keeps a bright ink louder than its base', () => {
+  // A pair marks the live thing by drawing it in the bright index and its
+  // neighbours in the base one, so the bright one has to be the louder of the
+  // two or the mark reads backwards - the slot being edited drawn fainter than
+  // the two beside it. Light mode re-inks both halves, and what it must not do
+  // is carry the dark palette's lightness ordering across: on black louder
+  // means lighter, on paper it means darker, so the hex values invert while the
+  // ordering has to hold.
+  //
+  // Asserted as a property of the pair rather than against a table of hex
+  // values, so re-inking a colour later cannot quietly put the ordering back.
+  const dark = browser.themePalette('dark');
+  const light = browser.themePalette('light');
+
+  for (const [baseName, brightName] of INK_PAIRS) {
+    const base = browser.C[baseName];
+    const bright = browser.C[brightName];
+    assert.ok(base !== undefined, `C.${baseName} is a named colour`);
+    assert.ok(bright !== undefined, `C.${brightName} is a named colour`);
+
+    const darkBase = loudness(dark[base], browser.THEME_BG.dark);
+    const darkBright = loudness(dark[bright], browser.THEME_BG.dark);
+    // The premise: the pair is only a pair because dark mode ordered it. A pair
+    // that never held in the first place has nothing to preserve, and saying so
+    // here keeps the assertion below about light mode rather than about both.
+    assert.ok(darkBright > darkBase,
+      `${baseName}/${brightName}: dark mode orders the pair, ${darkBase} then ${darkBright}`);
+
+    const lightBase = loudness(light[base], browser.THEME_BG.light);
+    const lightBright = loudness(light[bright], browser.THEME_BG.light);
+    assert.ok(lightBright > lightBase,
+      `${baseName}/${brightName}: light mode draws the bright ink at ${lightBright} `
+      + `against the base at ${lightBase}, so the marked thing is the fainter of the two`);
+  }
+});
+
 test('each scheme names the page colour behind its grid', () => {
   assert.match(browser.THEME_BG.dark, HEX);
   assert.match(browser.THEME_BG.light, HEX);
