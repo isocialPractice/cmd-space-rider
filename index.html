@@ -227,6 +227,14 @@ const C={
 // of having a palette, and a scheme test inside renderNameEntry would put it
 // back. `light mode keeps a bright ink louder than its base` pins the ordering
 // for every pair the game draws with.
+//
+// A pair is not the only ordering the renderer relies on, and it was the only
+// one checked. `the light warp ramp climbs the way dark's does` walks the five
+// rungs WARP_WALLS puts on screen, which is where the one drawn neon sits and
+// where no base-and-bright pair reaches. `no two inks the game draws sit closer
+// than MIN_INK_SEPARATION` is the other half: light mode is packed two to three
+// times tighter than the scheme it was derived from, so an ordering that holds
+// is not the same as two colours a player can tell apart.
 const LIGHT_INK={
   // BLACK is the page under everything, so in light mode it is the paper.
   0:'#f2f2f4',
@@ -243,8 +251,29 @@ const LIGHT_INK={
   5:'#6b0f63',13:'#3d0839',
   // The pause label and the mute indicator.
   3:'#6e5600',11:'#403200',
-  // The named neons, each to the same value as the base colour it echoes.
-  51:'#00707a',46:'#0a7a24',201:'#a3129a',196:'#c01414',208:'#a35a00',
+  // The named neons. One of the five is drawn, and that one is a rung of a ramp
+  // rather than a colour on its own: WARP_WALLS carries the tunnel's BLUE band
+  // across to NEON_MAGENTA for a warp, between MAGENTA at the far wall and
+  // BRIGHT_MAGENTA one band in, so its light value has to sit between those two
+  // or the ramp dips where dark climbs. As channel distance from the paper, the
+  // light warp ramp far to near is 507, 563, 602, 602, 676 against dark's 340,
+  // 510, 595, 595, 765.
+  //
+  // 563 is about all the corridor allows, and the arithmetic is worth recording
+  // because it is one unit short of comfortable. MAGENTA and BRIGHT_MAGENTA are
+  // 95 apart in light against 255 in dark, while two steps at the 48 the
+  // separation floor asks for need 96 - so a rung at its neighbours' own hue
+  // cannot clear the floor on both sides at any value. #520053 buys the margin
+  // from hue instead: pure magenta with no green in it, which is what #ff00ff is
+  // in dark, reading 56 from MAGENTA and 55 from BRIGHT_MAGENTA across 56 and 39
+  // of loudness. On paper it is 12.66:1 between their 10.02:1 and 14.54:1, so
+  // the two measures order the ramp the same way.
+  //
+  // The other four are drawn nowhere in either build - nothing references
+  // C.NEON_CYAN, C.NEON_GREEN, C.NEON_RED or C.ORANGE - so each is left as the
+  // tint one step off its base that all five used to be. What a light value for
+  // one of them should be is a question for whatever first draws it.
+  51:'#00707a',46:'#0a7a24',201:'#520053',196:'#c01414',208:'#a35a00',
 };
 
 // The page colour each scheme paints behind the character grid. The renderer
@@ -715,6 +744,22 @@ const DETAIL_WINDOW_FRAMES=30;
 // before it, because a flag armed by the long frame and cleared by whatever
 // follows throws out the next sample whatever its length - and a loop
 // alternating across the cut-off then contributes nothing at all.
+//
+// It decides the sample after a single stall and nothing else, which is the
+// correction to the version that shipped it. A band on its own reads a short
+// return as an ordinary frame, and one sample carries a window of thirty as soon
+// as it passes about 283ms - twenty-nine frames at the target are 966.7ms
+// against the 1250ms a 41.7ms mean needs - so a fragment from roughly 290ms to
+// just under this floor cost a tier, which is the outcome the discard exists to
+// prevent. Three readings are not a floor either: a return lands anywhere in the
+// interval, and over a third of them land under the shortest of the three. So a
+// run of two stalls or more is read as a tab that was behind and the sample after
+// it is discarded whatever its length, and this band decides only the rest.
+//
+// What both tests leave is narrower and named rather than hidden: one stall
+// followed by a fragment between about 290ms and this floor is still counted and
+// still costs one tier, which one window hands back. That is a tab switch of a
+// second or two rather than a spell away from the run.
 const DETAIL_STALL_RETURN_FACTOR=0.65;
 
 // How far past the target a window's mean frame time has to run before the
@@ -980,7 +1025,7 @@ class Game{
       warpLevel:1,warpFlash:0,
       rapidFire:0,slowMotion:0,fireTimer:0,
       sounds:[],
-      detail:0,frameSpent:0,frameSeen:0,frameStalled:false,
+      detail:0,frameSpent:0,frameSeen:0,frameStalls:0,
       leaderboard:loadLeaderboard(),
       entryName:DEFAULT_NAME,entrySlot:0,
       ghost:[],ghostCursor:0,ghostShip:null,ghostRecord:[],ghostTimer:GHOST_SAMPLE_TIME,
@@ -1065,7 +1110,7 @@ class Game{
     // the device draws, and one of them averaged in would cost a tier that the
     // next window has to hand back - the starfield thinning out as a reward for
     // coming back to the tab.
-    if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME){s.frameStalled=true;return}
+    if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME){s.frameStalls+=1;return}
     // And neither is the frame that ends the stall, when it is long enough to be
     // a piece of one. A backgrounded tab is reactivated partway through one of
     // the intervals its frames were being withheld across, so the frame
@@ -1079,25 +1124,52 @@ class Game{
     // prevent - the player looks at another tab and comes back to a thinner
     // starfield.
     //
-    // The length is half the test, and the flag on its own is not enough. A flag
-    // armed by the long frame and cleared by whatever follows discards the next
-    // sample whatever it measured, so a loop alternating across the cut-off
-    // spends every short frame clearing the flag and contributes nothing at all:
-    // 300 pairs of 1.5s and 0.2s leave frameSeen at 0 and the ladder where it
-    // started, and a device stalling every other frame reads as one with no
-    // measurable frame rate rather than as a slow one. So the sample has to fall
-    // in the band a fragment of a withheld interval falls in, and a shorter one
-    // is an ordinary frame that happens to follow a stall, which is counted. The
-    // flag is cleared either way: it marks one frame, not a state the run sits
-    // in.
+    // Three readings are a sample of that interval and not a floor under it,
+    // which is the part worth reading carefully: a return landing anywhere in a
+    // 1.000s interval is as likely to be a fragment of 300ms as one of 800ms,
+    // and the short end is just as much a piece of the stall.
     //
-    // Discarding one sample rather than lowering the cut-off is what keeps the
-    // other half of this true: a device genuinely at two frames a second is a
-    // run of samples and not one, and at 0.5s a frame it is now under the band
-    // as well, so it loses none of them and is detected by all.
-    if(s.frameStalled){
-      s.frameStalled=false;
-      if(elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME*DETAIL_STALL_RETURN_FACTOR)return;
+    // Two tests decide it, and neither works alone.
+    //
+    // How long the stall was is the first. A flag armed by one long frame and
+    // cleared by whatever follows discards the next sample whatever it measured,
+    // so a loop alternating across the cut-off spends every short frame clearing
+    // the flag and contributes nothing at all: 300 pairs of 1.5s and 0.2s leave
+    // frameSeen at 0 and the ladder where it started, and a device stalling
+    // every other frame reads as one with no measurable frame rate rather than
+    // as a slow one. A stall of two samples or more is not that device. A
+    // throttled loop delivers a run of withheld intervals, so the frame after a
+    // run is a fragment whatever its length, while 1.5s and 0.2s in turn is a
+    // single long frame each time and its short half is an ordinary frame.
+    //
+    // How long the sample is is the second, and it decides the single-stall case
+    // alone. A fragment of a withheld interval falls in a band -
+    // DETAIL_STALL_RETURN_FACTOR of the cut-off and up - and a shorter sample
+    // after one long frame is an ordinary frame, which is counted.
+    //
+    // The band is not enough by itself either, which is what the release that
+    // added it got wrong. A short return read as an ordinary frame carries a
+    // window of thirty on its own past about 283ms, so a fragment from roughly
+    // 290ms to the band floor cost a tier - the thing the guard above exists to
+    // stop. The run count is what covers it, since a spell away from the run is
+    // a run of stalls.
+    //
+    // What neither test covers is stated rather than left to be found: one stall
+    // followed by a fragment inside that 290ms-to-floor stretch is still counted
+    // and still costs a tier, and one window hands it back. That shape is a tab
+    // switch of a second or two, not a spell behind another window.
+    //
+    // The count is cleared either way: it measures a stall that has just ended,
+    // not a state the run sits in.
+    //
+    // Discarding samples rather than lowering the cut-off is what keeps the
+    // other half of this true. A device genuinely at two frames a second never
+    // reaches the cut-off at all, so it never arms either test: thirty samples
+    // at 0.5s are thirty samples, and the tier goes on the window they close.
+    if(s.frameStalls>0){
+      const stalls=s.frameStalls;
+      s.frameStalls=0;
+      if(stalls>1||elapsed>=DETAIL_WINDOW_FRAMES*TARGET_FRAME_TIME*DETAIL_STALL_RETURN_FACTOR)return;
     }
 
     s.frameSpent+=elapsed;
@@ -1132,7 +1204,7 @@ class Game{
     // measured it, so a player who dropped a tier last run opens this one at
     // that tier rather than paying the first second of it over again. The window
     // is what resets: its frames were spent on the run that is over.
-    s.frameSpent=0;s.frameSeen=0;s.frameStalled=false;
+    s.frameSpent=0;s.frameSeen=0;s.frameStalls=0;
     s.entryName=DEFAULT_NAME;s.entrySlot=0;
     s.ghostCursor=0;s.ghostShip=null;s.ghostRecord=[];s.ghostTimer=GHOST_SAMPLE_TIME;
     // An opening sample, so the recording is anchored at the moment the run began

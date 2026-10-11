@@ -393,6 +393,113 @@ test('the partial frame on the way back from a stall is not a sample either', ()
   }
 });
 
+test('a short frame after a run of stalls is a fragment, whatever it measured', () => {
+  // The hole the band left behind when it shipped, and nothing in this file fed a
+  // short fragment after a stall - the one case the test above tries is 0.7s,
+  // which the band discards.
+  //
+  // A band on the discarded sample alone reads a short return as an ordinary
+  // frame, and one such sample carries a window of thirty on its own as soon as
+  // it passes about 283ms: twenty-nine frames at the target are 966.7ms against
+  // the 1250ms a 41.7ms mean needs. So a return fragment from roughly 290ms to
+  // just under the band floor cost a tier, which is the outcome the discard
+  // exists to prevent, and before the band no fragment length could produce it.
+  //
+  // What tells a return apart from the short half of an alternating loop is how
+  // long the stall before it ran, not how long the sample is. A throttled loop
+  // delivers a run of withheld intervals, so a spell away from the run is two
+  // samples at the cut-off or more, while 1.5s and 0.2s in turn is a single long
+  // frame each time.
+  for (const build of BUILDS) {
+    const { api } = build;
+    const window = api.DETAIL_WINDOW_FRAMES * api.TARGET_FRAME_TIME;
+    const floor = window * api.DETAIL_STALL_RETURN_FACTOR;
+
+    // Walked across the whole stretch that used to cost a tier and out the far
+    // side of the band, because the point of the run count is that the length
+    // stops deciding: every one of these is a fragment now.
+    for (const fragment of [0.2, 0.283, 0.29, 0.5, 0.64, floor, 0.7, 0.85]) {
+      const game = flying(build);
+      feed(game, window, 2);
+      game.trackFrameRate(fragment);
+      assert.equal(game.state.frameSeen, 0,
+        `${build.name}: a ${fragment}s fragment after a run of stalls is not a sample`);
+
+      feed(game, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES);
+      assert.equal(game.state.frameSeen, 0, `${build.name}: a healthy window closed after it`);
+      assert.equal(game.state.detail, 0, `${build.name}: and a ${fragment}s return cost no tier`);
+    }
+
+    // Two is the shortest run that counts as one, and it has to be: a run of one
+    // is the alternating loop, whose short halves the ladder needs. A longer
+    // spell behaves the same way.
+    for (const stalls of [2, 3, 10]) {
+      const game = flying(build);
+      feed(game, window, stalls);
+      game.trackFrameRate(0.5);
+      assert.equal(game.state.frameSeen, 0, `${build.name}: ${stalls} stalls then a 0.5s fragment`);
+    }
+
+    // Only the one sample, however long the spell ran. The count is cleared by
+    // the frame that ended the stall, so the frame after that is ordinary.
+    const after = flying(build);
+    feed(after, window, 5);
+    feed(after, 0.2, 2);
+    assert.equal(after.state.frameSeen, 1, `${build.name}: the second short frame was counted`);
+
+    // And a stall still open when a run ended does not reach into the next one.
+    // The ladder survives a run and the window does not, and the count is part
+    // of the window.
+    const across = flying(build);
+    feed(across, window, 3);
+    across.startGame();
+    feed(across, 0.5, api.DETAIL_WINDOW_FRAMES);
+    assert.equal(across.state.frameSeen, 0, `${build.name}: thirty samples closed a new window`);
+    assert.equal(across.state.detail, 1, `${build.name}: none of them read as a return`);
+  }
+});
+
+test('one stall and a short return still costs a tier, which is the limit', () => {
+  // Stated rather than left to be found, because a single threshold cannot do
+  // both jobs and this is the half that was given up. One long frame is not a
+  // spell away from the run - it is as likely to be the slow half of a loop
+  // alternating across the cut-off - so the band alone decides what follows it,
+  // and a sample under the floor is counted.
+  //
+  // The cost is one tier on a tab switch of a second or two, where a spell behind
+  // another window delivers a run of throttled frames and is covered. One healthy
+  // window hands the tier back.
+  for (const build of BUILDS) {
+    const { api } = build;
+    const window = api.DETAIL_WINDOW_FRAMES * api.TARGET_FRAME_TIME;
+
+    // The 283ms both builds' comments quote is this boundary: a fragment and
+    // twenty-nine frames at the target, against the drop threshold.
+    for (const [fragment, tier, what] of [
+      [0.283, 0, 'is inside the drop threshold'],
+      [0.29, 1, 'crosses it, and costs the tier'],
+    ]) {
+      const game = flying(build);
+      game.trackFrameRate(window);
+      game.trackFrameRate(fragment);
+      feed(game, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES - 1);
+      assert.equal(game.state.frameSeen, 0,
+        `${build.name}: the fragment and twenty-nine frames closed a window`);
+      assert.equal(game.state.detail, tier, `${build.name}: a ${fragment}s return ${what}`);
+    }
+
+    // And the window after it hands the tier back, which is why this is a limit
+    // rather than a defect: the starfield thins for a second and fills again.
+    const back = flying(build);
+    back.trackFrameRate(window);
+    back.trackFrameRate(0.5);
+    feed(back, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES - 1);
+    assert.equal(back.state.detail, 1, `${build.name}: the return cost a tier`);
+    feed(back, atFactor(api, 1), api.DETAIL_WINDOW_FRAMES);
+    assert.equal(back.state.detail, 0, `${build.name}: and one healthy window gave it back`);
+  }
+});
+
 test('a loop stalling on every other frame is a slow device, not an unmeasurable one', () => {
   // Nothing else in this file feeds two frame lengths in turn, and the discard
   // above is the reason to. It was a flag armed by a frame at or over the

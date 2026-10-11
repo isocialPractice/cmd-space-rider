@@ -399,11 +399,16 @@ export interface GameState {
   /** Frames the open detail window has counted. */
   frameSeen: number;
   /**
-   * Whether the sample before this one was thrown out as a stopped loop. The
-   * frame straddling the return from one is a partial interval rather than a
-   * whole frame, so it is thrown out too. See trackFrameRate.
+   * How many samples in a row have just been thrown out as a stopped loop.
+   *
+   * A count rather than a flag, because the frame straddling the return from a
+   * stall is read differently depending on how long the stall was: a run of
+   * withheld intervals is a tab that was behind, and whatever follows it is a
+   * fragment, while one long frame on its own may be the slow half of a loop
+   * alternating across the cut-off, and the sample after that is an ordinary
+   * frame. Zero while the loop is delivering. See trackFrameRate.
    */
-  frameStalled: boolean;
+  frameStalls: number;
 
   /** The top scores, highest first. Persisted by the browser build only. */
   leaderboard: LeaderEntry[];
@@ -574,12 +579,31 @@ export const DETAIL_WINDOW_FRAMES = 30;
  * frame rate instead of as a slow one. With the band, 0.2s is under the floor,
  * is counted, and takes the tier it should.
  *
+ * The band decides only the sample after a single stall, and that limit is the
+ * correction to the version that shipped it. On its own a band reads a short
+ * return as an ordinary frame, and one sample carries a window of thirty as
+ * soon as it passes about 283ms - twenty-nine frames at the target are 966.7ms
+ * against the 1250ms a 41.7ms mean needs - so a fragment from roughly 290ms to
+ * just under this floor cost a tier, which is the outcome the discard exists to
+ * prevent. Three readings are not a floor either: the fragments below were
+ * measured at 650ms, 750ms and 850ms, and a return landing anywhere in a 1.000s
+ * interval puts a bit over a third of them under the shortest of the three.
+ *
+ * So the length test is the second of two, and `frameStalls` is the first. Two
+ * or more samples at or over the cut-off in a row is a tab that was behind - a
+ * throttled loop delivers a run of them - and whatever follows that is a
+ * fragment whatever it measured. One long frame on its own is the case this
+ * band is for, and it is the only case it decides.
+ *
  * It bounds the hole rather than closing it, because the two populations
  * overlap: a 0.99s frame is an ordinary sample and is longer than any fragment
  * measured, so a loop alternating 1.01s and 0.99s still contributes nothing.
  * That device trips the whole-window cut-off on every other frame, which is by
  * design read as a loop that stopped, and the cut-off is not this constant's to
- * move.
+ * move. What is left after both tests is narrower and is named rather than
+ * hidden: a single stall followed by a fragment between about 290ms and this
+ * floor is still counted and still costs one tier, which one window hands back.
+ * That is a tab switch of a second or two rather than a spell away from the run.
  */
 export const DETAIL_STALL_RETURN_FACTOR = 0.65;
 

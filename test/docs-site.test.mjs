@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT } from './helpers.mjs';
+import { REPO_ROOT, loadBrowserEngine, fakeStorage } from './helpers.mjs';
 import { styleSheet, specificity, compareSpecificity } from './page-style.mjs';
 
 const DOCS = join(REPO_ROOT, 'docs');
@@ -1122,4 +1122,142 @@ test('docs: the sheet resolves to the scheme it is written in', () => {
     px(style.properties['--bar'], '--bar'), px(narrow.declarations['--bar'], 'narrow --bar'),
     'the two blocks declare two different bars, which is the whole reason they are two blocks'
   );
+});
+
+
+/* ===== The site's colours against the game's own palette ===== */
+
+// The game's engine, for its palette alone. The site is not a build of the game
+// and nothing else in this file reaches for it - but the stylesheet opens by
+// saying every value in it comes from DESIGN_LANGUAGE.md, and that file says
+// every colour in it comes from the game. So the provenance is checkable, and
+// until now it was only written down.
+const browser = loadBrowserEngine(fakeStorage());
+
+/**
+ * Where each colour the site declares comes from, per scheme.
+ *
+ * A name is a named colour in the game's own palette, and the property has to
+ * equal whatever that scheme resolves the name to. `null` is a value the site
+ * chose for itself, and the property has to equal no named colour at all.
+ *
+ * Both halves are the point, and the second half is why this exists.
+ * 1.0.0-alpha.0.9.2 decided two things that pull against each other: --link and
+ * --rule stop tracking the game, because the index they quoted went to 12.10:1
+ * and would rule ten pages of prose in near-black, while --ship-hull and
+ * --ship-wing keep tracking it, because that drawing is a picture of the game's
+ * ship. Neither half was asserted anywhere. A later reader meeting
+ * DESIGN_LANGUAGE.md's opening claim - "Nothing here was invented for the site"
+ * - can re-sync the two properties in one edit and the suite would pass.
+ */
+const PROVENANCE = {
+  dark: {
+    '--page': 'BLACK',
+    '--text': 'WHITE',
+    '--text-strong': 'BRIGHT_WHITE',
+    '--heading': 'BRIGHT_CYAN',
+    '--link': 'BRIGHT_CYAN',
+    '--rule': 'CYAN',
+    '--edge': 'BRIGHT_BLUE',
+    '--ship-hull': 'BRIGHT_CYAN',
+    '--ship-wing': 'BRIGHT_BLUE',
+    '--ship-engine': 'CYAN',
+    // One step off the page, which the game has no equivalent for, and the grey
+    // ramp's 245 - a numbered index rather than a colour the renderer draws in.
+    '--surface': null,
+    '--muted': null,
+  },
+  light: {
+    '--page': 'BLACK',
+    '--text': 'WHITE',
+    '--text-strong': 'BRIGHT_WHITE',
+    // Light heads at CYAN rather than BRIGHT_CYAN: the re-inking took every
+    // bright index below its base one, so the heading row of the design table
+    // is 7.52:1 where dark's is 17.13:1.
+    '--heading': 'CYAN',
+    // The divergence, asserted below as well as here.
+    '--link': null,
+    '--rule': null,
+    '--edge': 'GRAY',
+    '--ship-hull': 'BRIGHT_CYAN',
+    '--ship-wing': 'BRIGHT_BLUE',
+    '--ship-engine': 'CYAN',
+    '--surface': null,
+    // LIGHT_INK[8] reaches only 3.06:1 and cannot carry text, so muted text is
+    // the same hue taken down until it passes.
+    '--muted': null,
+  },
+};
+
+/** The `:root` block for a scheme: the sheet's own, or the light re-inking. */
+function rootBlock(scheme) {
+  const found = style.rules.find((rule) => rule.selectors.includes(':root')
+    && (scheme === 'light'
+      ? rule.at.some((prelude) => prelude.includes('prefers-color-scheme: light'))
+      : !rule.at.length));
+  assert.ok(found, `the sheet declares :root for ${scheme}`);
+  return found.declarations;
+}
+
+test("docs: every site colour says whether it is the game's or the site's own", () => {
+  for (const scheme of ['dark', 'light']) {
+    const declared = rootBlock(scheme);
+    const palette = scheme === 'light' ? browser.themePalette('light') : browser.ANSI256;
+    const named = Object.fromEntries(
+      Object.entries(browser.C).map(([name, index]) => [name, palette[index].toLowerCase()])
+    );
+
+    for (const [property, source] of Object.entries(PROVENANCE[scheme])) {
+      const value = (declared[property] || '').trim().toLowerCase();
+      assert.match(value, /^#[0-9a-f]{6}$/, `${scheme} ${property} is a hex colour`);
+
+      if (source === null) {
+        const matched = Object.keys(named).filter((name) => named[name] === value);
+        assert.deepEqual(matched, [],
+          `${scheme} ${property} is ${value}, which is ${matched.join('/')} - the site is `
+          + 'listed as choosing this one for itself');
+        continue;
+      }
+
+      assert.ok(source in named, `C.${source} is a named colour`);
+      assert.equal(value, named[source],
+        `${scheme} ${property} is ${value} and C.${source} resolves to ${named[source]}`);
+    }
+
+    // Nothing in the block escapes the table, so a colour added to the
+    // stylesheet cannot carry an unrecorded provenance.
+    const colours = Object.keys(declared)
+      .filter((name) => name.startsWith('--') && /^#[0-9a-f]{6}$/i.test((declared[name] || '').trim()));
+    assert.deepEqual(colours.sort(), Object.keys(PROVENANCE[scheme]).sort(),
+      `${scheme}: every colour the block declares is accounted for`);
+  }
+});
+
+test('docs: the light link and rule no longer track the index the ship does', () => {
+  // The pair of facts the release decided, stated against the game's palette
+  // rather than against a hex value, so a re-inking of the game cannot make this
+  // pass by moving the number both sides are compared to.
+  //
+  // LIGHT_INK[14] is BRIGHT_CYAN, the tunnel mouth. It is #00343a at 12.10:1 on
+  // the site's paper, where the rule it replaced was 4.88:1 - two and a half
+  // times the weight the prose was ruled at, and heavier than the 7.85:1 the
+  // body text is set in.
+  const light = rootBlock('light');
+  const palette = browser.themePalette('light');
+  const index = palette[browser.C.BRIGHT_CYAN];
+
+  for (const property of ['--link', '--rule']) {
+    assert.notEqual(light[property].trim().toLowerCase(), index.toLowerCase(),
+      `light ${property} is back on LIGHT_INK[14], which rules ten pages of prose `
+      + 'in near-black');
+  }
+
+  // And the exception to the exception: the brand ship is a picture of the
+  // game's ship, so those three do track it, and dropping them would be the
+  // same edit read the other way round.
+  assert.equal(light['--ship-hull'].trim().toLowerCase(), index.toLowerCase());
+  assert.equal(light['--ship-wing'].trim().toLowerCase(),
+    palette[browser.C.BRIGHT_BLUE].toLowerCase());
+  assert.equal(light['--ship-engine'].trim().toLowerCase(),
+    palette[browser.C.CYAN].toLowerCase());
 });

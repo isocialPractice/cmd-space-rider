@@ -103,7 +103,25 @@ const INK_PAIRS = [
 ];
 
 /**
- * How far an ink departs the paper it is drawn on, summed over the channels.
+ * How far two colours sit apart, summed over the channels.
+ *
+ * One measure serves both questions this file asks of the palette, because they
+ * are the same sum over a different second operand: an ink against the paper is
+ * how loud it is, and an ink against another ink is how far apart a player can
+ * see them. Two measures would be two things to keep in step.
+ */
+function channelDistance(a, b) {
+  const first = parseInt(a.slice(1), 16);
+  const second = parseInt(b.slice(1), 16);
+  let sum = 0;
+  for (let shift = 0; shift <= 16; shift += 8) {
+    sum += Math.abs(((first >> shift) & 255) - ((second >> shift) & 255));
+  }
+  return sum;
+}
+
+/**
+ * How far an ink departs the paper it is drawn on.
  *
  * Higher is louder against the page. This is a comparison between two inks on
  * one background rather than a contrast figure, so the plain channel distance
@@ -111,14 +129,69 @@ const INK_PAIRS = [
  * on one scheme and quiet on the other.
  */
 function loudness(hex, paper) {
-  const ink = parseInt(hex.slice(1), 16);
-  const page = parseInt(paper.slice(1), 16);
-  let sum = 0;
-  for (let shift = 0; shift <= 16; shift += 8) {
-    sum += Math.abs(((ink >> shift) & 255) - ((page >> shift) & 255));
-  }
-  return sum;
+  return channelDistance(hex, paper);
 }
+
+/** The page with its line comments taken off, so a name can only be a usage. */
+function pageCode() {
+  return html.split('\n').map((line) => {
+    // The first `//` that is not the tail of a scheme - the page carries two
+    // `https://` links, and a comment stripper that took those for comments
+    // would silently shorten the lines they sit on.
+    const at = line.search(/(^|[^:/])\/\//);
+    if (at < 0) return line;
+    return line.slice(0, at === 0 ? 0 : at + 1);
+  }).join('\n');
+}
+
+/**
+ * The palette indices the page actually draws with, read off its own source.
+ *
+ * Derived rather than listed, which is the whole point: a separation floor over
+ * a hand-written set of names says nothing about a colour a later drawing site
+ * reaches for, and the names that need excluding are exactly the ones nothing
+ * references. Six of the twenty-four in `C` go unused today - the two dark
+ * tunnel shades and four of the five named neons - and the first colour drawn in
+ * any of them joins the walk without this file being touched.
+ *
+ * Comments are taken off first, and that is not tidiness. The comment above the
+ * neons in index.html names the four nothing draws, in order to say that nothing
+ * draws them, so a scan over the raw page reads all four as drawn and the walk
+ * then fails on a pair the renderer cannot put on screen.
+ */
+function drawnInks() {
+  const referenced = new Set([...pageCode().matchAll(/\bC\.([A-Z_]+)\b/g)].map((m) => m[1]));
+  const drawn = Object.entries(browser.C).filter(([name]) => referenced.has(name));
+  assert.ok(drawn.length > 12, `only ${drawn.length} of the named colours are drawn`);
+  for (const name of referenced) {
+    assert.ok(name in browser.C, `C.${name} is referenced and is not a named colour`);
+  }
+  return drawn;
+}
+
+/**
+ * The tightest the game has ever drawn two inks together, in channel distance,
+ * and the floor a re-inking may not take them below.
+ *
+ * 48 admits the current floor rather than buying margin back, and the pair that
+ * sets it is the reason: BRIGHT_WHITE against DARK_BLUE at 49, which the barrel
+ * roll puts on screen together when the white hull crosses a row of DARK_BLUE
+ * floor dots. Neither ink has been moved by any release, so 49 is not a margin
+ * some change spent - it is what this palette has always been at its tightest,
+ * on a screen that reads.
+ *
+ * What the figure is for is the next re-inking, not this one. 1.0.0-alpha.0.9.2
+ * took light mode's six chromatic bright indices below their base ones so a
+ * base-and-bright pair would still mark the live thing on pale paper, and in
+ * doing so closed five of its six tightest pairs to between a half and a third
+ * of what they had been - 127 to 52, 175 to 53, 114 to 56, 215 to 56, 152 to 58.
+ * Every one of those still reads, and all of them were checked in chromium. The
+ * defect was that nothing could see the loss: the pair test above compares an
+ * ink with its paper, so a margin could go to nothing and the suite would pass.
+ * A floor at 48 is the smallest number that says the current palette is
+ * acceptable and the next one may not be tighter.
+ */
+const MIN_INK_SEPARATION = 48;
 
 test('light mode keeps a bright ink louder than its base', () => {
   // A pair marks the live thing by drawing it in the bright index and its
@@ -153,6 +226,98 @@ test('light mode keeps a bright ink louder than its base', () => {
     assert.ok(lightBright > lightBase,
       `${baseName}/${brightName}: light mode draws the bright ink at ${lightBright} `
       + `against the base at ${lightBase}, so the marked thing is the fainter of the two`);
+  }
+});
+
+test('no two inks the game draws sit closer than MIN_INK_SEPARATION', () => {
+  // The pair test above is about ordering: which of two inks is the louder one.
+  // This is about margin, which is the thing ordering says nothing about - a
+  // pair ordered correctly and one channel step apart passes it and is one
+  // colour on screen.
+  //
+  // Asserted over every pair of drawn indices rather than the pairs the game
+  // marks something with, because a player sees whatever two inks a frame put
+  // beside each other and the renderer is free to put any two together. The set
+  // is read off the page's own `C.` references, so this cannot go stale.
+  for (const scheme of ['light', 'dark']) {
+    const palette = browser.themePalette(scheme);
+    const paper = browser.THEME_BG[scheme];
+    const drawn = drawnInks();
+
+    let tightest = [Infinity, ''];
+    for (let i = 0; i < drawn.length; i++) {
+      for (let j = i + 1; j < drawn.length; j++) {
+        const [firstName, first] = drawn[i];
+        const [secondName, second] = drawn[j];
+        const apart = channelDistance(palette[first], palette[second]);
+        assert.ok(apart >= MIN_INK_SEPARATION,
+          `${scheme}: ${firstName} at ${palette[first]} and ${secondName} at `
+          + `${palette[second]} are ${apart} apart, under the ${MIN_INK_SEPARATION} floor`);
+        if (apart < tightest[0]) tightest = [apart, `${firstName}/${secondName}`];
+      }
+    }
+
+    // Named rather than only bounded, because the two schemes are not equally
+    // close to the floor and a reader deserves to know which one is. Light is
+    // packed two to three times tighter than the scheme it was derived from,
+    // which is why the floor was written at all.
+    const expected = scheme === 'light'
+      ? [49, 'BRIGHT_WHITE/DARK_BLUE']
+      : [75, 'BLUE/DARK_BLUE'];
+    assert.deepEqual(tightest, expected,
+      `${scheme}: the tightest drawn pair is ${tightest[1]} at ${tightest[0]}`);
+
+    // And no ink has quietly become the paper, which is the one way a pair can
+    // be far from every other ink and still invisible.
+    for (const [name, index] of drawn) {
+      if (index === browser.C.BLACK) continue;
+      assert.ok(loudness(palette[index], paper) >= MIN_INK_SEPARATION,
+        `${scheme}: ${name} at ${palette[index]} is inside the floor of the paper`);
+    }
+  }
+});
+
+// The tunnel's wall colours as drawTunnel bands them, far end first. The four
+// depth bands pick from these in order, so this is a ramp rather than a set.
+const TUNNEL_WALLS = ['DARK_BLUE', 'BLUE', 'BRIGHT_BLUE', 'CYAN', 'BRIGHT_CYAN'];
+
+test("the light warp ramp climbs the way dark's does", () => {
+  // A warp carries the whole tunnel across to magenta and out to white at the
+  // mouth, and that is the one sequence in the game that has to read as a ramp:
+  // quietest at the far wall, loudest at the player. The plain wall ramp is not
+  // one - dark runs 95, 170, 425, 340, 595 - because the depth bands are also
+  // doing hue, so only the warp ramp is walked here.
+  //
+  // It is the only ordering a base-and-bright pair cannot reach, and the reason
+  // it needs its own walk: the second rung is NEON_MAGENTA, which is in no pair,
+  // so the pair test passed over the one named neon the game draws while its
+  // light value sat 114 below the rung behind it and 209 below the rung ahead.
+  for (const scheme of ['light', 'dark']) {
+    const palette = browser.themePalette(scheme);
+    const paper = browser.THEME_BG[scheme];
+
+    const rungs = TUNNEL_WALLS.map((name) => {
+      const index = browser.warpWallColor(browser.C[name], { warpFlash: 1 });
+      assert.notEqual(index, browser.C[name], `${scheme}: ${name} is shifted by a warp`);
+      return { index, loud: loudness(palette[index], paper) };
+    });
+
+    for (let i = 1; i < rungs.length; i++) {
+      const behind = rungs[i - 1];
+      const ahead = rungs[i];
+      // Two of the five rungs are literally the same colour - CYAN and
+      // BRIGHT_BLUE both shift to BRIGHT_MAGENTA - so the equal step is the
+      // table saying so rather than a ramp that stopped climbing.
+      if (ahead.index === behind.index) continue;
+      assert.ok(ahead.loud > behind.loud,
+        `${scheme}: the warp ramp reads ${behind.loud} at rung ${i} and `
+        + `${ahead.loud} at rung ${i + 1}, so the nearer wall is the quieter one`);
+    }
+
+    const read = rungs.map((rung) => rung.loud);
+    assert.deepEqual(read, scheme === 'light'
+      ? [507, 563, 602, 602, 676]
+      : [340, 510, 595, 595, 765], `${scheme}: the ramp as measured`);
   }
 });
 

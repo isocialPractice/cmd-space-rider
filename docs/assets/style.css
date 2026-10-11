@@ -50,9 +50,11 @@
    text; --surface, which the game has no equivalent for; and --link and --rule,
    which held LIGHT_INK[14] until the game re-inked its bright indices below
    their base ones so a pair would still mark the live thing in light mode.
-   LIGHT_INK[14] is now #00343a at 12.10:1, which is a heading weight rather
-   than a rule weight, so the teal the prose was measured against is pinned here
-   instead. The ship still tracks the game, which is the point of drawing it. */
+   LIGHT_INK[14] is now #00343a at 12.10:1, against the 4.88:1 of the teal it
+   replaced: two and a half times the weight the prose was ruled at, and heavier
+   than the 7.85:1 the body text itself is set in. So the teal the prose was
+   measured against is pinned here instead. The ship still tracks the game, which
+   is the point of drawing it. */
 @media (prefers-color-scheme: light) {
   :root {
     --page:        #f2f2f4;  /* THEME_BG.light, LIGHT_INK[0] */

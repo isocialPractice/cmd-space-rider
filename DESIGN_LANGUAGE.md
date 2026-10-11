@@ -82,10 +82,13 @@ exclusions are:
   bright indices below their base ones, so that a base-and-bright pair still
   marks the live thing when the paper is pale rather than drawing it fainter
   than its neighbours - the game's reason is in the comment above `LIGHT_INK`
-  in `index.html`. The index that came back is a strong-text weight: a page of
-  prose whose every rule and cell border is drawn at 12.10:1 reads as ruled in
-  near-black. So the teal the prose was measured against is pinned on the site
-  instead, and this substitution exists because weight wins over fidelity.
+  in `index.html`. The index that came back is two and a half times the weight
+  the prose was ruled at, and heavier than the 7.85:1 the body text itself is set
+  in - it lands between the heading row and the strong-text row of the table
+  above and matches neither. A page of prose whose every rule and cell border is
+  drawn at 12.10:1 reads as ruled in near-black, so the teal the prose was
+  measured against is pinned on the site instead, and this substitution exists
+  because weight wins over fidelity.
 
   The ship is the exception to the exception. `--ship-hull` and `--ship-wing`
   followed the game to `#00343a` and `#04116e`, because that drawing is a

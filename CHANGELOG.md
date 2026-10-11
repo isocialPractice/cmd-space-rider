@@ -1,5 +1,146 @@
 # Changelog
 
+## [1.0.0-alpha.0.9.3] - 2026-10-11
+
+### Fixed
+
+- The post-stall discard was handing the ordinary case back the tier it was
+  written to protect. `1.0.0-alpha.0.9.2` bounded the discard to a band on the
+  discarded sample, at 0.65 of the whole-window cut-off, so that a loop
+  alternating across the cut-off stopped losing every short frame. It did stop
+  losing them, and it also counted a short return: one sample carries a window
+  of thirty on its own as soon as it passes about 283ms, because twenty-nine
+  frames at the target are 966.7ms against the 1250ms a 41.7ms mean needs. Fed
+  three frames at the cut-off, one fragment, then thirty at the target, a
+  fragment of 0.283s left the ladder where it was and one of 0.290s through
+  0.640s cost a tier, in both builds - which is the outcome the discard exists
+  to prevent, and before the band no fragment length could produce it.
+
+  The premise was wrong as well as the behaviour. The band was cut from three
+  fragments measured at 650ms, 750ms and 850ms and read 650ms as their floor,
+  two sentences after the same comment said the return "lands anywhere in the
+  interval" - and a return landing anywhere in a 1.000s interval puts a bit over
+  a third of all returns under the shortest of the three.
+
+  A single threshold cannot do both jobs, so the discard is now two tests rather
+  than one. `frameStalled` becomes `frameStalls`, a count of how many samples in
+  a row have just been thrown out as a stopped loop, and a run of two or more is
+  read as a tab that was behind: a throttled loop delivers a run of withheld
+  intervals, so the sample after a run is a fragment whatever its length. One
+  long frame on its own is as likely to be the slow half of an alternating loop,
+  and there the band decides alone, exactly as it did. Every assertion the band
+  earned stays green, including the three patterns in `a loop stalling on every
+  other frame is a slow device, not an unmeasurable one`.
+
+  What the pair of tests leaves is narrower and is named in both builds rather
+  than left to be found: one stall followed by a fragment between about 290ms
+  and the band floor is still counted and still costs one tier, which the next
+  healthy window hands back. That shape is a tab switch of a second or two,
+  where a spell behind another window delivers the run of stalls the count
+  reads. Two cases cover it in `test/performance-mode.test.mjs` - the fragment
+  walked across the whole stretch after a run of stalls, and the 283ms boundary
+  either side with the window that gives the tier back - and nothing in the
+  suite fed a short fragment after a stall before, which is why the hole was
+  invisible.
+
+- `NEON_MAGENTA` was the one drawn index the light re-inking left behind. The
+  release took the six chromatic bright indices below their base ones and left
+  the named neons where they were, and one neon is drawn: `WARP_WALLS` carries
+  the tunnel's `BLUE` band across to `NEON_MAGENTA` for a warp, between
+  `MAGENTA` at the far wall and `BRIGHT_MAGENTA` one band in. `BRIGHT_MAGENTA`
+  moved and `NEON_MAGENTA` did not, so the light warp ramp read 507, 393, 602,
+  602 and 676 in channel distance from the paper against dark's 340, 510, 595,
+  595 and 765: the rung one step in from the far wall was 114 quieter than the
+  far wall itself and 209 quieter than the rung ahead of it, where dark climbs
+  the whole way.
+
+  The light value of a drawn neon is now a rung of that ramp, and the comment
+  says so. `201` becomes `#520053`, which reads 563 and makes the light ramp
+  climb as dark's does. The arithmetic behind the choice is recorded with it,
+  because it is one unit short of comfortable: `MAGENTA` and `BRIGHT_MAGENTA`
+  are 95 apart in light against 255 in dark, while two steps at the 48 the
+  separation floor below asks for need 96, so no value at the neighbours' own
+  hue can clear the floor on both sides. `#520053` buys the margin from hue
+  instead - pure magenta with no green in it, which is what `#ff00ff` is in dark
+  - reading 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA`. On paper it is
+  12.66:1 between their 10.02:1 and 14.54:1, so contrast orders the ramp the
+  same way channel distance does.
+
+  The comment above the neons claimed each was set "to the same value as the
+  base colour it echoes", which was never true of any of the five. It now says
+  which one is drawn and what its value is for, and says that the other four are
+  drawn nowhere in either build - nothing references `C.NEON_CYAN`,
+  `C.NEON_GREEN`, `C.NEON_RED` or `C.ORANGE` - so each is left as the tint one
+  step off its base that all five used to be. What a light value for one of
+  those should be is a question for whatever first draws it.
+
+- One contrast figure was a heading weight in one file and a strong-text weight
+  in two others. `#00343a` at 12.10:1 is why the site stopped quoting
+  `LIGHT_INK[14]`, and `docs/assets/style.css` called it "a heading weight
+  rather than a rule weight" while `DESIGN_LANGUAGE.md` and this file both
+  called it "a strong-text weight". The design file's own light table puts
+  headings at 7.52:1 and strong text at 16.98:1, so 12.10:1 matches neither row
+  and sits between them, and a reader checking either sentence against the table
+  found the other contradicting it. All three now say it measured rather than
+  labelled: the index is 12.10:1 against the 4.88:1 of the rule it replaced,
+  which is two and a half times the weight the prose was ruled at and heavier
+  than the 7.85:1 the body text is set in. The entry for `1.0.0-alpha.0.9.2` is
+  corrected in place, since it is one of the three places that disagreed.
+
+### Added
+
+- A separation floor over every ink the game draws with, in
+  `test/browser-shell.test.mjs`. `light mode keeps a bright ink louder than its
+  base` compares an ink with its paper, once per pair, so nothing compared two
+  inks with each other - and the re-inking closed five of light mode's six
+  tightest pairs to between a half and a third of what they had been: 127 to 52,
+  175 to 53, 114 to 56, 215 to 56, 152 to 58. Every one still reads and all of
+  them were checked in chromium; the defect was that the next re-inking could
+  close one of those margins to nothing and the suite would pass.
+
+  `MIN_INK_SEPARATION` is 48, which admits the current floor rather than buying
+  margin back, and the pair that sets the floor is the reason: `BRIGHT_WHITE`
+  against `DARK_BLUE` at 49, which the barrel roll puts on screen together when
+  the white hull crosses a row of `DARK_BLUE` floor dots. Neither ink has been
+  moved by any release, so 49 is not a margin some change spent - it is what
+  this palette has always been at its tightest, on a screen that reads. Dark's
+  tightest drawn pair is 75, and both figures are named rather than only
+  bounded.
+
+  The set of drawn indices is derived from the page's own `C.` references rather
+  than listed, so a colour a later drawing site reaches for joins the walk
+  without the test being touched. Six of the twenty-four named colours go unused
+  today, and they are exactly the ones the derivation leaves out. Line comments
+  are stripped before the scan, which is not tidiness: the comment above the
+  neons names the four nothing draws in order to say that nothing draws them, so
+  a scan over the raw page reads all four as drawn.
+
+- The warp ramp's ordering, walked in both schemes. It is the one ordering a
+  base-and-bright pair cannot reach, and the reason `NEON_MAGENTA` went
+  unchecked - the second rung is in no pair. `the light warp ramp climbs the way
+  dark's does` reads the five rungs through `warpWallColor` and asserts each is
+  louder than the one behind it, with the equal step allowed because two rungs
+  are literally the same colour. The plain wall ramp is deliberately not walked:
+  dark runs 95, 170, 425, 340, 595, because the depth bands are also doing hue.
+
+- The provenance of every colour the documentation site declares, against the
+  game's own palette rather than against a table of hex values. The release
+  decided two things that pull against each other and asserted neither: light
+  `--link` and `--rule` stop tracking the game, because the index they quoted
+  would rule ten pages of prose in near-black, while `--ship-hull` and
+  `--ship-wing` keep tracking it, because that drawing is a picture of the
+  game's ship. `test/docs-site.test.mjs` reads the stylesheet through
+  `styleSheet` and pinned a great deal of geometry with no colour assertion at
+  all, so a later reader meeting `DESIGN_LANGUAGE.md`'s opening claim - "Nothing
+  here was invented for the site" - could re-sync the two properties in one edit
+  and the suite would pass.
+
+  Both `:root` blocks are now walked against `loadBrowserEngine`'s `ANSI256` and
+  `LIGHT_INK`: each colour either equals the named index it is quoted from, or
+  is listed as one the site chose for itself and has to equal no named colour at
+  all. Nothing in either block escapes the table, so a colour added to the
+  stylesheet cannot carry an unrecorded provenance.
+
 ## [1.0.0-alpha.0.9.2] - 2026-10-10
 
 ### Fixed
@@ -115,8 +256,9 @@
 ### Changed
 
 - The documentation site no longer quotes `LIGHT_INK[14]` for its link and rule
-  colours. That index is now `#00343a` at 12.10:1 on paper, which is a
-  strong-text weight: a page of prose whose every rule and cell border is drawn
+  colours. That index is now `#00343a` at 12.10:1 on paper, two and a half times
+  the 4.88:1 the rule it replaced was measured at and heavier than the 7.85:1 the
+  body text is set in: a page of prose whose every rule and cell border is drawn
   at 12.10:1 reads as ruled in near-black. The teal those two were measured
   against, `#00757f` at 4.88:1, is pinned on the site instead, and
   `DESIGN_LANGUAGE.md` records it as a second measured substitution beside the

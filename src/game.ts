@@ -108,7 +108,7 @@ export class Game {
       detail: 0,
       frameSpent: 0,
       frameSeen: 0,
-      frameStalled: false,
+      frameStalls: 0,
       leaderboard: [],
       entryName: DEFAULT_NAME,
       entrySlot: 0,
@@ -236,7 +236,7 @@ export class Game {
     // Lowering the cut-off to catch it would stop a device genuinely at two
     // frames a second from ever being detected.
     if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME) {
-      s.frameStalled = true;
+      s.frameStalls += 1;
       return;
     }
     // And neither is the frame that ends the stall, when it is long enough to be
@@ -252,25 +252,53 @@ export class Game {
     // written to prevent - the player looks at another tab and comes back to a
     // thinner starfield.
     //
-    // The length is half the test, and the flag on its own is not enough. A
-    // flag armed by the long frame and cleared by whatever follows discards the
-    // next sample whatever it measured, so a loop alternating across the cut-off
-    // spends every short frame clearing the flag and contributes nothing at all:
-    // 300 pairs of 1.5s and 0.2s leave frameSeen at 0 and the ladder where it
-    // started, and a device stalling every other frame reads as one with no
-    // measurable frame rate rather than as a slow one. So the sample has to fall
-    // in the band a fragment of a withheld interval falls in -
-    // DETAIL_STALL_RETURN_FACTOR of the cut-off and up - and a shorter one is an
-    // ordinary frame that happens to follow a stall, which is counted. The flag
-    // is cleared either way: it marks one frame, not a state the run sits in.
+    // Three readings are a sample of that interval and not a floor under it,
+    // which is the part worth reading carefully: a return landing anywhere in a
+    // 1.000s interval is as likely to be a fragment of 300ms as one of 800ms,
+    // and the short end is just as much a piece of the stall.
     //
-    // Discarding one sample rather than lowering the cut-off is what keeps the
-    // other half of this true: a device genuinely at two frames a second is a
-    // run of samples and not one, and at 0.5s a frame it is now under the band
-    // as well, so it loses none of them and is detected by all.
-    if (s.frameStalled) {
-      s.frameStalled = false;
-      if (elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME * DETAIL_STALL_RETURN_FACTOR) {
+    // Two tests decide it, and neither works alone.
+    //
+    // How long the stall was is the first. A flag armed by one long frame and
+    // cleared by whatever follows discards the next sample whatever it measured,
+    // so a loop alternating across the cut-off spends every short frame clearing
+    // the flag and contributes nothing at all: 300 pairs of 1.5s and 0.2s leave
+    // frameSeen at 0 and the ladder where it started, and a device stalling
+    // every other frame reads as one with no measurable frame rate rather than
+    // as a slow one. A stall of two samples or more is not that device. A
+    // throttled loop delivers a run of withheld intervals, so the frame after a
+    // run is a fragment whatever its length, while 1.5s and 0.2s in turn is a
+    // single long frame each time and its short half is an ordinary frame.
+    //
+    // How long the sample is is the second, and it decides the single-stall case
+    // alone. A fragment of a withheld interval falls in a band -
+    // DETAIL_STALL_RETURN_FACTOR of the cut-off and up - and a shorter sample
+    // after one long frame is an ordinary frame, which is counted.
+    //
+    // The band is not enough by itself either, which is what the release that
+    // added it got wrong. A short return read as an ordinary frame carries a
+    // window of thirty on its own past about 283ms, so a fragment from roughly
+    // 290ms to the band floor cost a tier - the thing the guard above exists to
+    // stop. The run count is what covers it, since a spell away from the run is
+    // a run of stalls.
+    //
+    // What neither test covers is stated rather than left to be found: one stall
+    // followed by a fragment inside that 290ms-to-floor stretch is still counted
+    // and still costs a tier, and one window hands it back. That shape is a tab
+    // switch of a second or two, not a spell behind another window.
+    //
+    // The count is cleared either way: it measures a stall that has just ended,
+    // not a state the run sits in.
+    //
+    // Discarding samples rather than lowering the cut-off is what keeps the
+    // other half of this true. A device genuinely at two frames a second never
+    // reaches the cut-off at all, so it never arms either test: thirty samples
+    // at 0.5s are thirty samples, and the tier goes on the window they close.
+    if (s.frameStalls > 0) {
+      const stalls = s.frameStalls;
+      s.frameStalls = 0;
+      if (stalls > 1
+        || elapsed >= DETAIL_WINDOW_FRAMES * TARGET_FRAME_TIME * DETAIL_STALL_RETURN_FACTOR) {
         return;
       }
     }
@@ -343,7 +371,7 @@ export class Game {
     // window is what resets: its frames were spent on the run that is over.
     s.frameSpent = 0;
     s.frameSeen = 0;
-    s.frameStalled = false;
+    s.frameStalls = 0;
     s.entryName = DEFAULT_NAME;
     s.entrySlot = 0;
     s.ghostCursor = 0;
