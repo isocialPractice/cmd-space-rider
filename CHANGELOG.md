@@ -1,5 +1,125 @@
 # Changelog
 
+## [1.0.0-alpha.0.9.4] - 2026-10-12
+
+### Fixed
+
+- The ink separation floor sat a unit below the palette it fenced.
+  `1.0.0-alpha.0.9.3` wrote `MIN_INK_SEPARATION` as 48 and described what 49
+  does: "a floor at 48 is the smallest number that says the current palette is
+  acceptable and the next one may not be tighter". The tightest pair the game
+  draws is 49 - `BRIGHT_WHITE` against `DARK_BLUE` in light, which the same test
+  pins by name beside dark's 75 - so a re-inking that brought any drawn pair to
+  exactly 48 passed a guard whose own sentence said it may not. "Smallest"
+  pointed the wrong way as well: the numbers that admit this palette run upward
+  from nothing, and 49 is the largest of them rather than 48 being the smallest.
+
+  The constant is now 49, which is the figure that makes the sentence true and
+  the one the palette clears exactly: light 49, dark 75, and `NEON_MAGENTA`'s
+  margins of 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA`. Every drawn ink
+  also clears it against its paper by a wide margin - the quietest is `GRAY` at
+  304 in light and `DARK_BLUE` at 95 in dark - so the floor binds on pairs
+  rather than on the paper check beside it. `no two inks the game draws sit
+  closer than MIN_INK_SEPARATION` stays green in both schemes, and one unit
+  tighter now fails where before it passed.
+
+  Two quoted figures move with the constant. The `LIGHT_INK` comment in
+  `index.html` read "two steps at the 48 the separation floor asks for need 96"
+  and called the result "one unit short of comfortable"; at 49 the two steps
+  need 98 and the shortfall is three. The conclusion is unchanged, because
+  `MAGENTA` and `BRIGHT_MAGENTA` are 95 apart either way, so no rung at the
+  neighbours' own hue clears the floor on both sides at any value and `#520053`
+  still buys its margin from hue. The `1.0.0-alpha.0.9.3` entry is corrected in
+  place in both of the places it carried the old arithmetic.
+
+- The site's provenance walk read one `:root` block per scheme, and claimed to
+  read the stylesheet. `rootBlock` in `test/docs-site.test.mjs` resolved a
+  scheme with `find`, so `docs: every site colour says whether it is the game's
+  or the site's own` asserted the hex-valued properties of that single block
+  against `PROVENANCE`. The sheet already carries three `:root` blocks, and
+  appending a fourth defeated the walk: `:root { --edge: #ff0000; }` at the end
+  of `docs/assets/style.css` left the whole suite green with a drawn colour
+  re-inked to a value that is neither its recorded `BRIGHT_BLUE` nor any named
+  colour at all, because the dark branch matches on a block having no at-rule
+  and `find` had already returned the first such block.
+
+  `rootBlocks` collects every block a scheme resolves and `rootBlock` merges
+  them in cascade order, later blocks winning, so a scheme split in two reads
+  here as it reads in a browser and a caller asking for one property gets the
+  value that is painted. The completeness check runs over the union.
+
+  The blocks neither scheme collects are now checked too, which is what makes
+  the walk a statement about the stylesheet rather than about the parts of it
+  the predicates happen to match. One block is in that position: the `:root`
+  inside the width media query, which states the narrow layout's `--bar` and no
+  colour. A width is orthogonal to a colour scheme, so it belongs to neither
+  palette, and the exclusion is only honest while it carries no colour - put a
+  hex colour there and the test fails naming the property. All three cases fail
+  now: a drawn colour redeclared later, a new colour appended, and a colour
+  moved into the width query's block. What counts as a colour is a hex literal
+  in either form: six digits is the sheet's own convention and the provenance
+  walk asserts it for every property in the table, but the blocks no scheme
+  collects have nothing asserting it, so `--edge: #f00` dropped into the width
+  query read as a length until the predicate was widened to both.
+
+- Two places said nothing had fed a short fragment after a stall, and one had.
+  The new case in `test/performance-mode.test.mjs` opened "nothing in this file
+  fed a short fragment after a stall - the one case the test above tries is
+  0.7s, which the band discards", and the `1.0.0-alpha.0.9.3` entry repeated it
+  as the reason the hole was invisible. The test above feeds one: the band edge
+  of `the partial frame on the way back from a stall is not a sample either`
+  runs one stall and then 649.35ms, a thousandth under the 650ms floor, and
+  asserts `frameSeen === 1` - a short fragment after a stall, fed and pinned as
+  counted.
+
+  What was missing was the step after the sample rather than the sample. No case
+  carried a counted fragment on into a closed window, so nothing said what one
+  costs the ladder, and that cost is the figure the 283ms boundary turns on.
+  Both places now say that. The two cases the release added are the right ones
+  and are unchanged.
+
+### Added
+
+- Which shade glyph each depth band of the tunnel is drawn in, in
+  `test/warp.test.mjs` and for both builds. `drawTunnel` picks a glyph and a
+  colour together, four bands deep - `░` at the far wall, then `▒`, `▓`
+  and `█` at the mouth - and only the colour half was pinned. `the walls are
+  drawn from the four glyphs every wall figure counts` sorts the distinct glyphs
+  standing on the wall columns against a sorted `WALL_RAMP` and then counts each
+  as present, so exchanging the first and fourth rows of that table left the
+  distinct set unchanged, every count non-zero, every wall colour still shifting
+  on a warp, and `the light warp ramp climbs the way dark's does` still passing,
+  because that test walks inks. The whole suite passed with the tunnel inside
+  out, in both builds.
+
+  `each depth band of the tunnel is drawn in its own shade glyph` keys the
+  collected glyphs by the band the row falls in rather than flattening them, and
+  asserts each band is drawn in its own glyph alone - which is also what rejects
+  a fifth band cut inside an existing one, or a glyph drawn again at a new depth,
+  since a band coming back as two glyphs is not one glyph alone. `the shade ramp
+  climbs far to near and never doubles back` reads the rows in draw order,
+  compresses each run of one glyph to a step, and requires the four steps to
+  arrive in `WALL_RAMP`'s order. It is the weaker of the two and deliberately so:
+  the map cannot pass while it fails, and what it adds is which of the two to
+  believe. The map keys by `BAND_BOUNDS`, the test file's own copy of the `t`
+  values `drawTunnel` cuts at, so a stale copy fails it with the renderer
+  untouched; the step walk consults no copy of anything and stays green on that
+  failure. The band's glyph is `WALL_RAMP` at that band's index rather than a
+  second copy of the table, so the set assertion and the positions cannot drift
+  apart. Both new tests fail on the inside-out tunnel in both builds while the
+  set test passes.
+
+  What makes the ordering worth an assertion is that the glyph carries most of
+  the effect. Read off the canvas a cell at a time in chromium under an emulated
+  light scheme, with a warp held open, the four bands cover 14%, 29%, 75% and
+  86% of their cells: the inks span 507 to 676 of channel distance from the
+  paper, a factor of 1.33, while the cells as painted span 71 to 581, a factor
+  of 8.2. Coverage carries the ramp and the ink trims it, and it was the
+  coverage that was unordered. Dark mode measures 14%, 30%, 77%, 86% and 88%, so
+  the figure is the glyph and the font rather than the scheme. Those percentages
+  are recorded rather than asserted - they are a property of one browser's font
+  and the cell size, and nothing in the repository can rebuild them.
+
 ## [1.0.0-alpha.0.9.3] - 2026-10-11
 
 ### Fixed
@@ -39,9 +159,14 @@
   where a spell behind another window delivers the run of stalls the count
   reads. Two cases cover it in `test/performance-mode.test.mjs` - the fragment
   walked across the whole stretch after a run of stalls, and the 283ms boundary
-  either side with the window that gives the tier back - and nothing in the
-  suite fed a short fragment after a stall before, which is why the hole was
-  invisible.
+  either side with the window that gives the tier back. This entry first
+  published the reason the hole was invisible as "nothing in the suite fed a
+  short fragment after a stall before", which the file contradicts: the band
+  edge of `the partial frame on the way back from a stall is not a sample
+  either` feeds one stall and then 649.35ms, a thousandth under the floor, and
+  pins it counted. What no case did was carry a counted fragment on into a
+  closed window, so the tier one costs went unmeasured - and that cost is the
+  figure the 283ms boundary turns on.
 
 - `NEON_MAGENTA` was the one drawn index the light re-inking left behind. The
   release took the six chromatic bright indices below their base ones and left
@@ -57,12 +182,13 @@
   The light value of a drawn neon is now a rung of that ramp, and the comment
   says so. `201` becomes `#520053`, which reads 563 and makes the light ramp
   climb as dark's does. The arithmetic behind the choice is recorded with it,
-  because it is one unit short of comfortable: `MAGENTA` and `BRIGHT_MAGENTA`
-  are 95 apart in light against 255 in dark, while two steps at the 48 the
-  separation floor below asks for need 96, so no value at the neighbours' own
-  hue can clear the floor on both sides. `#520053` buys the margin from hue
-  instead - pure magenta with no green in it, which is what `#ff00ff` is in dark
-  - reading 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA`. On paper it is
+  because it is three units short of comfortable: `MAGENTA` and
+  `BRIGHT_MAGENTA` are 95 apart in light against 255 in dark, while two steps at
+  the 49 the separation floor below asks for need 98, so no value at the
+  neighbours' own hue can clear the floor on both sides. `#520053` buys the
+  margin from hue instead - pure magenta with no green in it, which is what
+  `#ff00ff` is in dark - reading 56 from `MAGENTA` and 55 from
+  `BRIGHT_MAGENTA`. On paper it is
   12.66:1 between their 10.02:1 and 14.54:1, so contrast orders the ramp the
   same way channel distance does.
 
@@ -98,14 +224,16 @@
   them were checked in chromium; the defect was that the next re-inking could
   close one of those margins to nothing and the suite would pass.
 
-  `MIN_INK_SEPARATION` is 48, which admits the current floor rather than buying
-  margin back, and the pair that sets the floor is the reason: `BRIGHT_WHITE`
-  against `DARK_BLUE` at 49, which the barrel roll puts on screen together when
-  the white hull crosses a row of `DARK_BLUE` floor dots. Neither ink has been
-  moved by any release, so 49 is not a margin some change spent - it is what
-  this palette has always been at its tightest, on a screen that reads. Dark's
-  tightest drawn pair is 75, and both figures are named rather than only
-  bounded.
+  `MIN_INK_SEPARATION` is 49, which admits the current palette exactly rather
+  than buying margin back, and the pair that sets the floor is the reason:
+  `BRIGHT_WHITE` against `DARK_BLUE` at 49, which the barrel roll puts on screen
+  together when the white hull crosses a row of `DARK_BLUE` floor dots. Neither
+  ink has been moved by any release, so 49 is not a margin some change spent -
+  it is what this palette has always been at its tightest, on a screen that
+  reads. Dark's tightest drawn pair is 75, and both figures are named rather
+  than only bounded. This entry first published the floor as 48, which admitted
+  a palette a unit tighter than the one it was written for; it is corrected in
+  place by `1.0.0-alpha.0.9.4`, which also records why 49 is the figure.
 
   The set of drawn indices is derived from the page's own `C.` references rather
   than listed, so a colour a later drawing site reaches for joins the walk
@@ -138,8 +266,12 @@
   Both `:root` blocks are now walked against `loadBrowserEngine`'s `ANSI256` and
   `LIGHT_INK`: each colour either equals the named index it is quoted from, or
   is listed as one the site chose for itself and has to equal no named colour at
-  all. Nothing in either block escapes the table, so a colour added to the
-  stylesheet cannot carry an unrecorded provenance.
+  all. Nothing in those two blocks escapes the table. This entry first published
+  that as "a colour added to the stylesheet cannot carry an unrecorded
+  provenance", which was the broader claim and was not what the walk checked -
+  it resolved one block per scheme, so a colour in a later block escaped it.
+  `1.0.0-alpha.0.9.4` widens the walk to every block and the broader sentence
+  holds from there.
 
 ## [1.0.0-alpha.0.9.2] - 2026-10-10
 

@@ -306,6 +306,148 @@ for (const build of BUILDS) {
   });
 }
 
+/**
+ * The `t` boundaries drawTunnel bands the play area at, far to near.
+ *
+ * `t` is `(row - gameTop) / (gameBottom - gameTop)`, so the bands these cut are
+ * WALL_RAMP's four entries in order: below 0.2 is the far wall, and from 0.8 on
+ * is the mouth. The glyph for a band is WALL_RAMP at that band's index rather
+ * than a second copy of the table, so the set above and the positions below
+ * cannot drift apart.
+ */
+const BAND_BOUNDS = [0.2, 0.5, 0.8];
+
+/** Which band a row's `t` falls in, as an index into WALL_RAMP. */
+function bandOf(t) {
+  let band = 0;
+  while (band < BAND_BOUNDS.length && t >= BAND_BOUNDS[band]) band++;
+  return band;
+}
+
+/** A band's half-open `t` range, for naming it in a failure. */
+function bandRange(band) {
+  if (band === 0) return `t below ${BAND_BOUNDS[0]}`;
+  if (band === BAND_BOUNDS.length) return `t from ${BAND_BOUNDS[band - 1]} on`;
+  return `t from ${BAND_BOUNDS[band - 1]} to ${BAND_BOUNDS[band]}`;
+}
+
+/**
+ * The wall glyphs of one rendered frame, kept in the shape the bands are in:
+ * one entry per row of the play area, far to near, carrying the band the row
+ * falls in and the distinct glyphs standing on its wall columns.
+ *
+ * Collected the way rampGlyphs does - located from `tunnelSpan` and walked
+ * outward through the thickness - and for the same reason, so a glyph this file
+ * does not know about arrives rather than being filtered away. What it does not
+ * do is flatten the rows together, which is the whole difference: the set is
+ * already pinned, and where each member of it belongs is not.
+ *
+ * A row can legitimately carry no glyph at all. The ring ends overwrite the
+ * wall at `tunnelSpan`'s own two columns, so a ring row one cell thick has its
+ * only wall cell taken, and at 80x24 three rows come back empty that way - the
+ * same three in both builds, since the ring spacing and the thickness ramp are
+ * the same arithmetic in each.
+ */
+function rampRows(build, screen) {
+  const gameTop = HUD_ROWS;
+  const gameBottom = screen.height - FOOTER_ROWS;
+  const out = [];
+  for (let row = gameTop; row < gameBottom; row++) {
+    const text = rowText(screen, row);
+    const { left, right } = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
+    const glyphs = new Set();
+    for (const [from, step] of [[left, -1], [right, 1]]) {
+      for (let x = from; x >= 0 && x < screen.width; x += step) {
+        const char = text[x];
+        if (char === ' ' || char === undefined) break;
+        if (NOT_RAMP.has(char)) continue;
+        glyphs.add(char);
+      }
+    }
+    const t = (row - gameTop) / (gameBottom - gameTop);
+    out.push({ row, t, band: bandOf(t), glyphs: [...glyphs] });
+  }
+  return out;
+}
+
+for (const build of BUILDS) {
+  test(`${build.name}: each depth band of the tunnel is drawn in its own shade glyph`, () => {
+    // The glyph is most of what makes the tunnel recede, and until this test the
+    // ink was the only half pinned. Read off the canvas a cell at a time under an
+    // emulated light scheme, with a warp held open, the four bands cover 14%,
+    // 29%, 75% and 86% of their cells: the inks span 507 to 676 of channel
+    // distance from the paper, a factor of 1.33, while the cells as painted span
+    // 71 to 581, a factor of 8.2. Coverage carries the ramp and the ink trims it.
+    // Those percentages are not asserted anywhere - they are a property of one
+    // browser's font and nothing here can rebuild them - but they are why the
+    // ordering is worth an assertion rather than a comment.
+    const game = quietRun(build);
+    const screen = new build.ScreenBuffer(80, 24);
+    build.renderGame(screen, game.state);
+
+    const byBand = new Map();
+    for (const { band, glyphs } of rampRows(build, screen)) {
+      for (const glyph of glyphs) {
+        if (!byBand.has(band)) byBand.set(band, new Set());
+        byBand.get(band).add(glyph);
+      }
+    }
+
+    WALL_RAMP.forEach((glyph, band) => {
+      assert.deepEqual(
+        [...(byBand.get(band) ?? [])], [glyph],
+        `band ${band + 1} of the tunnel - ${bandRange(band)} - should be drawn`
+        + ` in ${glyph} alone, and came back as`
+        + ` ${JSON.stringify([...(byBand.get(band) ?? [])])}. The set test above passes with the`
+        + ` tunnel inside out: exchange the far wall's row of drawTunnel's table with the mouth's`
+        + ` and the distinct glyphs are unchanged, every count stays non-zero, and both warp ramp`
+        + ` tests still pass because they walk inks`
+      );
+    });
+
+    assert.equal(byBand.size, WALL_RAMP.length,
+      `the ramp's bands came back as ${JSON.stringify([...byBand.keys()])} rather than all four,`
+      + ' so a band the figures count was not reached at 80x24');
+  });
+
+  test(`${build.name}: the shade ramp climbs far to near and never doubles back`, () => {
+    // The same statement, derived without BAND_BOUNDS, and that is the whole of
+    // what it adds. The map above is the stronger assertion - it cannot pass
+    // while this fails, since a band holding one glyph alone makes the compressed
+    // draw order WALL_RAMP by itself - so this is not a second net under it. A
+    // fifth band cut inside an existing one is caught there rather than here:
+    // cut 0.65 to 0.7 out of the third band and draw it in ▒ and `each depth
+    // band of the tunnel is drawn in its own shade glyph` is what reports it,
+    // because a band coming back as two glyphs is not one glyph alone.
+    //
+    // What this is for is which of the two to believe. The map keys the glyphs it
+    // collects by BAND_BOUNDS, this file's own copy of the t values drawTunnel
+    // cuts at, so it answers for the bands as this file has them; a stale copy
+    // fails it with the renderer untouched. This reads nothing but draw order -
+    // the rows as they are painted, each run of one glyph compressed to a single
+    // step, the four steps required to arrive in WALL_RAMP's order - so it stays
+    // green on that failure and red when the tunnel really is drawn out of order.
+    const game = quietRun(build);
+    const screen = new build.ScreenBuffer(80, 24);
+    build.renderGame(screen, game.state);
+
+    const steps = [];
+    for (const { row, glyphs } of rampRows(build, screen)) {
+      assert.ok(glyphs.length <= 1,
+        `row ${row} carries ${JSON.stringify(glyphs)}, so one row spans two bands and the ramp`
+        + ' has no single depth there');
+      const [glyph] = glyphs;
+      if (glyph !== undefined && glyph !== steps[steps.length - 1]) steps.push(glyph);
+    }
+
+    assert.deepEqual(steps, WALL_RAMP,
+      `the tunnel ramps through ${JSON.stringify(steps)} from the far wall to the mouth rather`
+      + ` than ${JSON.stringify(WALL_RAMP)}. Read as steps rather than as a set, so a repeat at a`
+      + ' new depth is a step of its own and the lightest-to-heaviest order is what carries the'
+      + ' depth');
+  });
+}
+
 // ----- The banner -----
 
 for (const build of BUILDS) {

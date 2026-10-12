@@ -1189,14 +1189,54 @@ const PROVENANCE = {
   },
 };
 
-/** The `:root` block for a scheme: the sheet's own, or the light re-inking. */
-function rootBlock(scheme) {
-  const found = style.rules.find((rule) => rule.selectors.includes(':root')
+/**
+ * Every `:root` block a scheme resolves, in cascade order.
+ *
+ * All of them rather than the first, which is the difference between reading the
+ * sheet and reading the top of it. More than one is not hypothetical - the sheet
+ * already carries three `:root` blocks, and a fourth is one appended line away -
+ * and with `find` here the walk below read the block at the top of the file and
+ * called the whole stylesheet accounted for. Appending
+ * `:root { --edge: #ff0000; }` left the entire suite green: the dark branch
+ * matches on a block having no at-rule, `find` had already returned the first
+ * such block, and so a colour that wins the cascade reached neither the
+ * provenance table nor the completeness check under it.
+ */
+function rootBlocks(scheme) {
+  const found = style.rules.filter((rule) => rule.selectors.includes(':root')
     && (scheme === 'light'
       ? rule.at.some((prelude) => prelude.includes('prefers-color-scheme: light'))
       : !rule.at.length));
-  assert.ok(found, `the sheet declares :root for ${scheme}`);
-  return found.declarations;
+  assert.ok(found.length, `the sheet declares :root for ${scheme}`);
+  return found;
+}
+
+/**
+ * A scheme's `:root` declarations as the cascade resolves them, later blocks
+ * winning.
+ *
+ * Merged rather than returned as a list, so a scheme split across two blocks
+ * reads here exactly as it reads in a browser - and so a caller asking for one
+ * property gets the value that is actually painted rather than the first one
+ * declared.
+ */
+function rootBlock(scheme) {
+  return Object.assign({}, ...rootBlocks(scheme).map((rule) => rule.declarations));
+}
+
+/**
+ * The hex-valued custom properties of a declaration block.
+ *
+ * Both hex forms, because a form the sheet does not use today is still one a
+ * later edit can write. Six digits is this sheet's convention and the provenance
+ * walk below asserts it for every property in the table, so widening here costs
+ * that nothing - but the walk at the foot of the test reads blocks no scheme
+ * collects, where nothing asserts the convention at all, and `--edge: #f00`
+ * dropped into the width query read as a length rather than as a colour.
+ */
+function blockColours(declarations) {
+  return Object.keys(declarations).filter((name) => name.startsWith('--')
+    && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test((declarations[name] || '').trim()));
 }
 
 test("docs: every site colour says whether it is the game's or the site's own", () => {
@@ -1224,12 +1264,31 @@ test("docs: every site colour says whether it is the game's or the site's own", 
         `${scheme} ${property} is ${value} and C.${source} resolves to ${named[source]}`);
     }
 
-    // Nothing in the block escapes the table, so a colour added to the
-    // stylesheet cannot carry an unrecorded provenance.
-    const colours = Object.keys(declared)
-      .filter((name) => name.startsWith('--') && /^#[0-9a-f]{6}$/i.test((declared[name] || '').trim()));
-    assert.deepEqual(colours.sort(), Object.keys(PROVENANCE[scheme]).sort(),
-      `${scheme}: every colour the block declares is accounted for`);
+    // Nothing in any of the scheme's blocks escapes the table, so a colour added
+    // to the stylesheet cannot carry an unrecorded provenance. Taken from the
+    // merged declarations, so this is the union over every block the scheme
+    // resolves rather than one of them.
+    assert.deepEqual(blockColours(declared).sort(), Object.keys(PROVENANCE[scheme]).sort(),
+      `${scheme}: every colour the scheme's :root blocks declare is accounted for`);
+  }
+
+  // And the blocks neither scheme collects declare no colour at all, which is
+  // what makes the two walks above a statement about the stylesheet rather than
+  // about the parts of it they happen to match.
+  //
+  // One block is in that position today: the `:root` inside the width media
+  // query, which states the narrow layout's --bar and nothing else. It is left
+  // out of both schemes deliberately - a width is orthogonal to a colour scheme,
+  // so its declarations belong to neither palette - and the exclusion is only
+  // honest while it carries no colour. Put a hex colour there, in either form,
+  // and this fails naming the property, rather than the colour slipping past a
+  // predicate that was never about it.
+  const collected = new Set([...rootBlocks('dark'), ...rootBlocks('light')]);
+  for (const rule of style.rules) {
+    if (!rule.selectors.includes(':root') || collected.has(rule)) continue;
+    assert.deepEqual(blockColours(rule.declarations), [],
+      `a :root under ${JSON.stringify(rule.at)} declares a colour, and no scheme collects that `
+      + 'block - give it a provenance entry, or move the colour to the scheme it belongs to');
   }
 });
 
