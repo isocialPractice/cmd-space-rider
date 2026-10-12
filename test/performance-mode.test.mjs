@@ -394,9 +394,12 @@ test('the partial frame on the way back from a stall is not a sample either', ()
 });
 
 test('a short frame after a run of stalls is a fragment, whatever it measured', () => {
-  // The hole the band left behind when it shipped, and nothing in this file fed a
-  // short fragment after a stall - the one case the test above tries is 0.7s,
-  // which the band discards.
+  // The hole the band left behind when it shipped. A short fragment after a
+  // stall was not the unmeasured part - this file already fed one, in the
+  // band-edge case of the test above: a stall and then 649.35ms, a thousandth
+  // under the floor, pinned as counted. What no case did was carry a counted
+  // fragment on into a closed window, so nothing said what one costs the
+  // ladder, and that cost is the figure the 283ms boundary below turns on.
   //
   // A band on the discarded sample alone reads a short return as an ordinary
   // frame, and one such sample carries a window of thirty on its own as soon as

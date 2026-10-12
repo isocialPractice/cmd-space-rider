@@ -2345,3 +2345,96 @@ still be found by name.
     run belongs beside them either way, since nothing in the suite feeds two
     frame lengths in turn.
   - From: Polish
+
+## Archived 10-12-26
+
+- [x] Nothing pins how close two inks drawn on one screen may sit
+  - **Issue**: The six re-inked brights all read correctly - the name entry
+    screen, the debug menu's selected row, the tunnel, the ship, the HUD, the
+    obstacles, the orbs and both flashes were driven in chromium under an
+    emulated light scheme and every observation the release asked for holds.
+    What also happened, unmeasured, is that light mode's inks closed up.
+    Measured as channel distance over every index `index.html` draws with -
+    all of `LIGHT_INK` bar `DARK_GREEN` and `DARK_CYAN`, which no drawing site
+    reaches for - the six tightest light pairs are now 49, 52, 53, 56, 56 and
+    58, against 75, 85, 170, 170, 170 and 170 in dark. Five of the six involve
+    a bright this release moved, and each was two to four times wider before
+    it: `BLUE`/`BRIGHT_BLUE` 127 to 52, `BRIGHT_CYAN`/`DARK_BLUE` 175 to 53,
+    `BRIGHT_GREEN`/`BRIGHT_CYAN` 114 to 56, `BRIGHT_BLUE`/`DARK_BLUE` 215 to
+    56, `BRIGHT_GREEN`/`BRIGHT_WHITE` 152 to 58. The sixth, `BRIGHT_WHITE`
+    against `DARK_BLUE` at 49, moved neither ink and is the pre-existing floor.
+    None of this is a defect today: the tightest pair was read off the canvas
+    on the name entry screen, where the hint line is `BRIGHT_GREEN` and the
+    active slot blinks through `BRIGHT_WHITE`, and came back `#7d9381` against
+    `#727276`, 55 apart as painted, both clearing the paper at 13.15:1 and
+    16.98:1. The gap is that nothing can see it. `light mode keeps a bright ink
+    louder than its base` compares an ink with its paper; no test compares two
+    inks with each other, so the next re-inking can close one of these margins
+    to nothing and the suite will pass. The margin is a third of what it was
+    and it was not chosen - it fell out.
+  - **Goal**: Resolve to [light-ink-separation-floor.prompt.md](.claude/prompts/light-ink-separation-floor.prompt.md)
+  - From: UI/UX Override - the re-inked light brights
+- [x] Return Frame Sample 3
+  - **Issue**: Bounding the post-stall discard to a band on the discarded
+    sample closed the alternating-stall hole and reopened the one the discard
+    was written for. A post-stall sample under the band floor is now counted,
+    and one sample carries a window of thirty on its own past about 283ms -
+    twenty-nine frames at the target are 966.7ms against the 1250ms a 41.7ms
+    mean needs - so a return fragment from roughly 290ms to just under 650ms
+    costs a tier in both builds. Fed three frames at the 1.000s cut-off, then
+    one fragment, then thirty at the target: 0.283 leaves `detail` at 0, 0.29
+    through 0.64 take it to 1, and 0.65 and up are discarded and leave it at 0.
+    That is the outcome the comment above the guard still names as the thing it
+    prevents, in both builds - "the player looks at another tab and comes back
+    to a thinner starfield" - and before this release no fragment length could
+    produce it. The same comment argues both sides: the band is cut from three
+    fragments measured at 650ms, 750ms and 850ms and reads 650ms as their floor,
+    two sentences after saying the return "lands anywhere in the interval",
+    which puts over a third of all returns inside the band's own gap. Nothing in
+    the suite feeds a short fragment after a stall, so the case is invisible -
+    the one fragment `the partial frame on the way back from a stall is not a
+    sample either` tries is 0.7s, which the band discards.
+  - **Goal**: Resolve to [stall-return-band-counts-a-short-return.prompt.md](.claude/prompts/stall-return-band-counts-a-short-return.prompt.md)
+  - From: Polish
+- [x] One contrast figure is a heading weight in one file and a strong-text
+  weight in two others
+  - **Issue**: `#00343a` at 12.10:1 is the reason the site stopped quoting
+    `LIGHT_INK[14]`, and the three files that record the decision describe its
+    weight two different ways. `docs/assets/style.css:53` calls it "a heading
+    weight rather than a rule weight"; `DESIGN_LANGUAGE.md:85` and
+    `CHANGELOG.md:119` both call it "a strong-text weight". The design file's own
+    light table is the authority and puts headings at 7.52:1 and strong text at
+    16.98:1, so 12.10:1 is between its two named rows and matches neither - 4.58
+    above the heading figure and 4.88 below the strong-text one. A reader
+    checking either sentence against the table finds the other sentence
+    contradicting it, and the one thing both are trying to say, that the index is
+    far too heavy for a rule, is the part neither needs a weight name for.
+  - **Goal**: Say the same thing in all three places, measured rather than
+    labelled: the index is 12.10:1 where the rule it replaced was 4.88:1, which
+    is two and a half times the weight the prose was ruled at and above the
+    7.85:1 the body text is set in. Drop the comparison to a named role, or name
+    the two rows it sits between rather than picking one.
+  - From: Code Review Override - the band that counts a short return, and the weights nothing holds
+- [x] Nothing holds the site's light teal apart from the game's re-inked index
+  - **Issue**: The release decided, in three documents, that
+    `docs/assets/style.css` keeps `--link` and `--rule` at the site teal
+    `#00757f` and no longer tracks `LIGHT_INK[14]`, while `--ship-hull` and
+    `--ship-wing` do follow the game to `#00343a` and `#04116e`. Both halves of
+    that are deliberate and neither is asserted anywhere.
+    `test/docs-site.test.mjs` reads the stylesheet through `styleSheet` and pins
+    a great deal of geometry, and makes no colour assertion at all, so a later
+    run that re-reads `DESIGN_LANGUAGE.md`'s opening claim - "Nothing here was
+    invented for the site: ... the light theme is the game's own re-inking of
+    it" - can re-sync the two properties to the game in one edit, take every
+    rule and cell border on ten pages to 12.10:1, and the suite will pass. This
+    is the shape of the defect the same release fixed in the palette: the entry
+    says six inverted pairs shipped because "nothing in the suite compared two
+    inks with each other", and the divergence written on the way out is held by
+    nothing either.
+  - **Goal**: Pin the pair of facts the release decided, in
+    `test/docs-site.test.mjs`, against `loadBrowserEngine`'s own `LIGHT_INK`
+    rather than against a table of hex values: that the light `--link` and
+    `--rule` are not `LIGHT_INK[14]`, and that `--ship-hull`, `--ship-wing` and
+    `--ship-engine` are `LIGHT_INK[14]`, `[12]` and `[6]`. The dark block tracks
+    the base palette the same way and can be pinned in the same walk.
+  - From: Code Review Override - the band that counts a short return, and the weights nothing holds

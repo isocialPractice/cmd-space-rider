@@ -260,9 +260,9 @@ const LIGHT_INK={
   // 510, 595, 595, 765.
   //
   // 563 is about all the corridor allows, and the arithmetic is worth recording
-  // because it is one unit short of comfortable. MAGENTA and BRIGHT_MAGENTA are
-  // 95 apart in light against 255 in dark, while two steps at the 48 the
-  // separation floor asks for need 96 - so a rung at its neighbours' own hue
+  // because it is three units short of comfortable. MAGENTA and BRIGHT_MAGENTA
+  // are 95 apart in light against 255 in dark, while two steps at the 49 the
+  // separation floor asks for need 98 - so a rung at its neighbours' own hue
   // cannot clear the floor on both sides at any value. #520053 buys the margin
   // from hue instead: pure magenta with no green in it, which is what #ff00ff is
   // in dark, reading 56 from MAGENTA and 55 from BRIGHT_MAGENTA across 56 and 39

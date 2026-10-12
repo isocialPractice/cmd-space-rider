@@ -173,12 +173,20 @@ function drawnInks() {
  * The tightest the game has ever drawn two inks together, in channel distance,
  * and the floor a re-inking may not take them below.
  *
- * 48 admits the current floor rather than buying margin back, and the pair that
- * sets it is the reason: BRIGHT_WHITE against DARK_BLUE at 49, which the barrel
- * roll puts on screen together when the white hull crosses a row of DARK_BLUE
- * floor dots. Neither ink has been moved by any release, so 49 is not a margin
- * some change spent - it is what this palette has always been at its tightest,
- * on a screen that reads.
+ * 49 is the floor and 49 is the pair that sets it: BRIGHT_WHITE against
+ * DARK_BLUE, which the barrel roll puts on screen together when the white hull
+ * crosses a row of DARK_BLUE floor dots. Neither ink has been moved by any
+ * release, so 49 is not a margin some change spent - it is what this palette
+ * has always been at its tightest, on a screen that reads.
+ *
+ * The floor sits on that pair rather than a unit under it, and which of the two
+ * it is decides what the figure promises. Every number at or below 49
+ * admits the palette as it stands, so 49 is the largest of them and the only
+ * one that also forbids a tighter palette: at 48 a re-inking may close any pair
+ * to exactly 48 and pass. 1.0.0-alpha.0.9.3 wrote 48 and described what 49
+ * does, which left the guard a unit looser than its own sentence claimed - and
+ * called 48 the smallest such number, where the admitting numbers run upward
+ * from nothing and 49 is their largest.
  *
  * What the figure is for is the next re-inking, not this one. 1.0.0-alpha.0.9.2
  * took light mode's six chromatic bright indices below their base ones so a
@@ -188,10 +196,10 @@ function drawnInks() {
  * Every one of those still reads, and all of them were checked in chromium. The
  * defect was that nothing could see the loss: the pair test above compares an
  * ink with its paper, so a margin could go to nothing and the suite would pass.
- * A floor at 48 is the smallest number that says the current palette is
- * acceptable and the next one may not be tighter.
+ * A floor at 49 is what says the current palette is acceptable and the next one
+ * may not be tighter.
  */
-const MIN_INK_SEPARATION = 48;
+const MIN_INK_SEPARATION = 49;
 
 test('light mode keeps a bright ink louder than its base', () => {
   // A pair marks the live thing by drawing it in the bright index and its
