@@ -40,103 +40,52 @@ its origin survives archiving into `## Complete`.
   `index.html`, and nothing in the repository reproduces it.
   - From: Measurement
 
-### UI/UX Override - the glyph half of the tunnel ramp
+### Code Review Override - the band coverage figures and an assertion that cannot fail
 
-- [ ] The separation floor sits one unit below the palette it fences
-  - **Issue**: The `MIN_INK_SEPARATION` comment in
-    `test/browser-shell.test.mjs` closes "A floor at 48 is the smallest number
-    that says the current palette is acceptable and the next one may not be
-    tighter", and the assertion under it is `apart >= MIN_INK_SEPARATION` at 48.
-    The tightest drawn pair is 49 - `BRIGHT_WHITE` against `DARK_BLUE` in light,
-    which the same test pins by name beside dark's 75 - so a re-inking that
-    brings any drawn pair to exactly 48 passes a guard whose own sentence says
-    it may not. "Smallest" points the wrong way as well: every number at or
-    below 49 admits the current palette and 49 is the largest of them, so 48 is
-    neither the smallest such number nor the one that forbids a tighter palette.
-    The figure is quoted in two further places that would move with it -
-    `index.html`'s "two steps at the 48 the separation floor asks for need 96",
-    above the `LIGHT_INK` neons, and the `### Added` entry for
-    1.0.0-alpha.0.9.3 in `CHANGELOG.md`.
-  - **Goal**: Decide which of the two was meant and make the other match. Either
-    move the constant to 49, which is the value that makes the sentence true and
-    which the palette clears exactly - light 49, dark 75, and `NEON_MAGENTA`'s
-    new margins of 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA` - and then
-    correct the two quoted figures, where `index.html`'s two steps become 98 and
-    its conclusion is unchanged because `MAGENTA` and `BRIGHT_MAGENTA` are 95
-    apart either way; or keep 48 and say what it actually does, which is admit
-    the current palette with a single unit of slack, dropping the guarantee the
-    test does not provide. Changing the constant must leave
-    `no two inks the game draws sit closer than MIN_INK_SEPARATION` green in
-    both schemes.
-  - From: UI/UX Override - the glyph half of the tunnel ramp
-- [ ] The site's provenance walk reads one `:root` block per scheme
-  - **Issue**: `rootBlock` in `test/docs-site.test.mjs` resolves a scheme with
-    `style.rules.find(...)`, taking the first `:root` whose at-rule preludes
-    match, and
-    `docs: every site colour says whether it is the game's or the site's own`
-    then asserts that the hex-valued custom properties of that one block are
-    exactly the keys of `PROVENANCE`. More than one `:root` is not
-    hypothetical: the sheet already carries a third at
-    `docs/assets/style.css:326`, inside a width media query. Appending
-    `:root { --accent: #ff0000; }` to `docs/assets/style.css` leaves both new
-    tests green - the dark branch matches on `!rule.at.length` and `find` has
-    already returned the block at line 9, so the added colour reaches neither
-    the table nor the completeness check. The in-code comment is accurate at
-    "Nothing in the block escapes the table"; the `### Added` entry in
-    `CHANGELOG.md` states it as "Nothing in either block escapes the table, so a
-    colour added to the stylesheet cannot carry an unrecorded provenance", which
-    is the broader claim a reader would rely on and the one that does not hold.
-  - **Goal**: Collect every `:root` a scheme resolves rather than the first -
-    `filter` in place of `find`, merging the declarations - and assert the union
-    of their hex-valued properties against `PROVENANCE`, which also covers a
-    light block split in two. The width media query's `:root` carries a layout
-    token today and would need either a provenance entry or an explicit
-    exclusion naming why a block with no colour in it is skipped. Keep the
-    present assertions of both new tests green, and if the narrower scope is
-    deliberate, bring the CHANGELOG sentence back to what the code checks.
-  - From: UI/UX Override - the glyph half of the tunnel ramp
-- [ ] Two places say nothing fed a short fragment after a stall, and one did
-  - **Issue**: The new case in `test/performance-mode.test.mjs` opens "nothing
-    in this file fed a short fragment after a stall - the one case the test
-    above tries is 0.7s, which the band discards", and the `### Fixed` entry in
-    `CHANGELOG.md` repeats it as "nothing in the suite fed a short fragment
-    after a stall before, which is why the hole was invisible". The test above
-    feeds one. Its band-edge case runs `trackFrameRate(window)` and then
-    `trackFrameRate(floor * 0.999)`, which is 649.35ms after a single stall, and
-    asserts `frameSeen === 1` - a short fragment after a stall, fed and pinned
-    as counted. What was missing is the step after the sample rather than the
-    sample: nothing closed a window on a counted fragment, so nothing said what
-    one costs the ladder, which is the figure the 283ms boundary turns on.
-  - **Goal**: Say in both places what was actually uncovered - that a short
-    fragment after a stall was already fed and pinned as counted at the band
-    edge, and that no case carried one into a closed window, so the tier it
-    costs went unmeasured. The two new cases are the right ones and want no
-    change.
-  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [ ] An assertion in the new band map cannot fail
+  - **Issue**: `assert.equal(byBand.size, WALL_RAMP.length, ...)` at the foot of
+    `each depth band of the tunnel is drawn in its own shade glyph` in
+    `test/warp.test.mjs` is unreachable. `bandOf` returns only 0 through 3, so
+    `byBand` can never hold a fifth key, and the `WALL_RAMP.forEach` directly
+    above it already asserts that each of those four comes back as exactly one
+    glyph - which is what fails, first, for a band that was not reached, since an
+    absent band compares `[]` against `[glyph]`. No render makes `byBand.size`
+    anything but 4 by the time the equality is evaluated, so its message - "so a
+    band the figures count was not reached at 80x24" - names a state the
+    assertion above it has already rejected. Verified by reasoning rather than by
+    a failing input, which is the point: there is no input.
+  - **Goal**: Drop it, or give the thing it was written for somewhere it can
+    fail. The question it asks - whether all four bands are reached at 80x24 - is
+    the `forEach`'s job now, and if it is wanted separately from the glyph check
+    it has to be read before the per-band assertions rather than after them.
+  - From: Code Review Override - the band coverage figures and an assertion that cannot fail
 
-#### Found Issues
+#### Resolve Issues
 
-- [ ] Nothing pins which shade glyph each depth band of the tunnel is drawn in
-  - **Issue**: `drawTunnel` picks a glyph and a colour together, four bands
-    deep - `░` at the far wall, then `▒`, `▓` and `█` at the mouth - and only
-    the colour half is pinned. `the walls are drawn from the four glyphs every
-    wall figure counts`, at `test/warp.test.mjs:285`, compares the distinct
-    glyphs standing on the wall columns `.sort()`ed against a `.sort()`ed
-    `WALL_RAMP` and then counts each as present. Nothing says which glyph
-    belongs to which band, so exchanging the first and fourth rows of that
-    table - `█` at the far wall and `░` at the mouth - leaves the distinct set
-    unchanged, every count non-zero, every wall colour still shifting on a
-    warp, and `the light warp ramp climbs the way dark's does` still passing,
-    because that test walks inks. The whole suite passes with the tunnel inside
-    out. What this release's verification measured is why that matters: read
-    off the canvas a cell at a time under an emulated light scheme, with a warp
-    held open, the four bands cover 14%, 29%, 75% and 86% of their cells, so
-    the inks span 507 to 676 of channel distance from the paper - a factor of
-    1.33 - while the cells as painted span 71 to 581, a factor of 8.2. Coverage
-    carries the ramp and the ink trims it, and it is the coverage that is
-    unordered. Dark mode measures 14%, 30%, 77%, 86% and 88%, so the figure is
-    the glyph and the font rather than the scheme.
-  - **Goal**: Resolve to [tunnel-ramp-glyph-order.prompt.md](.claude/prompts/tunnel-ramp-glyph-order.prompt.md)
+- [ ] Band Coverage Figures 1
+  - **Issue**: The dark half of the coverage measurement is published as five
+    figures for a four-band ramp. The `### Added` entry for 1.0.0-alpha.0.9.4 in
+    `CHANGELOG.md` gives light as "the four bands cover 14%, 29%, 75% and 86% of
+    their cells" and then dark as "Dark mode measures 14%, 30%, 77%, 86% and
+    88%", and `drawTunnel` has four bands drawn in four glyphs, so the fifth dark
+    figure belongs to nothing either sentence names. The conclusion it is offered
+    for - "so the figure is the glyph and the font rather than the scheme" - is a
+    comparison between two lists of different lengths, and a reader cannot tell
+    which dark figure pairs with light's 29% or what the extra one measured. The
+    same five sit in the completed item's own `**Issue**`, where they came from,
+    and `test/warp.test.mjs` quotes only the four. The entry says the percentages
+    are a property of one browser's font and that nothing in the repository can
+    rebuild them, which is why the fifth cannot simply be recomputed and
+    corrected.
+  - **Goal**: Say what the fifth dark figure is, in the CHANGELOG entry and in
+    the item text that carries it, or take it out. If it is the ring-end glyph or
+    a fifth wall colour rather than a depth band, name it as that and say why
+    dark was read over one more sample than light; if dark was measured at five
+    rows rather than four bands, say that instead. Re-measuring needs chromium,
+    which this project has so far declined, so the alternative is to publish the
+    four that line up with the four bands, record that dark was read the same way
+    and reached the same conclusion, and leave the fifth out rather than leave it
+    unexplained.
   - From: UI/UX Override - the glyph half of the tunnel ramp
 
 ### Create and Deploy GitHub Pages Override
@@ -220,98 +169,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 132 earlier items in `TODO-archive.md`, newest last.
+> 136 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Nothing pins how close two inks drawn on one screen may sit
-  - **Issue**: The six re-inked brights all read correctly - the name entry
-    screen, the debug menu's selected row, the tunnel, the ship, the HUD, the
-    obstacles, the orbs and both flashes were driven in chromium under an
-    emulated light scheme and every observation the release asked for holds.
-    What also happened, unmeasured, is that light mode's inks closed up.
-    Measured as channel distance over every index `index.html` draws with -
-    all of `LIGHT_INK` bar `DARK_GREEN` and `DARK_CYAN`, which no drawing site
-    reaches for - the six tightest light pairs are now 49, 52, 53, 56, 56 and
-    58, against 75, 85, 170, 170, 170 and 170 in dark. Five of the six involve
-    a bright this release moved, and each was two to four times wider before
-    it: `BLUE`/`BRIGHT_BLUE` 127 to 52, `BRIGHT_CYAN`/`DARK_BLUE` 175 to 53,
-    `BRIGHT_GREEN`/`BRIGHT_CYAN` 114 to 56, `BRIGHT_BLUE`/`DARK_BLUE` 215 to
-    56, `BRIGHT_GREEN`/`BRIGHT_WHITE` 152 to 58. The sixth, `BRIGHT_WHITE`
-    against `DARK_BLUE` at 49, moved neither ink and is the pre-existing floor.
-    None of this is a defect today: the tightest pair was read off the canvas
-    on the name entry screen, where the hint line is `BRIGHT_GREEN` and the
-    active slot blinks through `BRIGHT_WHITE`, and came back `#7d9381` against
-    `#727276`, 55 apart as painted, both clearing the paper at 13.15:1 and
-    16.98:1. The gap is that nothing can see it. `light mode keeps a bright ink
-    louder than its base` compares an ink with its paper; no test compares two
-    inks with each other, so the next re-inking can close one of these margins
-    to nothing and the suite will pass. The margin is a third of what it was
-    and it was not chosen - it fell out.
-  - **Goal**: Resolve to [light-ink-separation-floor.prompt.md](.claude/prompts/light-ink-separation-floor.prompt.md)
-  - From: UI/UX Override - the re-inked light brights
-- [x] Return Frame Sample 3
-  - **Issue**: Bounding the post-stall discard to a band on the discarded
-    sample closed the alternating-stall hole and reopened the one the discard
-    was written for. A post-stall sample under the band floor is now counted,
-    and one sample carries a window of thirty on its own past about 283ms -
-    twenty-nine frames at the target are 966.7ms against the 1250ms a 41.7ms
-    mean needs - so a return fragment from roughly 290ms to just under 650ms
-    costs a tier in both builds. Fed three frames at the 1.000s cut-off, then
-    one fragment, then thirty at the target: 0.283 leaves `detail` at 0, 0.29
-    through 0.64 take it to 1, and 0.65 and up are discarded and leave it at 0.
-    That is the outcome the comment above the guard still names as the thing it
-    prevents, in both builds - "the player looks at another tab and comes back
-    to a thinner starfield" - and before this release no fragment length could
-    produce it. The same comment argues both sides: the band is cut from three
-    fragments measured at 650ms, 750ms and 850ms and reads 650ms as their floor,
-    two sentences after saying the return "lands anywhere in the interval",
-    which puts over a third of all returns inside the band's own gap. Nothing in
-    the suite feeds a short fragment after a stall, so the case is invisible -
-    the one fragment `the partial frame on the way back from a stall is not a
-    sample either` tries is 0.7s, which the band discards.
-  - **Goal**: Resolve to [stall-return-band-counts-a-short-return.prompt.md](.claude/prompts/stall-return-band-counts-a-short-return.prompt.md)
-  - From: Polish
-- [x] One contrast figure is a heading weight in one file and a strong-text
-  weight in two others
-  - **Issue**: `#00343a` at 12.10:1 is the reason the site stopped quoting
-    `LIGHT_INK[14]`, and the three files that record the decision describe its
-    weight two different ways. `docs/assets/style.css:53` calls it "a heading
-    weight rather than a rule weight"; `DESIGN_LANGUAGE.md:85` and
-    `CHANGELOG.md:119` both call it "a strong-text weight". The design file's own
-    light table is the authority and puts headings at 7.52:1 and strong text at
-    16.98:1, so 12.10:1 is between its two named rows and matches neither - 4.58
-    above the heading figure and 4.88 below the strong-text one. A reader
-    checking either sentence against the table finds the other sentence
-    contradicting it, and the one thing both are trying to say, that the index is
-    far too heavy for a rule, is the part neither needs a weight name for.
-  - **Goal**: Say the same thing in all three places, measured rather than
-    labelled: the index is 12.10:1 where the rule it replaced was 4.88:1, which
-    is two and a half times the weight the prose was ruled at and above the
-    7.85:1 the body text is set in. Drop the comparison to a named role, or name
-    the two rows it sits between rather than picking one.
-  - From: Code Review Override - the band that counts a short return, and the weights nothing holds
-- [x] Nothing holds the site's light teal apart from the game's re-inked index
-  - **Issue**: The release decided, in three documents, that
-    `docs/assets/style.css` keeps `--link` and `--rule` at the site teal
-    `#00757f` and no longer tracks `LIGHT_INK[14]`, while `--ship-hull` and
-    `--ship-wing` do follow the game to `#00343a` and `#04116e`. Both halves of
-    that are deliberate and neither is asserted anywhere.
-    `test/docs-site.test.mjs` reads the stylesheet through `styleSheet` and pins
-    a great deal of geometry, and makes no colour assertion at all, so a later
-    run that re-reads `DESIGN_LANGUAGE.md`'s opening claim - "Nothing here was
-    invented for the site: ... the light theme is the game's own re-inking of
-    it" - can re-sync the two properties to the game in one edit, take every
-    rule and cell border on ten pages to 12.10:1, and the suite will pass. This
-    is the shape of the defect the same release fixed in the palette: the entry
-    says six inverted pairs shipped because "nothing in the suite compared two
-    inks with each other", and the divergence written on the way out is held by
-    nothing either.
-  - **Goal**: Pin the pair of facts the release decided, in
-    `test/docs-site.test.mjs`, against `loadBrowserEngine`'s own `LIGHT_INK`
-    rather than against a table of hex values: that the light `--link` and
-    `--rule` are not `LIGHT_INK[14]`, and that `--ship-hull`, `--ship-wing` and
-    `--ship-engine` are `LIGHT_INK[14]`, `[12]` and `[6]`. The dark block tracks
-    the base palette the same way and can be pinned in the same walk.
-  - From: Code Review Override - the band that counts a short return, and the weights nothing holds
 - [x] `NEON_MAGENTA` is the one drawn index the light re-inking left behind
   - **Issue**: The re-inking took the six chromatic bright indices below their
     base ones and left the named neons where they were, and one of those neons
@@ -344,3 +203,96 @@ the roadmap section each one came from.
     and drawn nowhere in either build, which is a separate question and not this
     one.
   - From: Code Review Override - the band that counts a short return, and the weights nothing holds
+- [x] The separation floor sits one unit below the palette it fences
+  - **Issue**: The `MIN_INK_SEPARATION` comment in
+    `test/browser-shell.test.mjs` closes "A floor at 48 is the smallest number
+    that says the current palette is acceptable and the next one may not be
+    tighter", and the assertion under it is `apart >= MIN_INK_SEPARATION` at 48.
+    The tightest drawn pair is 49 - `BRIGHT_WHITE` against `DARK_BLUE` in light,
+    which the same test pins by name beside dark's 75 - so a re-inking that
+    brings any drawn pair to exactly 48 passes a guard whose own sentence says
+    it may not. "Smallest" points the wrong way as well: every number at or
+    below 49 admits the current palette and 49 is the largest of them, so 48 is
+    neither the smallest such number nor the one that forbids a tighter palette.
+    The figure is quoted in two further places that would move with it -
+    `index.html`'s "two steps at the 48 the separation floor asks for need 96",
+    above the `LIGHT_INK` neons, and the `### Added` entry for
+    1.0.0-alpha.0.9.3 in `CHANGELOG.md`.
+  - **Goal**: Decide which of the two was meant and make the other match. Either
+    move the constant to 49, which is the value that makes the sentence true and
+    which the palette clears exactly - light 49, dark 75, and `NEON_MAGENTA`'s
+    new margins of 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA` - and then
+    correct the two quoted figures, where `index.html`'s two steps become 98 and
+    its conclusion is unchanged because `MAGENTA` and `BRIGHT_MAGENTA` are 95
+    apart either way; or keep 48 and say what it actually does, which is admit
+    the current palette with a single unit of slack, dropping the guarantee the
+    test does not provide. Changing the constant must leave
+    `no two inks the game draws sit closer than MIN_INK_SEPARATION` green in
+    both schemes.
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] The site's provenance walk reads one `:root` block per scheme
+  - **Issue**: `rootBlock` in `test/docs-site.test.mjs` resolves a scheme with
+    `style.rules.find(...)`, taking the first `:root` whose at-rule preludes
+    match, and
+    `docs: every site colour says whether it is the game's or the site's own`
+    then asserts that the hex-valued custom properties of that one block are
+    exactly the keys of `PROVENANCE`. More than one `:root` is not
+    hypothetical: the sheet already carries a third at
+    `docs/assets/style.css:326`, inside a width media query. Appending
+    `:root { --accent: #ff0000; }` to `docs/assets/style.css` leaves both new
+    tests green - the dark branch matches on `!rule.at.length` and `find` has
+    already returned the block at line 9, so the added colour reaches neither
+    the table nor the completeness check. The in-code comment is accurate at
+    "Nothing in the block escapes the table"; the `### Added` entry in
+    `CHANGELOG.md` states it as "Nothing in either block escapes the table, so a
+    colour added to the stylesheet cannot carry an unrecorded provenance", which
+    is the broader claim a reader would rely on and the one that does not hold.
+  - **Goal**: Collect every `:root` a scheme resolves rather than the first -
+    `filter` in place of `find`, merging the declarations - and assert the union
+    of their hex-valued properties against `PROVENANCE`, which also covers a
+    light block split in two. The width media query's `:root` carries a layout
+    token today and would need either a provenance entry or an explicit
+    exclusion naming why a block with no colour in it is skipped. Keep the
+    present assertions of both new tests green, and if the narrower scope is
+    deliberate, bring the CHANGELOG sentence back to what the code checks.
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] Two places say nothing fed a short fragment after a stall, and one did
+  - **Issue**: The new case in `test/performance-mode.test.mjs` opens "nothing
+    in this file fed a short fragment after a stall - the one case the test
+    above tries is 0.7s, which the band discards", and the `### Fixed` entry in
+    `CHANGELOG.md` repeats it as "nothing in the suite fed a short fragment
+    after a stall before, which is why the hole was invisible". The test above
+    feeds one. Its band-edge case runs `trackFrameRate(window)` and then
+    `trackFrameRate(floor * 0.999)`, which is 649.35ms after a single stall, and
+    asserts `frameSeen === 1` - a short fragment after a stall, fed and pinned
+    as counted. What was missing is the step after the sample rather than the
+    sample: nothing closed a window on a counted fragment, so nothing said what
+    one costs the ladder, which is the figure the 283ms boundary turns on.
+  - **Goal**: Say in both places what was actually uncovered - that a short
+    fragment after a stall was already fed and pinned as counted at the band
+    edge, and that no case carried one into a closed window, so the tier it
+    costs went unmeasured. The two new cases are the right ones and want no
+    change.
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] **Band Coverage Figures**: Nothing pins which shade glyph each depth band of the tunnel is drawn in
+  - **Issue**: `drawTunnel` picks a glyph and a colour together, four bands
+    deep - `░` at the far wall, then `▒`, `▓` and `█` at the mouth - and only
+    the colour half is pinned. `the walls are drawn from the four glyphs every
+    wall figure counts`, at `test/warp.test.mjs:285`, compares the distinct
+    glyphs standing on the wall columns `.sort()`ed against a `.sort()`ed
+    `WALL_RAMP` and then counts each as present. Nothing says which glyph
+    belongs to which band, so exchanging the first and fourth rows of that
+    table - `█` at the far wall and `░` at the mouth - leaves the distinct set
+    unchanged, every count non-zero, every wall colour still shifting on a
+    warp, and `the light warp ramp climbs the way dark's does` still passing,
+    because that test walks inks. The whole suite passes with the tunnel inside
+    out. What this release's verification measured is why that matters: read
+    off the canvas a cell at a time under an emulated light scheme, with a warp
+    held open, the four bands cover 14%, 29%, 75% and 86% of their cells, so
+    the inks span 507 to 676 of channel distance from the paper - a factor of
+    1.33 - while the cells as painted span 71 to 581, a factor of 8.2. Coverage
+    carries the ramp and the ink trims it, and it is the coverage that is
+    unordered. Dark mode measures 14%, 30%, 77%, 86% and 88%, so the figure is
+    the glyph and the font rather than the scheme.
+  - **Goal**: Resolve to [tunnel-ramp-glyph-order.prompt.md](.claude/prompts/tunnel-ramp-glyph-order.prompt.md)
+  - From: UI/UX Override - the glyph half of the tunnel ramp
