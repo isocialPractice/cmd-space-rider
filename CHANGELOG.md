@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.0.0-alpha.0.9.5] - 2026-10-13
+
+### Fixed
+
+- The dark half of the band coverage reading was published as five figures for a
+  ramp with four bands. `1.0.0-alpha.0.9.4` gave light as "the four bands cover
+  14%, 29%, 75% and 86% of their cells" and then dark as "14%, 30%, 77%, 86% and
+  88%", while `drawTunnel` cuts the play area at `t` of 0.2, 0.5 and 0.8 and
+  draws the four bands those make in four glyphs. So the fifth dark figure
+  belonged to nothing either sentence named, and the conclusion it was offered
+  for - that the coverage is a property of the glyph and the font rather than of
+  the scheme - rested on a comparison between two lists of different lengths. A
+  reader could not tell which dark figure paired with light's 29%, nor what the
+  extra one had measured.
+
+  The entry now gives dark as 14%, 30%, 77% and 86%, and the item text in
+  `TODO.md` that the figures came from is corrected to the same four. Those are
+  the four the reading supports: against light's they are out by 0, 1, 2 and 0
+  points, which is the closest pairing any four of the five admit, and both
+  lists climb. The 88% is dropped rather than explained, and deliberately
+  without a guess at which sample it was - re-reading it needs chromium, which
+  this project has so far declined, and nothing in the repository can rebuild
+  the percentages, so what it measured is not recoverable from here. What the
+  figures were quoted to establish is unaffected: it turns on coverage spanning
+  a factor of 8.2 against the inks' 1.33, which the four give.
+
+- An assertion in the new band map could not fail. `each depth band of the
+  tunnel is drawn in its own shade glyph` closed on
+  `assert.equal(byBand.size, WALL_RAMP.length, ...)`, under a message naming "a
+  band the figures count was not reached at 80x24", and by the time that line
+  was evaluated the state it describes had already been rejected twice over.
+  `bandOf` returns only 0 through 3, so `byBand` can hold no fifth key however
+  the renderer is changed, and the `WALL_RAMP.forEach` directly above it
+  requires each of those four bands to come back as exactly one glyph - which an
+  absent band fails first, comparing `[]` against `[glyph]`. There was no input
+  that reached the equality with anything but 4.
+
+  The check is now read before the per-band assertions instead of after them,
+  which is the only position it can fail from, and it compares the band keys it
+  collected against `WALL_RAMP`'s indices rather than counting them. Ordering it
+  first also puts the right name on the failure: an unreached band is now
+  reported as a band that was not reached, where the per-band assertion reports
+  it as a glyph that came back empty. Confirmed by making a band unreachable -
+  moving the test file's own third boundary to 0.999, which no row at 80x24
+  crosses - whereupon the new assertion fails in both builds with "the ramp's
+  bands came back as [0,1,2] rather than all four" and the per-band message does
+  not appear. A fifth band cut inside an existing one is still the per-band
+  loop's to catch, where the band holding it comes back carrying two glyphs, and
+  the comment says so rather than leaving the stronger reading available.
+
 ## [1.0.0-alpha.0.9.4] - 2026-10-12
 
 ### Fixed
@@ -115,10 +165,25 @@
   86% of their cells: the inks span 507 to 676 of channel distance from the
   paper, a factor of 1.33, while the cells as painted span 71 to 581, a factor
   of 8.2. Coverage carries the ramp and the ink trims it, and it was the
-  coverage that was unordered. Dark mode measures 14%, 30%, 77%, 86% and 88%, so
-  the figure is the glyph and the font rather than the scheme. Those percentages
+  coverage that was unordered. Dark mode measures 14%, 30%, 77% and 86%, which
+  pairs one for one with light's four and sits within two points of each, so the
+  figure is the glyph and the font rather than the scheme. Those percentages
   are recorded rather than asserted - they are a property of one browser's font
   and the cell size, and nothing in the repository can rebuild them.
+
+  This entry first published the dark reading as five figures - "14%, 30%, 77%,
+  86% and 88%" - against a ramp `drawTunnel` bands four deep and draws in four
+  glyphs, so the fifth belonged to nothing either sentence named, and the
+  comparison it was offered for ran between lists of different lengths with no
+  way for a reader to tell which dark figure paired with light's 29%. It is
+  corrected in place by `1.0.0-alpha.0.9.5` to the four that pair with light's
+  four in order. The 88% is dropped rather than explained: what it measured is
+  not recoverable from here, since re-reading it needs chromium, which this
+  project has so far declined, and nothing in the repository can rebuild it.
+  Dropping the last of the five is what the other four support - against light's
+  14%, 29%, 75% and 86% they are out by 0, 1, 2 and 0 points, the closest
+  pairing any of the five admits - and it is not a claim about which sample the
+  88% was.
 
 ## [1.0.0-alpha.0.9.3] - 2026-10-11
 

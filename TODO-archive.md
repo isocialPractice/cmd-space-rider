@@ -2438,3 +2438,65 @@ still be found by name.
     `--ship-engine` are `LIGHT_INK[14]`, `[12]` and `[6]`. The dark block tracks
     the base palette the same way and can be pinned in the same walk.
   - From: Code Review Override - the band that counts a short return, and the weights nothing holds
+
+## Archived 10-13-26
+
+- [x] `NEON_MAGENTA` is the one drawn index the light re-inking left behind
+  - **Issue**: The re-inking took the six chromatic bright indices below their
+    base ones and left the named neons where they were, and one of those neons
+    is drawn. `WARP_WALLS` (`src/render.ts:85`, `index.html:2001`) carries the
+    tunnel across for a warp, and its second rung is `BLUE` to `NEON_MAGENTA`
+    while the two above it are `BRIGHT_BLUE` and `CYAN` to `BRIGHT_MAGENTA`.
+    `BRIGHT_MAGENTA` moved from `#a81a9a` to `#3d0839` and `NEON_MAGENTA` did
+    not, so the light warp ramp, far to near, is now 507, 393, 602, 602 and 676
+    in channel distance from the paper against 340, 510, 595, 595 and 765 in
+    dark: the rung one step in from the far wall reads 114 quieter than the far
+    wall itself and 209 quieter than the rung above it, where dark climbs the
+    whole way. The ramp did dip here before the release, at 507, 393, 380, 380
+    and 676, so this is an index left behind rather than a new inversion - but
+    the jump off it is two and a half times the widest step dark takes. The new
+    test is scoped to base-and-bright pairs and `NEON_MAGENTA` is in none, so
+    the comment's claim that it "pins the ordering for every pair the game draws
+    with" is true and still leaves the only live neon unchecked. The comment
+    above the neons in `LIGHT_INK` (`index.html:246`) reads "each to the same
+    value as the base colour it echoes", which was already not so - `#a3129a`
+    against `MAGENTA` at `#6b0f63` - and is now wrong by 114.
+  - **Goal**: Decide what the light value of a drawn neon is for, and make the
+    comment say it. If the neons are meant to sit above the bright index they
+    echo, `201` wants a value below `#3d0839`'s 602 and the warp ramp climbs in
+    both schemes; if they are a mid-tone on purpose, say that instead of "the
+    same value as the base colour it echoes", and say which rung of the warp
+    ramp is allowed to read quieter than the one behind it. Either way the walk
+    wants widening past base-and-bright pairs to the ramps the renderer actually
+    orders - `WARP_WALLS` is a five-rung table that can be read straight out of
+    both builds. `NEON_CYAN`, `NEON_GREEN`, `NEON_RED` and `ORANGE` are in `C`
+    and drawn nowhere in either build, which is a separate question and not this
+    one.
+  - From: Code Review Override - the band that counts a short return, and the weights nothing holds
+- [x] The separation floor sits one unit below the palette it fences
+  - **Issue**: The `MIN_INK_SEPARATION` comment in
+    `test/browser-shell.test.mjs` closes "A floor at 48 is the smallest number
+    that says the current palette is acceptable and the next one may not be
+    tighter", and the assertion under it is `apart >= MIN_INK_SEPARATION` at 48.
+    The tightest drawn pair is 49 - `BRIGHT_WHITE` against `DARK_BLUE` in light,
+    which the same test pins by name beside dark's 75 - so a re-inking that
+    brings any drawn pair to exactly 48 passes a guard whose own sentence says
+    it may not. "Smallest" points the wrong way as well: every number at or
+    below 49 admits the current palette and 49 is the largest of them, so 48 is
+    neither the smallest such number nor the one that forbids a tighter palette.
+    The figure is quoted in two further places that would move with it -
+    `index.html`'s "two steps at the 48 the separation floor asks for need 96",
+    above the `LIGHT_INK` neons, and the `### Added` entry for
+    1.0.0-alpha.0.9.3 in `CHANGELOG.md`.
+  - **Goal**: Decide which of the two was meant and make the other match. Either
+    move the constant to 49, which is the value that makes the sentence true and
+    which the palette clears exactly - light 49, dark 75, and `NEON_MAGENTA`'s
+    new margins of 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA` - and then
+    correct the two quoted figures, where `index.html`'s two steps become 98 and
+    its conclusion is unchanged because `MAGENTA` and `BRIGHT_MAGENTA` are 95
+    apart either way; or keep 48 and say what it actually does, which is admit
+    the current palette with a single unit of slack, dropping the guarantee the
+    test does not provide. Changing the constant must leave
+    `no two inks the game draws sit closer than MIN_INK_SEPARATION` green in
+    both schemes.
+  - From: UI/UX Override - the glyph half of the tunnel ramp

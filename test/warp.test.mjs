@@ -393,6 +393,24 @@ for (const build of BUILDS) {
       }
     }
 
+    // Whether all four bands were reached at all, read before the per-band
+    // assertions rather than after them. Order is the whole of what makes this
+    // assertable: a band that no row reached leaves its key absent, so read
+    // first it fails here and says so, while read last it cannot fail at all -
+    // the loop below has by then rejected every missing band by comparing `[]`
+    // against `[glyph]`, which reports the glyph choice rather than the band
+    // never arriving.
+    //
+    // A fifth band is not what this catches, and cannot be: `bandOf` returns
+    // only 0 through 3, so there is no fifth key to find. One cut inside an
+    // existing band is the loop's to report, where that band comes back
+    // carrying two glyphs.
+    assert.deepEqual(
+      [...byBand.keys()].sort((a, b) => a - b),
+      WALL_RAMP.map((_, band) => band),
+      `the ramp's bands came back as ${JSON.stringify([...byBand.keys()])} rather than all four,`
+      + ' so a band the figures count was not reached at 80x24');
+
     WALL_RAMP.forEach((glyph, band) => {
       assert.deepEqual(
         [...(byBand.get(band) ?? [])], [glyph],
@@ -404,10 +422,6 @@ for (const build of BUILDS) {
         + ` tests still pass because they walk inks`
       );
     });
-
-    assert.equal(byBand.size, WALL_RAMP.length,
-      `the ramp's bands came back as ${JSON.stringify([...byBand.keys()])} rather than all four,`
-      + ' so a band the figures count was not reached at 80x24');
   });
 
   test(`${build.name}: the shade ramp climbs far to near and never doubles back`, () => {

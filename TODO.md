@@ -40,54 +40,6 @@ its origin survives archiving into `## Complete`.
   `index.html`, and nothing in the repository reproduces it.
   - From: Measurement
 
-### Code Review Override - the band coverage figures and an assertion that cannot fail
-
-- [ ] An assertion in the new band map cannot fail
-  - **Issue**: `assert.equal(byBand.size, WALL_RAMP.length, ...)` at the foot of
-    `each depth band of the tunnel is drawn in its own shade glyph` in
-    `test/warp.test.mjs` is unreachable. `bandOf` returns only 0 through 3, so
-    `byBand` can never hold a fifth key, and the `WALL_RAMP.forEach` directly
-    above it already asserts that each of those four comes back as exactly one
-    glyph - which is what fails, first, for a band that was not reached, since an
-    absent band compares `[]` against `[glyph]`. No render makes `byBand.size`
-    anything but 4 by the time the equality is evaluated, so its message - "so a
-    band the figures count was not reached at 80x24" - names a state the
-    assertion above it has already rejected. Verified by reasoning rather than by
-    a failing input, which is the point: there is no input.
-  - **Goal**: Drop it, or give the thing it was written for somewhere it can
-    fail. The question it asks - whether all four bands are reached at 80x24 - is
-    the `forEach`'s job now, and if it is wanted separately from the glyph check
-    it has to be read before the per-band assertions rather than after them.
-  - From: Code Review Override - the band coverage figures and an assertion that cannot fail
-
-#### Resolve Issues
-
-- [ ] Band Coverage Figures 1
-  - **Issue**: The dark half of the coverage measurement is published as five
-    figures for a four-band ramp. The `### Added` entry for 1.0.0-alpha.0.9.4 in
-    `CHANGELOG.md` gives light as "the four bands cover 14%, 29%, 75% and 86% of
-    their cells" and then dark as "Dark mode measures 14%, 30%, 77%, 86% and
-    88%", and `drawTunnel` has four bands drawn in four glyphs, so the fifth dark
-    figure belongs to nothing either sentence names. The conclusion it is offered
-    for - "so the figure is the glyph and the font rather than the scheme" - is a
-    comparison between two lists of different lengths, and a reader cannot tell
-    which dark figure pairs with light's 29% or what the extra one measured. The
-    same five sit in the completed item's own `**Issue**`, where they came from,
-    and `test/warp.test.mjs` quotes only the four. The entry says the percentages
-    are a property of one browser's font and that nothing in the repository can
-    rebuild them, which is why the fifth cannot simply be recomputed and
-    corrected.
-  - **Goal**: Say what the fifth dark figure is, in the CHANGELOG entry and in
-    the item text that carries it, or take it out. If it is the ring-end glyph or
-    a fifth wall colour rather than a depth band, name it as that and say why
-    dark was read over one more sample than light; if dark was measured at five
-    rows rather than four bands, say that instead. Re-measuring needs chromium,
-    which this project has so far declined, so the alternative is to publish the
-    four that line up with the four bands, record that dark was read the same way
-    and reached the same conclusion, and leave the fifth out rather than leave it
-    unexplained.
-  - From: UI/UX Override - the glyph half of the tunnel ramp
-
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
@@ -169,67 +121,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 136 earlier items in `TODO-archive.md`, newest last.
+> 138 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `NEON_MAGENTA` is the one drawn index the light re-inking left behind
-  - **Issue**: The re-inking took the six chromatic bright indices below their
-    base ones and left the named neons where they were, and one of those neons
-    is drawn. `WARP_WALLS` (`src/render.ts:85`, `index.html:2001`) carries the
-    tunnel across for a warp, and its second rung is `BLUE` to `NEON_MAGENTA`
-    while the two above it are `BRIGHT_BLUE` and `CYAN` to `BRIGHT_MAGENTA`.
-    `BRIGHT_MAGENTA` moved from `#a81a9a` to `#3d0839` and `NEON_MAGENTA` did
-    not, so the light warp ramp, far to near, is now 507, 393, 602, 602 and 676
-    in channel distance from the paper against 340, 510, 595, 595 and 765 in
-    dark: the rung one step in from the far wall reads 114 quieter than the far
-    wall itself and 209 quieter than the rung above it, where dark climbs the
-    whole way. The ramp did dip here before the release, at 507, 393, 380, 380
-    and 676, so this is an index left behind rather than a new inversion - but
-    the jump off it is two and a half times the widest step dark takes. The new
-    test is scoped to base-and-bright pairs and `NEON_MAGENTA` is in none, so
-    the comment's claim that it "pins the ordering for every pair the game draws
-    with" is true and still leaves the only live neon unchecked. The comment
-    above the neons in `LIGHT_INK` (`index.html:246`) reads "each to the same
-    value as the base colour it echoes", which was already not so - `#a3129a`
-    against `MAGENTA` at `#6b0f63` - and is now wrong by 114.
-  - **Goal**: Decide what the light value of a drawn neon is for, and make the
-    comment say it. If the neons are meant to sit above the bright index they
-    echo, `201` wants a value below `#3d0839`'s 602 and the warp ramp climbs in
-    both schemes; if they are a mid-tone on purpose, say that instead of "the
-    same value as the base colour it echoes", and say which rung of the warp
-    ramp is allowed to read quieter than the one behind it. Either way the walk
-    wants widening past base-and-bright pairs to the ramps the renderer actually
-    orders - `WARP_WALLS` is a five-rung table that can be read straight out of
-    both builds. `NEON_CYAN`, `NEON_GREEN`, `NEON_RED` and `ORANGE` are in `C`
-    and drawn nowhere in either build, which is a separate question and not this
-    one.
-  - From: Code Review Override - the band that counts a short return, and the weights nothing holds
-- [x] The separation floor sits one unit below the palette it fences
-  - **Issue**: The `MIN_INK_SEPARATION` comment in
-    `test/browser-shell.test.mjs` closes "A floor at 48 is the smallest number
-    that says the current palette is acceptable and the next one may not be
-    tighter", and the assertion under it is `apart >= MIN_INK_SEPARATION` at 48.
-    The tightest drawn pair is 49 - `BRIGHT_WHITE` against `DARK_BLUE` in light,
-    which the same test pins by name beside dark's 75 - so a re-inking that
-    brings any drawn pair to exactly 48 passes a guard whose own sentence says
-    it may not. "Smallest" points the wrong way as well: every number at or
-    below 49 admits the current palette and 49 is the largest of them, so 48 is
-    neither the smallest such number nor the one that forbids a tighter palette.
-    The figure is quoted in two further places that would move with it -
-    `index.html`'s "two steps at the 48 the separation floor asks for need 96",
-    above the `LIGHT_INK` neons, and the `### Added` entry for
-    1.0.0-alpha.0.9.3 in `CHANGELOG.md`.
-  - **Goal**: Decide which of the two was meant and make the other match. Either
-    move the constant to 49, which is the value that makes the sentence true and
-    which the palette clears exactly - light 49, dark 75, and `NEON_MAGENTA`'s
-    new margins of 56 from `MAGENTA` and 55 from `BRIGHT_MAGENTA` - and then
-    correct the two quoted figures, where `index.html`'s two steps become 98 and
-    its conclusion is unchanged because `MAGENTA` and `BRIGHT_MAGENTA` are 95
-    apart either way; or keep 48 and say what it actually does, which is admit
-    the current palette with a single unit of slack, dropping the guarantee the
-    test does not provide. Changing the constant must leave
-    `no two inks the game draws sit closer than MIN_INK_SEPARATION` green in
-    both schemes.
-  - From: UI/UX Override - the glyph half of the tunnel ramp
 - [x] The site's provenance walk reads one `:root` block per scheme
   - **Issue**: `rootBlock` in `test/docs-site.test.mjs` resolves a scheme with
     `style.rules.find(...)`, taking the first `:root` whose at-rule preludes
@@ -292,7 +185,52 @@ the roadmap section each one came from.
     the inks span 507 to 676 of channel distance from the paper - a factor of
     1.33 - while the cells as painted span 71 to 581, a factor of 8.2. Coverage
     carries the ramp and the ink trims it, and it is the coverage that is
-    unordered. Dark mode measures 14%, 30%, 77%, 86% and 88%, so the figure is
-    the glyph and the font rather than the scheme.
+    unordered. Dark mode measures 14%, 30%, 77% and 86%, so the figure is
+    the glyph and the font rather than the scheme. (This item first wrote the
+    dark reading as five figures against a four-band ramp; `Band Coverage
+    Figures 1` corrected it here and in `CHANGELOG.md` to the four that pair
+    with light's four, dropping an unrecoverable 88%.)
   - **Goal**: Resolve to [tunnel-ramp-glyph-order.prompt.md](.claude/prompts/tunnel-ramp-glyph-order.prompt.md)
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] An assertion in the new band map cannot fail
+  - **Issue**: `assert.equal(byBand.size, WALL_RAMP.length, ...)` at the foot of
+    `each depth band of the tunnel is drawn in its own shade glyph` in
+    `test/warp.test.mjs` is unreachable. `bandOf` returns only 0 through 3, so
+    `byBand` can never hold a fifth key, and the `WALL_RAMP.forEach` directly
+    above it already asserts that each of those four comes back as exactly one
+    glyph - which is what fails, first, for a band that was not reached, since an
+    absent band compares `[]` against `[glyph]`. No render makes `byBand.size`
+    anything but 4 by the time the equality is evaluated, so its message - "so a
+    band the figures count was not reached at 80x24" - names a state the
+    assertion above it has already rejected. Verified by reasoning rather than by
+    a failing input, which is the point: there is no input.
+  - **Goal**: Drop it, or give the thing it was written for somewhere it can
+    fail. The question it asks - whether all four bands are reached at 80x24 - is
+    the `forEach`'s job now, and if it is wanted separately from the glyph check
+    it has to be read before the per-band assertions rather than after them.
+  - From: Code Review Override - the band coverage figures and an assertion that cannot fail
+- [x] Band Coverage Figures 1
+  - **Issue**: The dark half of the coverage measurement is published as five
+    figures for a four-band ramp. The `### Added` entry for 1.0.0-alpha.0.9.4 in
+    `CHANGELOG.md` gives light as "the four bands cover 14%, 29%, 75% and 86% of
+    their cells" and then dark as "Dark mode measures 14%, 30%, 77%, 86% and
+    88%", and `drawTunnel` has four bands drawn in four glyphs, so the fifth dark
+    figure belongs to nothing either sentence names. The conclusion it is offered
+    for - "so the figure is the glyph and the font rather than the scheme" - is a
+    comparison between two lists of different lengths, and a reader cannot tell
+    which dark figure pairs with light's 29% or what the extra one measured. The
+    same five sit in the completed item's own `**Issue**`, where they came from,
+    and `test/warp.test.mjs` quotes only the four. The entry says the percentages
+    are a property of one browser's font and that nothing in the repository can
+    rebuild them, which is why the fifth cannot simply be recomputed and
+    corrected.
+  - **Goal**: Say what the fifth dark figure is, in the CHANGELOG entry and in
+    the item text that carries it, or take it out. If it is the ring-end glyph or
+    a fifth wall colour rather than a depth band, name it as that and say why
+    dark was read over one more sample than light; if dark was measured at five
+    rows rather than four bands, say that instead. Re-measuring needs chromium,
+    which this project has so far declined, so the alternative is to publish the
+    four that line up with the four bands, record that dark was read the same way
+    and reached the same conclusion, and leave the fifth out rather than leave it
+    unexplained.
   - From: UI/UX Override - the glyph half of the tunnel ramp
