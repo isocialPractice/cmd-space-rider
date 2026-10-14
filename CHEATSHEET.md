@@ -84,6 +84,7 @@ Debug runs never record a best score.
 | Combo window | 2 seconds, caps at `COMBO x8` |
 | Barrel roll | 0.5 seconds invulnerable, then a cooldown |
 | Warp step | every 60 seconds, banner for 2 seconds |
+| Asteroid field | every 150 seconds of tunnel, open for 15, 70 rocks |
 | Grid floor | 60 columns by 20 rows |
 | Leaderboard | top 10, three characters a name |
 | Replay ghost | 10 path samples a second, 10 minutes of run |
@@ -112,6 +113,7 @@ npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
 npm run probe -- free-flight --passes 2
 npm run probe -- overlay-anchor    # no grid, no build: it walks viewports
+npm run probe -- glyph-tuning      # no flags: it walks the font size range
 ```
 
 A flag the named probe does not read is refused rather than discarded, so
@@ -131,6 +133,13 @@ as frames.
 
 A probe reports; it never asserts. Every walk is seeded, so the same command
 gives the same numbers every time.
+
+`glyph-tuning` is the one probe that measures nothing: it rebuilds the figures
+the browser build's glyph centring quotes about itself, out of Courier New's
+`1229/2048` em advance and the page's own `glyphInset`. It also lists, at the
+foot of its output, the four figures in that tuning that needed a rasterizer and
+so are not rebuilt - each with the instrument that read it and what it
+concluded, which is the method published beside the number.
 
 ## Test grids
 

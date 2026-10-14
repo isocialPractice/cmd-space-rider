@@ -2500,3 +2500,50 @@ still be found by name.
     `no two inks the game draws sit closer than MIN_INK_SEPARATION` green in
     both schemes.
   - From: UI/UX Override - the glyph half of the tunnel ramp
+
+## Archived 10-14-26
+
+- [x] The site's provenance walk reads one `:root` block per scheme
+  - **Issue**: `rootBlock` in `test/docs-site.test.mjs` resolves a scheme with
+    `style.rules.find(...)`, taking the first `:root` whose at-rule preludes
+    match, and
+    `docs: every site colour says whether it is the game's or the site's own`
+    then asserts that the hex-valued custom properties of that one block are
+    exactly the keys of `PROVENANCE`. More than one `:root` is not
+    hypothetical: the sheet already carries a third at
+    `docs/assets/style.css:326`, inside a width media query. Appending
+    `:root { --accent: #ff0000; }` to `docs/assets/style.css` leaves both new
+    tests green - the dark branch matches on `!rule.at.length` and `find` has
+    already returned the block at line 9, so the added colour reaches neither
+    the table nor the completeness check. The in-code comment is accurate at
+    "Nothing in the block escapes the table"; the `### Added` entry in
+    `CHANGELOG.md` states it as "Nothing in either block escapes the table, so a
+    colour added to the stylesheet cannot carry an unrecorded provenance", which
+    is the broader claim a reader would rely on and the one that does not hold.
+  - **Goal**: Collect every `:root` a scheme resolves rather than the first -
+    `filter` in place of `find`, merging the declarations - and assert the union
+    of their hex-valued properties against `PROVENANCE`, which also covers a
+    light block split in two. The width media query's `:root` carries a layout
+    token today and would need either a provenance entry or an explicit
+    exclusion naming why a block with no colour in it is skipped. Keep the
+    present assertions of both new tests green, and if the narrower scope is
+    deliberate, bring the CHANGELOG sentence back to what the code checks.
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] Two places say nothing fed a short fragment after a stall, and one did
+  - **Issue**: The new case in `test/performance-mode.test.mjs` opens "nothing
+    in this file fed a short fragment after a stall - the one case the test
+    above tries is 0.7s, which the band discards", and the `### Fixed` entry in
+    `CHANGELOG.md` repeats it as "nothing in the suite fed a short fragment
+    after a stall before, which is why the hole was invisible". The test above
+    feeds one. Its band-edge case runs `trackFrameRate(window)` and then
+    `trackFrameRate(floor * 0.999)`, which is 649.35ms after a single stall, and
+    asserts `frameSeen === 1` - a short fragment after a stall, fed and pinned
+    as counted. What was missing is the step after the sample rather than the
+    sample: nothing closed a window on a counted fragment, so nothing said what
+    one costs the ladder, which is the figure the 283ms boundary turns on.
+  - **Goal**: Say in both places what was actually uncovered - that a short
+    fragment after a stall was already fed and pinned as counted at the band
+    edge, and that no case carried one into a closed window, so the tier it
+    costs went unmeasured. The two new cases are the right ones and want no
+    change.
+  - From: UI/UX Override - the glyph half of the tunnel ramp

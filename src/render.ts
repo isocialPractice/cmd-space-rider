@@ -3,7 +3,7 @@
 import { ScreenBuffer } from './screen';
 import {
   GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME,
-  tunnelSpan, tracerLit, POWERUP_GLYPHS, detailTier,
+  tunnelSpan, tracerDrawn, POWERUP_GLYPHS, detailTier,
 } from './types';
 
 // The tunnel's geometry moved to types.ts, where the hit test can read the same
@@ -129,7 +129,24 @@ function drawStarfield(screen: ScreenBuffer, state: GameState, gameTop: number, 
   }
 }
 
+/**
+ * The tunnel: two walls, the ring ends on them and the floor dots between.
+ *
+ * An asteroid field section draws none of it. Returning here rather than
+ * reaching into the loop is what keeps the ramp assertions in
+ * test/warp.test.mjs meaning what they say: they walk outward from
+ * `tunnelSpan`'s own columns collecting whatever glyph they find, so a section
+ * that drew some thinner wall, or drew the rings without them, would put a
+ * fifth glyph on those columns and the four-glyph set the index.html figures
+ * are counted over would no longer be what the walls are drawn from. A section
+ * is the walls being absent, not the walls being different.
+ *
+ * What is left is the starfield, drawn before this, which is the backdrop the
+ * open stretch reads against.
+ */
 function drawTunnel(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
+  if (state.asteroidTime > 0) return;
+
   const w = screen.width;
   const gameH = gameBottom - gameTop;
   const ringSpacing = 4;
@@ -304,6 +321,9 @@ function drawBlock(
  * rounded while registering floored is worse again - the glyph the player aims
  * by would sit a column off what the hit test reads, on half of all positions.
  *
+ * An asteroid field section opens the clip to the whole grid, because the
+ * premise above is the walls and a section has none - `tracerDrawn` says why.
+ *
  * The hit test reads the same clip, and that is the whole of what it shares
  * with this: a frame that draws no tracer registers nothing on that frame. The
  * flight itself is not cut short. The span the walls are drawn on runs a little
@@ -320,7 +340,7 @@ function drawBullets(screen: ScreenBuffer, state: GameState, gameTop: number, ga
   const w = screen.width;
   const h = screen.height;
   const inCorridor = (col: number, row: number): boolean =>
-    tracerLit(col, row, gameTop, gameBottom, w);
+    tracerDrawn(state, col, row, gameTop, gameBottom, w);
   for (const b of state.bullets) {
     const pos = gameToScreen(b.x, b.y, b.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
     if (pos.row < gameTop || pos.row >= gameBottom) continue;
@@ -485,12 +505,31 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
     }
   }
 
-  // Warp banner. It shares the centre of this row with the debug label and the
-  // NEW BEST banner, and loses to both: a debug run has its label up for the
+  // Warp banner. It shares the centre of this row with the debug label, the
+  // asteroid field banner and the NEW BEST banner. It loses to the first and
+  // the last and beats the middle one: a debug run has its label up for the
   // whole run, so the banner is held back rather than blinking over it for two
-  // seconds, and NEW BEST is drawn after this and covers it on the rare frame
-  // the two coincide. The level counts from 1, so the first one a run ever
-  // shows reads WARP LEVEL 2.
+  // seconds; NEW BEST is drawn after this and covers it on the rare frame the
+  // two coincide; and the asteroid banner is drawn before it and gives up the
+  // row for the two seconds this is live. The level counts from 1, so the first
+  // one a run ever shows reads WARP LEVEL 2.
+  // Asteroid field banner. It holds the row for the whole section rather than
+  // for a flash, because the walls being gone is a state the player is in and
+  // not an event they missed, and it is drawn in the rocks' own colours so the
+  // line and what it is about read as one thing.
+  //
+  // Drawn before the warp banner and held back from a debug run, which is the
+  // same arrangement the warp banner already has with NEW BEST: the two cannot
+  // normally coincide, since updateAsteroidField holds a section off while a
+  // flash is live, but a section opened just under fifteen seconds before an
+  // interval crossing is still running when the flash arrives. The flash is two
+  // seconds of the fifteen and is the newer news, so it wins the row for them.
+  if (state.asteroidTime > 0 && state.debugMode === null) {
+    const blink = sin(state.uiTime * 6) > 0;
+    screen.putStringCenter(HUD_ROWS, '>> ASTEROID FIELD <<',
+      blink ? C.BRIGHT_RED : C.RED, C.BLACK);
+  }
+
   if (state.warpFlash > 0 && state.debugMode === null) {
     const blink = sin(state.uiTime * 8) > 0;
     screen.putStringCenter(HUD_ROWS, `>> WARP LEVEL ${state.warpLevel} <<`,

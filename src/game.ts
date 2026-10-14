@@ -4,8 +4,9 @@ import {
   GameState, GameMode, DebugMode, DEBUG_MODES, SoundCue,
   Obstacle, Orb, Mine, Bullet, Particle, Star, Powerup, POWERUP_KINDS,
   BASE_SPEED_START, SHAKE_TIME, NEW_BEST_FLASH_TIME,
-  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols, tracerLit,
+  ROLL_TIME, ROLL_COOLDOWN, COMBO_TIME, COMBO_MAX, shotSlackCols, tracerDrawn,
   WARP_INTERVAL, WARP_FLASH_TIME,
+  ASTEROID_INTERVAL, ASTEROID_TIME, ASTEROID_COUNT, SHIP_MARGIN,
   POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
   RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
   BULLET_SPEED, BULLET_LIFE_SLACK,
@@ -101,6 +102,8 @@ export class Game {
       comboTimer: 0,
       warpLevel: 1,
       warpFlash: 0,
+      asteroidTime: 0,
+      asteroidTimer: 0,
       rapidFire: 0,
       slowMotion: 0,
       fireTimer: 0,
@@ -341,6 +344,8 @@ export class Game {
     s.comboTimer = 0;
     s.warpLevel = 1;
     s.warpFlash = 0;
+    s.asteroidTime = 0;
+    s.asteroidTimer = 0;
     s.rapidFire = 0;
     s.slowMotion = 0;
     s.fireTimer = 0;
@@ -483,11 +488,48 @@ export class Game {
    */
   protected persistLeaderboard(_entries: LeaderEntry[]): void { /* no persistence in the terminal build */ }
 
-  private spawnObstacle(z: number): void {
-    this.state.obstacles.push({
-      x: rand(-4.5, 4.5), y: rand(0.5, 4.5), z,
-      rot: rand(0, TAU), rotSpeed: rand(-2, 2), scale: rand(0.6, 1.5),
-    });
+  /**
+   * Place an obstacle across the tunnel, in the band its kind belongs to.
+   *
+   * The run's own field is held inside four and a half units of the axis, which
+   * is the span the walls are drawn outside of and the figure `drawBullets`
+   * reasons about when it says a shot that has left the corridor is in a column
+   * no target can occupy. An asteroid field section's rocks take the whole band
+   * the ship can reach instead: the section has no walls, so the corridor is
+   * not a thing to stay inside, and the width opening up is what the player
+   * sees of it.
+   *
+   * Two draws, x then y, in that order whichever band it is. A run's whole
+   * seeded world is the order these come out in, so a band that took a third
+   * draw, or took these two the other way round, would move every figure this
+   * repository quotes off a seeded flight.
+   */
+  private placeObstacle(o: Obstacle): void {
+    if (o.field) {
+      const reach = this.state.tunnelRadius - SHIP_MARGIN;
+      o.x = rand(-reach, reach);
+      o.y = rand(0, reach);
+      return;
+    }
+    o.x = rand(-4.5, 4.5);
+    o.y = rand(0.5, 4.5);
+  }
+
+  /**
+   * One obstacle at a depth, in the run's own field or in a section's.
+   *
+   * The draws run x, y, rot, rotSpeed, scale, which is the order they ran in
+   * before the placement moved into `placeObstacle` - the fields are assigned
+   * after the object is built rather than inside the literal, because a literal
+   * cannot call the placement and keep x and y ahead of the other three.
+   */
+  private spawnObstacle(z: number, field = false): void {
+    const o: Obstacle = { x: 0, y: 0, z, rot: 0, rotSpeed: 0, scale: 0, field };
+    this.placeObstacle(o);
+    o.rot = rand(0, TAU);
+    o.rotSpeed = rand(-2, 2);
+    o.scale = rand(0.6, 1.5);
+    this.state.obstacles.push(o);
   }
 
   private spawnOrb(z: number): void {
@@ -698,8 +740,19 @@ export class Game {
       s.speed = lerp(s.speed, s.baseSpeed, 2 * dt);
     }
 
-    // Constrain to tunnel (rectangular for 2D gameplay)
-    const maxR = s.tunnelRadius - 1.5;
+    // Constrain to tunnel (rectangular for 2D gameplay).
+    //
+    // The clamp holds through an asteroid field section, where there are no
+    // walls to be constrained by, and that is a decision rather than an
+    // oversight. The playable band is then the same band in both halves of a
+    // run, which is what lets `ghostRecord` and `readGhost` stay as they are: a
+    // recorded path is a pair of coordinates with no note of what the tunnel
+    // was doing at the time, so a section that widened the band would make a
+    // ghost from one run unreachable in the next. It also keeps the ship on
+    // screen - nothing outside this band is drawn - and keeps every rock in a
+    // section dodgeable, since `placeObstacle` measures the section's band off
+    // the same margin.
+    const maxR = s.tunnelRadius - SHIP_MARGIN;
     s.shipX = max(-maxR, min(maxR, s.shipX));
     s.shipY = max(0, min(maxR, s.shipY));
 
@@ -757,6 +810,7 @@ export class Game {
     s.gameTime += dt;
 
     this.updateWarpLevel();
+    this.updateAsteroidField(dt);
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance, dt);
@@ -824,6 +878,81 @@ export class Game {
     if (level <= s.warpLevel) return;
     s.warpLevel = level;
     s.warpFlash = WARP_FLASH_TIME;
+  }
+
+  /**
+   * The asteroid field section: every ASTEROID_INTERVAL the walls come down for
+   * ASTEROID_TIME and the rocks arrive across the whole screen.
+   *
+   * Run before `updateObstacles` so that opening and closing both happen on the
+   * frame boundary the obstacles are then advanced over, rather than a frame
+   * out from it: a section that spawned after the advance would carry its first
+   * rocks one frame further down the tunnel than the run's own.
+   *
+   * Nothing happens in a debug scenario. Each one is a fixed field laid out to
+   * be counted - sixty obstacles at a known spacing, a hundred orbs, the chaos
+   * screen's hundred and twenty - and taking the walls away for fifteen seconds
+   * of it changes what is being counted.
+   */
+  private updateAsteroidField(dt: number): void {
+    const s = this.state;
+    if (s.debugMode !== null) return;
+
+    if (s.asteroidTime > 0) {
+      s.asteroidTime = max(0, s.asteroidTime - dt);
+      if (s.asteroidTime === 0) this.closeAsteroidField();
+      return;
+    }
+
+    s.asteroidTimer += dt;
+    if (s.asteroidTimer < ASTEROID_INTERVAL) return;
+    // Held while a warp transition is on screen. Both announce themselves on
+    // the one HUD row and both are about the tunnel changing, so a section
+    // opening under a WARP LEVEL banner reads as one event the player cannot
+    // see the whole of. The timer is left where it is rather than reset, so the
+    // section opens on the first frame after the flash decays - at most
+    // WARP_FLASH_TIME late, and never skipped.
+    if (s.warpFlash > 0) return;
+    this.openAsteroidField();
+  }
+
+  /**
+   * Open a section: the clock starts and the rocks come in.
+   *
+   * The rocks are placed from just beyond the ship out to RECYCLE_Z, which is
+   * the depth the recycler returns one to, so the section's own field is spread
+   * the way a run's is rather than arriving as a wall of rock at one depth.
+   * They are added to the run's own obstacles rather than replacing them: what
+   * the section changes is the walls and the density, not what the tunnel was
+   * already carrying.
+   */
+  private openAsteroidField(): void {
+    const s = this.state;
+    s.asteroidTimer = 0;
+    s.asteroidTime = ASTEROID_TIME;
+    for (let i = 0; i < ASTEROID_COUNT; i++) this.spawnObstacle(-rand(20, RECYCLE_Z), true);
+  }
+
+  /**
+   * Close a section: the walls come back and the section's rocks go with them.
+   *
+   * Every rock the section brought in is taken out at once, including the ones
+   * still on screen, and the pop that costs is the price of one rule rather
+   * than three. A rock may be sitting outside the corridor when the walls
+   * return, so leaving it would draw an asteroid inside a wall; it may be
+   * outside the span `tracerDrawn` clips a tracer to, so leaving it would need
+   * the corridor held open past the section it belongs to; and it would be
+   * recycled into the wide band for the rest of the run, which is the band the
+   * section exists to be the exception to. Retiring them on the same flag that
+   * puts the walls back keeps the walls, the clip and the spawn band switching
+   * together.
+   *
+   * The run's own field is untouched, so a section neither adds to nor takes
+   * from the difficulty curve `updateObstacleScaling` is walking.
+   */
+  private closeAsteroidField(): void {
+    const s = this.state;
+    s.obstacles = s.obstacles.filter((o) => !o.field);
   }
 
   /**
@@ -938,7 +1067,15 @@ export class Game {
     if (!s.debugMode || s.debugMode === 'obstacleCollision' || s.debugMode === 'chaos') {
       const currentMinute = floor(s.gameTime / 60);
       if (currentMinute > s.lastObstacleIncreaseMinute) {
-        const newCount = Math.ceil(s.obstacles.length * 0.1);
+        // Ten percent of the run's own field, which is the whole of it except
+        // during an asteroid field section. A minute boundary falling inside
+        // one would otherwise take ten percent of the inflated population and
+        // keep it: the section's rocks are retired when it closes, but the
+        // obstacles grown off the back of them are ordinary ones and stay for
+        // the rest of the run, so one unlucky boundary would step the
+        // difficulty curve by about seven obstacles rather than by one.
+        const own = s.obstacles.reduce((n, o) => n + (o.field ? 0 : 1), 0);
+        const newCount = Math.ceil(own * 0.1);
         for (let i = 0; i < newCount; i++) {
           this.spawnObstacle(-rand(30, RECYCLE_Z));
         }
@@ -1001,8 +1138,7 @@ export class Game {
       o.rot += o.rotSpeed * dt;
       if (o.z > 10) {
         o.z -= RECYCLE_Z;
-        o.x = rand(-4.5, 4.5);
-        o.y = rand(0.5, 4.5);
+        this.placeObstacle(o);
         o.scale = rand(0.6, 1.5);
       }
       // 2D bounding-box overlap on the character grid
@@ -1142,7 +1278,7 @@ export class Game {
    * do not, and neither a target that is not being drawn nor a tracer that is
    * not being drawn can be half of a contact.
    *
-   * The corridor clip is read from `tracerLit`, which is what `drawBullets`
+   * The corridor clip is read from `tracerDrawn`, which is what `drawBullets`
    * draws by, so the two cannot come to state different corridors. Leaving it
    * out - which is how this stood until the clip was measured - let a shot
    * register from a column the tunnel no longer reaches: `drawEntitiesFar`
@@ -1234,9 +1370,9 @@ export class Game {
       // inside the corridor and nowhere else.
       const blockTop = max(gameTop, tScr.row - half);
       const blockBottom = min(gameBottom - 1, tScr.row + half);
-      const lowLit = tracerLit(bScr.col, bScr.row, gameTop, gameBottom, s.screenWidth);
+      const lowLit = tracerDrawn(s, bScr.col, bScr.row, gameTop, gameBottom, s.screenWidth);
       const highLit = bScr.row - 1 >= gameTop
-        && tracerLit(bScr.col, bScr.row - 1, gameTop, gameBottom, s.screenWidth);
+        && tracerDrawn(s, bScr.col, bScr.row - 1, gameTop, gameBottom, s.screenWidth);
       if (!lowLit && !highLit) continue; // nothing drawn, so nothing to register
       const tracerTop = highLit ? bScr.row - 1 : bScr.row;
       const tracerBottom = lowLit ? bScr.row : bScr.row - 1;

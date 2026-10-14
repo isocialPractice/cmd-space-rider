@@ -1,5 +1,189 @@
 # Changelog
 
+## [1.0.0-alpha.0.10.0] - 2026-10-14
+
+### Added
+
+- Asteroid field sections. Every `ASTEROID_INTERVAL` seconds of tunnel the walls
+  come down for `ASTEROID_TIME` and `ASTEROID_COUNT` rocks arrive across the
+  whole band the ship can reach, then the tunnel returns and the section's rocks
+  go with it. The three figures are 150, 15 and 70, and both builds read them
+  from one place, pinned in `test/parity.test.mjs`: a build carrying a different
+  one is a build playing a different game on the same leaderboard.
+
+  The whole section hangs off one state field, `asteroidTime`, and five things
+  read it. `drawTunnel` returns before drawing anything. `tracerDrawn` opens the
+  corridor a tracer is clipped to. `placeObstacle` puts a rock in the wide band
+  rather than the corridor. `closeAsteroidField` retires the section's rocks.
+  And the HUD carries a `>> ASTEROID FIELD <<` banner for the whole of it,
+  rather than for a flash, because the walls being gone is a state the player is
+  in and not an event they might have missed.
+
+  The cadence is counted on `asteroidTimer`, a timer of its own, rather than off
+  `gameTime` the way `updateWarpLevel` reads its interval. Read off `gameTime`
+  and every opening would land on a multiple of 150, which is a multiple of
+  `WARP_INTERVAL` whenever the two share a factor - and 150 and 60 share 30, so
+  a fifth of all sections would open on the frame a warp transition did. The
+  timer accumulates the `dt` the run was actually stepped and holds still while
+  a section is open, so the cadence is 150 seconds of tunnel between sections
+  however the frames fall, and a clock jump cannot open one the run has not
+  flown to. A section is also held off outright while a warp flash is live, with
+  the timer left where it is rather than reset, so the hold is at most
+  `WARP_FLASH_TIME` long and never a cancellation.
+
+  Four decisions in it are worth recording, because each had a plausible
+  alternative.
+
+  The walls are absent rather than different. `drawTunnel` returns at the top
+  instead of drawing something thinner, and that is what keeps
+  `test/warp.test.mjs` meaning what it says: the ramp assertions walk outward
+  from `tunnelSpan`'s own columns collecting whatever glyph they find, so a
+  section that drew a reduced wall, or the ring ends without the walls under
+  them, would put a fifth glyph on those columns - and the four-glyph set every
+  figure in the glyph tuning is counted over would stop being what the walls are
+  drawn from. The new suite asserts the wall columns come back empty during a
+  section and carry exactly what they carried before once it closes.
+
+  The corridor clip opens with the section. `tracerLit` is unchanged and still
+  the geometry; the new `tracerDrawn` reads it through the state, and while a
+  section is open it admits the whole grid instead. The clip exists because a
+  shot whose column has left the span is in a column no target can occupy at
+  that depth, and a section removes the premise rather than the reasoning: there
+  are no walls to cross, and its rocks are placed out past the old wall line, so
+  a shot into that column is a shot the player is owed. The grid bound is what
+  the span used to supply - without it a shot drifting off the screen would go
+  on registering against a block the renderer had clipped to the edge.
+  `drawBullets` and the pulse cannon's hit test both read the one function, so
+  they cannot come to state different corridors.
+
+  The ship's clamp holds through a section, where there are no walls to be
+  clamped by. The playable band is then the same band in both halves of a run,
+  which is what lets `ghostRecord` and `readGhost` stay exactly as they are: a
+  recorded path is a pair of coordinates with no note of what the tunnel was
+  doing at the time, so a section that widened the band would make a ghost from
+  one run unreachable in the next. `SHIP_MARGIN` is the clamp's own 1.5, now
+  named, because a section measures its placement band off the same figure -
+  every rock in one is a rock the ship could have reached.
+
+  The section's rocks are retired the moment it closes, including the ones still
+  on screen, and the pop that costs is the price of one rule rather than three.
+  A rock can be sitting outside the corridor when the walls return, so leaving
+  it would draw an asteroid inside a wall; it can be outside the span
+  `tracerDrawn` clips to, so leaving it would need the corridor held open past
+  the section it belongs to; and it would be recycled into the wide band for the
+  rest of the run, which is the band the section exists to be the exception to.
+  One flag switches the walls, the clip and the spawn band together.
+
+  Two things a section deliberately does not touch. `updateObstacleScaling` now
+  takes its ten percent off the run's own obstacles rather than off
+  `obstacles.length`, which is the same figure in every run that never opens a
+  section: a minute boundary falling inside one would otherwise take a tenth of
+  the inflated population and keep it, since the section's rocks go when it
+  closes but obstacles grown off the back of them are ordinary ones and stay, so
+  one unlucky boundary would step the difficulty curve by about seven rather
+  than by one. And no debug scenario opens a section at all - each is a fixed
+  field laid out to be counted, and taking the walls away for fifteen seconds of
+  it changes what is being counted.
+
+  The rock count is not on the detail ladder, which is the one place this
+  departs from how that ladder has been used so far. A section's rocks are a
+  population drawn every frame for fifteen seconds, which is exactly the steady
+  cost `DETAIL_TIERS` exists to hold down - but every figure on that ladder is
+  presentation that carries no rule, no hit test and no score, and a rock
+  carries all three: it damages the ship, it can be shot, and surviving the
+  section is worth distance. Thinning it on a slow device would make the section
+  easier there, and the leaderboard is persisted and compared across devices. So
+  the load goes the other way: a section raises the per-frame cost, the ladder
+  measures the frames and pays for it out of stars and debris, and every device
+  flies the same seventy rocks.
+
+  `test/asteroid-field.test.mjs` is 44 cases over both builds, in five groups -
+  the clock, the rocks, the walls, the corridor and the banner - and three of
+  them were written against behaviour that turned out to differ slightly from
+  what was expected, which is why they are worth having: the frame that closes a
+  section spends its `dt` on the section rather than crediting the next
+  interval, a debug scenario leaves the timer untouched rather than clearing it,
+  and the banner sits on `gameTop`, where `tunnelSpan` gives only three columns
+  either side of centre, so the wall walk starts a row below it the way
+  `wallCells` in `test/warp.test.mjs` already does.
+
+- A probe for the figures the browser build's glyph centring quotes about
+  itself: `npm run probe -- glyph-tuning`. It takes no flags - there is no grid,
+  build, placement walk or pass in it - and it is the first probe in the rig
+  that flies nothing and measures nothing.
+
+  Six sets of numbers sat in the comments around `glyphInset` and `tuneText`,
+  and every one of them had been read in chromium against a scratch copy of the
+  page and written down, so nothing in the repository could rebuild any of them.
+  The probe splits them, because they are not the same kind of figure. The
+  arithmetic half needs one measured input - that Courier New advances at
+  `1229/2048` em, a property of the font file rather than of any browser - and
+  everything after that is a ceiling, a subtraction and a halving. The probe
+  prints it from that metric and from the page's own `glyphInset`, loaded
+  through the same module the tests load the engine through, rather than from a
+  transcription.
+
+  What it rebuilds, each of which it reproduces exactly: the per-size advance
+  and cell table, the cells running 10, 10, 9, 8, 8, 7, 7, 6, 5, 5, 4 over the
+  eleven sizes `fitGrid` walks; the inset range, 0.099px at font 13 to 0.500px
+  at font 10, zero at none of them; the flat-0.6 near miss, which parts from the
+  font's own metric at exactly font 15 and font 10, the two sizes where
+  `0.6 * size` is a whole number and where under the real metric the slack is
+  widest; the cycle of five, and the half-thousandth of drift per step that
+  keeps it from being an exact repeat; the slack groups the junction reading is
+  organised by, which come back as the same five the comment names; and the
+  glyph-and-size pair arithmetic - 44 pairs over eleven sizes, 28 over the seven
+  distinct cells the removed figure was counted against, 16 merged rather than
+  covered, with the 5px cell at fonts 8 and 7 off advances of 4.801px and
+  4.201px. It also walks viewports through the page's own `fitGrid` to confirm
+  all eleven sizes are reachable, rather than assuming the range is the answer.
+
+  Two things fell out of writing it. The overhang past the cell, recorded as
+  eleven unexplained rasterizer numbers, is arithmetic resting on a single
+  premise - that the ink box ends at `round(advance) + 1` - and that premise
+  reproduces both published ends, 0.299px and 1.200px, exactly. It is fitted to
+  the published range rather than read, and the probe says so where it prints
+  it: what corroborates it is that the `+ 1` is separately recorded beside
+  `glyphInset`, as three of the four wall glyphs reaching a whole pixel left of
+  their origin, and what would settle it is reading `actualBoundingBoxRight` at
+  the eleven sizes. And two sentences beside `tuneText` that look as though they
+  disagree do not: the inset "runs 0.099px to 0.500px" and "can never reach half
+  a pixel" are both true, because the widest is 0.49951171875 and 0.500 is that
+  figure to three places. Both are now said in the comment as well as in the
+  probe.
+
+  Four figures are left unrebuildable, and that is the decision the
+  `## Measurement` item asked for rather than an omission: the
+  hinted-against-precise comparison over 96 pixel columns, the junction levels,
+  the left bearing at the two narrowest-slack sizes, and the ink widths of the
+  four wall glyphs. No browser probe lives in this repository. Every probe in
+  the rig runs in node, so a chromium probe would split it into probes that run
+  anywhere and probes that need a browser downloaded first, and what each of
+  those readings bought was a one-off verification of a tuning decision since
+  taken and recorded - two of them recorded as limits left in place on purpose -
+  which nothing re-reads. So they are quoted with their method instead: the
+  probe lists each one with the instrument that took it and what it concluded. A
+  figure nothing can rebuild and nothing depends on is a note; one something
+  depended on would be a reason to reopen this. The pad release reading from
+  `1.0.0-alpha.0.8.1`, measured against a patched copy of `index.html`, is
+  listed with them for the same reason.
+
+### Changed
+
+- The comments in `index.html` that pointed at the `## Measurement` item in
+  `TODO.md` for their method now point at the probe, since that item is complete
+  and archived and a comment pointing at an archived item is a dead pointer.
+  Three places moved, and each says which half it is in: the inset range and the
+  pair arithmetic are rebuilt, the left bearing level and the ink widths are
+  not, and the overhang is reproduced off a premise. The claim that the overhang
+  and the left bearing both "need a rasterizer, so they are not rebuildable from
+  this repository" was true when written and is now true of one of them.
+
+- The probe rig's own header names the two probes that load the browser alone
+  rather than the one, and says why `glyph-tuning` is still reading a real
+  engine despite flying nothing: arithmetic restated from a copy drifts from the
+  page exactly as a staged flight drifts from the game.
+
 ## [1.0.0-alpha.0.9.5] - 2026-10-13
 
 ### Fixed

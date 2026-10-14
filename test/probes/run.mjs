@@ -9,8 +9,16 @@
 // use. That is the point of the rig: the pulse cannon figures this work started
 // from were taken on a sandbox copy of the engine, and a copy drifts, so a
 // figure taken off a copy can be right about the copy and wrong about the game.
-// The probes that fly a shot run against both engines; overlay-anchor loads the
-// browser alone, because a terminal has no touch overlay to place.
+// The probes that fly a shot run against both engines. Two load the browser
+// alone: overlay-anchor, because a terminal has no touch overlay to place, and
+// glyph-tuning, because a terminal has no glyph of its own to centre - it writes
+// characters and the terminal places them in its own cells.
+//
+// glyph-tuning is also the one probe that flies nothing. It rebuilds the figures
+// the browser build's glyph centring quotes about itself from the font's em
+// advance and the page's own glyphInset, which is still a figure taken off the
+// real engine rather than a copy - that is the rule this rig exists for, and
+// arithmetic drifts from a restated copy exactly as a flight does.
 //
 //   npm run probe -- <name> [--grid 205x50] [--grid 80x24] [--build browser]
 //                            [--count 30] [--passes 5]

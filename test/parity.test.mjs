@@ -38,6 +38,15 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.COMBO_MAX, terminalTypes.COMBO_MAX);
   assert.equal(browser.SHOT_SLACK_COLS, terminalTypes.SHOT_SLACK_COLS);
   assert.equal(browser.SLACK_REF_WIDTH, terminalTypes.SLACK_REF_WIDTH);
+  // The asteroid field section. All three decide when a run's walls come down
+  // and how much arrives in their place, so a build carrying a different one is
+  // a build playing a different game on the same leaderboard.
+  assert.equal(browser.ASTEROID_INTERVAL, terminalTypes.ASTEROID_INTERVAL);
+  assert.equal(browser.ASTEROID_TIME, terminalTypes.ASTEROID_TIME);
+  assert.equal(browser.ASTEROID_COUNT, terminalTypes.ASTEROID_COUNT);
+  // Read twice in each build - the ship's clamp and a section's placement band -
+  // so the two agreeing is what keeps every rock in a section dodgeable in both.
+  assert.equal(browser.SHIP_MARGIN, terminalTypes.SHIP_MARGIN);
 });
 
 test('both builds hold the same detail ladder', () => {

@@ -341,7 +341,18 @@ let PALETTE=ANSI256;
 //
 // Both readings are off actualBoundingBoxLeft and actualBoundingBoxRight in
 // chromium at every size fitGrid can settle on. Like the junction levels above
-// they need a rasterizer, so they are not rebuildable from this repository.
+// they needed a rasterizer, and the two have since parted company.
+//
+// The overhang is rebuilt by `npm run probe -- glyph-tuning`, which reproduces
+// the 0.299px to 1.200px range exactly - but off a premise rather than off a
+// reading: that the ink box ends at round(advance) + 1. That premise is fitted
+// to this range and corroborated by the left bearing below, and it is not a
+// measurement. The probe is explicit about which it is; read it there before
+// quoting the figure as rebuilt.
+//
+// The left bearing itself still needs the rasterizer, as do the junction levels
+// and the ink widths below. The probe lists each of them with the instrument
+// that took it, which is where the method for those three now lives.
 //
 // A count stood beside that until 0.8.3-alpha - 24 of 28 glyph-and-size pairs
 // inking wider than their cell and four inking exactly it - and it answers a
@@ -354,9 +365,11 @@ let PALETTE=ANSI256;
 // sizes sharing a cell can differ by most of a pixel of advance - fonts 8 and 7
 // share a 5px cell off 4.801px and 4.201px - so a reading taken at one of them
 // does not stand for the other. Re-taking it over all eleven needs a
-// rasterizer, so it sits with the other browser-only figures in the
-// `## Measurement` item in TODO.md. The overlap above does not rest on it:
-// the overhang it follows from was read at every size.
+// rasterizer, so it sits with the other browser-only figures listed at the foot
+// of `npm run probe -- glyph-tuning`, which also rebuilds the pair arithmetic in
+// this paragraph - the 44, the 28, the seven distinct cells and the 4.801 and
+// 4.201 beside them. The overlap above does not rest on the count: the overhang
+// it follows from was read at every size.
 //
 // Browser only. The CLI build writes characters into a terminal, which places
 // them in its own cells, so there is nothing here for test/parity.test.mjs to
@@ -392,9 +405,11 @@ let PALETTE=ANSI256;
  * is what `the inset never pushes a glyph out of its own cell` in
  * test/menu-layout.test.mjs pins - and it would buy that at the cost of a
  * defect nobody has reported seeing, at level 39 on two of eleven sizes, which
- * the grid had before the centring arrived. Rebuilding the figure needs a
- * rasterizer, so it sits with the other browser-only figures in the
- * `## Measurement` item in TODO.md rather than beside the probes.
+ * the grid had before the centring arrived. Rebuilding the level needs a
+ * rasterizer, so it is listed at the foot of `npm run probe -- glyph-tuning`
+ * with the instrument that read it rather than rebuilt there. Which two sizes
+ * those are, and that their inset is a tenth of a pixel while the other nine
+ * have more, is arithmetic and the probe does rebuild it.
  */
 function glyphInset(cellW,advance){
   if(!(advance>0)||!(cellW>0)||advance>=cellW)return 0;
@@ -423,6 +438,16 @@ function glyphInset(cellW,advance){
  * page's own `measureCell`, at every size `fitGrid` can settle on: across the 6
  * to 16 range the inset runs 0.099px to 0.500px, and at no size in it is the
  * inset zero.
+ *
+ * Those two sentences look as though they disagree, and do not. The widest
+ * inset is 0.49951171875, at font 10; 0.500 is that figure to three places, and
+ * nothing in the range is 0.5 or over, which is what the ceiling guarantees.
+ *
+ * The reading no longer has to be taken on trust either. `npm run probe --
+ * glyph-tuning` rebuilds the whole table from the em metric below and this
+ * page's own `glyphInset` - the advance, the cell, the inset, both ends of the
+ * range, the cycle and the near miss, per size. The 96 comparisons above are
+ * the one figure in this comment that still needs a canvas.
  *
  * Courier New advances at `1229/2048` em, not at the flat 0.6 em it is near
  * enough to be taken for, and that near-miss is what puts both ends of the
@@ -605,6 +630,24 @@ function tracerLit(col,row,gameTop,gameBottom,w){
   return col>span.left&&col<span.right;
 }
 
+// Whether a tracer at this column and row is drawn, which is the corridor above
+// while the tunnel is up and the whole play area while an asteroid field section
+// is open.
+//
+// The clip exists because a shot whose column has left the span is in a column no
+// target can occupy at that depth. A section removes the premise rather than the
+// reasoning: there are no walls to cross, and its rocks are placed across the
+// whole band the ship can reach, so a column out by the old wall line is a column
+// a rock is in. The grid bound is what the span used to supply - without it a
+// shot drifting off the screen would go on registering.
+//
+// Read by drawBullets and by the pulse cannon's hit test, which is the whole
+// reason it is one function.
+function tracerDrawn(state,col,row,gameTop,gameBottom,w){
+  if(state.asteroidTime>0)return col>=0&&col<w;
+  return tracerLit(col,row,gameTop,gameBottom,w);
+}
+
 // Seconds a combo chain survives without a kill before it drops to nothing.
 const COMBO_TIME=2;
 // The highest multiplier a chain can reach. Without a ceiling the chain barely
@@ -631,6 +674,39 @@ const WARP_INTERVAL=60;
 // read a three-word line and short enough that the walls are back to their own
 // colours well before the thickened field reaches the ship.
 const WARP_FLASH_TIME=2;
+
+// Seconds of a run between asteroid field sections: the stretch where the
+// tunnel walls come down and the rocks arrive across the whole screen.
+//
+// Counted on a timer of its own rather than off gameTime the way
+// updateWarpLevel is. A section is "every few minutes of flying", which a timer
+// says exactly: it accumulates the dt the run was actually stepped and stops
+// while a section is open. Read off gameTime instead and every opening would
+// land on a multiple of this number, which is a multiple of WARP_INTERVAL
+// whenever the two share a factor - and 150 and 60 share 30.
+const ASTEROID_INTERVAL=150;
+// Seconds a section stays open before the tunnel returns. Long enough to cross
+// at the speed it opens at, short enough that the walls coming back reads as the
+// section ending rather than as a new one starting.
+const ASTEROID_TIME=15;
+// Rocks a section brings in, added to the run's own field rather than replacing
+// it.
+//
+// Not on the detail ladder. A section's rocks are a population drawn every frame
+// for ASTEROID_TIME seconds, which is exactly the cost DETAIL_TIERS exists to
+// hold down - but the ladder only ever cuts presentation, and a rock carries a
+// rule, a hit test and a score. Thinning it on a slow device would make the
+// section easier there, and the leaderboard is compared across devices. So the
+// load goes the other way: a section raises the per-frame cost and the ladder
+// pays for it out of stars and debris.
+const ASTEROID_COUNT=70;
+
+// How far inside the tunnel radius the ship is held, in world units. Read twice:
+// it is the clamp updatePlaying keeps the ship inside, and therefore also the
+// band a section places its rocks across, so every rock in one is a rock the
+// ship could have reached. The run's own obstacles do not read it - they are
+// held at four and a half units whatever the radius is.
+const SHIP_MARGIN=1.5;
 
 // The chance a mine shot to pieces leaves a powerup behind.
 //
@@ -1023,6 +1099,7 @@ class Game{
       damageFlash:0,collectFlash:0,boosting:false,
       combo:0,comboTimer:0,
       warpLevel:1,warpFlash:0,
+      asteroidTime:0,asteroidTimer:0,
       rapidFire:0,slowMotion:0,fireTimer:0,
       sounds:[],
       detail:0,frameSpent:0,frameSeen:0,frameStalls:0,
@@ -1193,6 +1270,7 @@ class Game{
     s.shipX=0;s.shipY=1;s.shipRoll=0;s.rollDir=0;s.rollCooldown=0;
     s.combo=0;s.comboTimer=0;
     s.warpLevel=1;s.warpFlash=0;
+    s.asteroidTime=0;s.asteroidTimer=0;
     s.rapidFire=0;s.slowMotion=0;s.fireTimer=0;
     s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.powerups=[];s.mines=[];
     s.gameTime=0;s.lastObstacleIncreaseMinute=0;
@@ -1289,11 +1367,33 @@ class Game{
     const next=(from+step+NAME_ALPHABET.length)%NAME_ALPHABET.length;
     s.entryName=normalizeName(s.entryName.slice(0,slot)+NAME_ALPHABET[next]+s.entryName.slice(slot+1));
   }
-  spawnObstacle(z){
-    this.state.obstacles.push({
-      x:rand(-4.5,4.5),y:rand(0.5,4.5),z,
-      rot:rand(0,TAU),rotSpeed:rand(-2,2),scale:rand(0.6,1.5),
-    });
+  // Place an obstacle across the tunnel, in the band its kind belongs to.
+  //
+  // The run's own field is held inside four and a half units of the axis, which
+  // is the span the walls are drawn outside of and the figure drawBullets
+  // reasons about. An asteroid field section's rocks take the whole band the
+  // ship can reach instead: the section has no walls, so the corridor is not a
+  // thing to stay inside, and the width opening up is what the player sees of it.
+  //
+  // Two draws, x then y, in that order whichever band it is. A run's whole seeded
+  // world is the order these come out in.
+  placeObstacle(o){
+    if(o.field){
+      const reach=this.state.tunnelRadius-SHIP_MARGIN;
+      o.x=rand(-reach,reach);o.y=rand(0,reach);
+      return;
+    }
+    o.x=rand(-4.5,4.5);o.y=rand(0.5,4.5);
+  }
+  // One obstacle at a depth, in the run's own field or in a section's. The draws
+  // run x, y, rot, rotSpeed, scale, which is the order they ran in before the
+  // placement moved out: a literal cannot call the placement and keep x and y
+  // ahead of the other three.
+  spawnObstacle(z,field=false){
+    const o={x:0,y:0,z,rot:0,rotSpeed:0,scale:0,field};
+    this.placeObstacle(o);
+    o.rot=rand(0,TAU);o.rotSpeed=rand(-2,2);o.scale=rand(0.6,1.5);
+    this.state.obstacles.push(o);
   }
   spawnOrb(z){
     this.state.orbs.push({x:rand(-4.5,4.5),y:rand(0.5,4.5),z,collected:false});
@@ -1461,7 +1561,15 @@ class Game{
       s.speed=lerp(s.speed,s.baseSpeed,2*dt);
     }
 
-    const maxR=s.tunnelRadius-1.5;
+    // The clamp holds through an asteroid field section, where there are no walls
+    // to be constrained by, and that is a decision rather than an oversight. The
+    // playable band is then the same in both halves of a run, which is what lets
+    // ghostRecord and readGhost stay as they are: a recorded path is a pair of
+    // coordinates with no note of what the tunnel was doing at the time, so a
+    // section that widened the band would make a ghost from one run unreachable
+    // in the next. It also keeps every rock in a section dodgeable, since
+    // placeObstacle measures the section's band off the same margin.
+    const maxR=s.tunnelRadius-SHIP_MARGIN;
     s.shipX=max(-maxR,min(maxR,s.shipX));
     s.shipY=max(0,min(maxR,s.shipY));
 
@@ -1510,6 +1618,7 @@ class Game{
     s.gameTime+=dt;
 
     this.updateWarpLevel();
+    this.updateAsteroidField(dt);
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance,dt);
@@ -1537,6 +1646,59 @@ class Game{
     if(level<=s.warpLevel)return;
     s.warpLevel=level;
     s.warpFlash=WARP_FLASH_TIME;
+  }
+  // The asteroid field section: every ASTEROID_INTERVAL the walls come down for
+  // ASTEROID_TIME and the rocks arrive across the whole screen.
+  //
+  // Run before updateObstacles so that opening and closing both happen on the
+  // frame boundary the obstacles are then advanced over, rather than a frame out
+  // from it. Nothing happens in a debug scenario: each one is a fixed field laid
+  // out to be counted, and taking the walls away for fifteen seconds of it
+  // changes what is being counted.
+  updateAsteroidField(dt){
+    const s=this.state;
+    if(s.debugMode!==null)return;
+
+    if(s.asteroidTime>0){
+      s.asteroidTime=max(0,s.asteroidTime-dt);
+      if(s.asteroidTime===0)this.closeAsteroidField();
+      return;
+    }
+
+    s.asteroidTimer+=dt;
+    if(s.asteroidTimer<ASTEROID_INTERVAL)return;
+    // Held while a warp transition is on screen. Both announce themselves on the
+    // one HUD row and both are about the tunnel changing, so a section opening
+    // under a WARP LEVEL banner reads as one event the player cannot see the
+    // whole of. The timer is left where it is rather than reset, so the section
+    // opens on the first frame after the flash decays - at most WARP_FLASH_TIME
+    // late, and never skipped.
+    if(s.warpFlash>0)return;
+    this.openAsteroidField();
+  }
+  // Open a section: the clock starts and the rocks come in, placed from just
+  // beyond the ship out to RECYCLE_Z so the section's own field is spread the way
+  // a run's is rather than arriving as a wall of rock at one depth.
+  openAsteroidField(){
+    const s=this.state;
+    s.asteroidTimer=0;
+    s.asteroidTime=ASTEROID_TIME;
+    for(let i=0;i<ASTEROID_COUNT;i++)this.spawnObstacle(-rand(20,RECYCLE_Z),true);
+  }
+  // Close a section: the walls come back and the section's rocks go with them.
+  //
+  // Every rock the section brought in is taken out at once, including the ones
+  // still on screen, and the pop that costs is the price of one rule rather than
+  // three. A rock may be sitting outside the corridor when the walls return, so
+  // leaving it would draw an asteroid inside a wall; it may be outside the span
+  // tracerDrawn clips a tracer to, so leaving it would need the corridor held
+  // open past the section it belongs to; and it would be recycled into the wide
+  // band for the rest of the run. The run's own field is untouched, so a section
+  // neither adds to nor takes from the difficulty curve updateObstacleScaling is
+  // walking.
+  closeAsteroidField(){
+    const s=this.state;
+    s.obstacles=s.obstacles.filter((o)=>!o.field);
   }
   // Dropped powerups: carried in by the tunnel and pulled toward the ship.
   //
@@ -1630,7 +1792,14 @@ class Game{
     if(!s.debugMode||s.debugMode==='obstacleCollision'||s.debugMode==='chaos'){
       const currentMinute=floor(s.gameTime/60);
       if(currentMinute>s.lastObstacleIncreaseMinute){
-        const newCount=Math.ceil(s.obstacles.length*0.1);
+        // Ten percent of the run's own field, which is the whole of it except
+        // during an asteroid field section. A minute boundary falling inside one
+        // would otherwise take ten percent of the inflated population and keep
+        // it: the section's rocks are retired when it closes, but the obstacles
+        // grown off the back of them are ordinary ones and stay for the rest of
+        // the run.
+        const own=s.obstacles.reduce((n,o)=>n+(o.field?0:1),0);
+        const newCount=Math.ceil(own*0.1);
         for(let i=0;i<newCount;i++)this.spawnObstacle(-rand(30,RECYCLE_Z));
         s.lastObstacleIncreaseMinute=currentMinute;
       }
@@ -1674,7 +1843,7 @@ class Game{
     for(let i=s.obstacles.length-1;i>=0;i--){
       const o=s.obstacles[i];
       o.z+=advance;o.rot+=o.rotSpeed*dt;
-      if(o.z>10){o.z-=RECYCLE_Z;o.x=rand(-4.5,4.5);o.y=rand(0.5,4.5);o.scale=rand(0.6,1.5)}
+      if(o.z>10){o.z-=RECYCLE_Z;this.placeObstacle(o);o.scale=rand(0.6,1.5)}
       if(o.z>-20&&o.z<5){
         const oScr=this.toScreen(o.x,o.y,o.z);
         const size=max(1,floor(oScr.scale*2.5));
@@ -1855,9 +2024,9 @@ class Game{
       // is its own row and, where there is room for it, the row above.
       const blockTop=max(gameTop,tScr.row-half);
       const blockBottom=min(gameBottom-1,tScr.row+half);
-      const lowLit=tracerLit(bScr.col,bScr.row,gameTop,gameBottom,s.screenWidth);
+      const lowLit=tracerDrawn(s,bScr.col,bScr.row,gameTop,gameBottom,s.screenWidth);
       const highLit=bScr.row-1>=gameTop
-        &&tracerLit(bScr.col,bScr.row-1,gameTop,gameBottom,s.screenWidth);
+        &&tracerDrawn(s,bScr.col,bScr.row-1,gameTop,gameBottom,s.screenWidth);
       if(!lowLit&&!highLit)continue; // nothing drawn, so nothing to register
       const tracerTop=highLit?bScr.row-1:bScr.row;
       const tracerBottom=lowLit?bScr.row:bScr.row-1;
@@ -2095,7 +2264,21 @@ function drawStarfield(screen,state,gameTop,gameBottom){
   }
 }
 
+// The tunnel: two walls, the ring ends on them and the floor dots between.
+//
+// An asteroid field section draws none of it. Returning here rather than reaching
+// into the loop is what keeps the ramp assertions in test/warp.test.mjs meaning
+// what they say: they walk outward from tunnelSpan's own columns collecting
+// whatever glyph they find, so a section that drew some thinner wall would put a
+// fifth glyph on those columns and the four-glyph set the figures above are
+// counted over would no longer be what the walls are drawn from. A section is the
+// walls being absent, not the walls being different.
+//
+// What is left is the starfield, drawn before this, which is the backdrop the
+// open stretch reads against.
 function drawTunnel(screen,state,gameTop,gameBottom){
+  if(state.asteroidTime>0)return;
+
   const w=screen.width;
   const gameH=gameBottom-gameTop;
   const ringSpacing=4;
@@ -2241,7 +2424,7 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom){
  */
 function drawBullets(screen,state,gameTop,gameBottom){
   const w=screen.width,h=screen.height;
-  const inCorridor=(col,row)=>tracerLit(col,row,gameTop,gameBottom,w);
+  const inCorridor=(col,row)=>tracerDrawn(state,col,row,gameTop,gameBottom,w);
   for(const b of state.bullets){
     const pos=gameToScreen(b.x,b.y,b.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
     if(pos.row<gameTop||pos.row>=gameBottom)continue;
@@ -2382,12 +2565,30 @@ function drawHUD(screen,state){
     }
   }
 
-  // Warp banner. It shares the centre of this row with the debug label and the
-  // NEW BEST banner, and loses to both: a debug run has its label up for the
-  // whole run, so the banner is held back rather than blinking over it for two
-  // seconds, and NEW BEST is drawn after this and covers it on the rare frame the
-  // two coincide. The level counts from 1, so the first one a run ever shows
-  // reads WARP LEVEL 2.
+  // Asteroid field banner. It holds the row for the whole section rather than for
+  // a flash, because the walls being gone is a state the player is in and not an
+  // event they missed, and it is drawn in the rocks' own colours so the line and
+  // what it is about read as one thing.
+  //
+  // Drawn before the warp banner and held back from a debug run, which is the
+  // same arrangement the warp banner already has with NEW BEST: the two cannot
+  // normally coincide, since updateAsteroidField holds a section off while a
+  // flash is live, but a section opened just under fifteen seconds before an
+  // interval crossing is still running when the flash arrives.
+  if(state.asteroidTime>0&&state.debugMode===null){
+    const blink=sin(state.uiTime*6)>0;
+    screen.putStringCenter(HUD_ROWS,'>> ASTEROID FIELD <<',
+      blink?C.BRIGHT_RED:C.RED,C.BLACK);
+  }
+
+  // Warp banner. It shares the centre of this row with the debug label, the
+  // asteroid field banner and the NEW BEST banner. It loses to the first and the
+  // last and beats the middle one: a debug run has its label up for the whole
+  // run, so the banner is held back rather than blinking over it for two seconds;
+  // NEW BEST is drawn after this and covers it on the rare frame the two
+  // coincide; and the asteroid banner is drawn before it and gives up the row for
+  // the two seconds this is live. The level counts from 1, so the first one a run
+  // ever shows reads WARP LEVEL 2.
   if(state.warpFlash>0&&state.debugMode===null){
     const blink=sin(state.uiTime*8)>0;
     screen.putStringCenter(HUD_ROWS,`>> WARP LEVEL ${state.warpLevel} <<`,

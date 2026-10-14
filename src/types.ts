@@ -26,6 +26,24 @@ export const DEBUG_MODE_DESCS: Record<DebugMode, string> = {
 export interface Obstacle {
   x: number; y: number; z: number;
   rot: number; rotSpeed: number; scale: number;
+  /**
+   * Set on the rocks an asteroid field section brought in, and absent on the
+   * run's own field.
+   *
+   * It is what makes the section reversible. The field's rocks are placed
+   * across the whole band the ship can reach rather than inside the corridor,
+   * so when the walls come back one of them can be sitting where a wall is
+   * about to be drawn - and the flag is how `closeAsteroidField` finds them
+   * again to take them out, how the recycler knows which band to put one back
+   * in, and how `updateObstacleScaling` keeps its ten percent off a population
+   * that is about to shrink.
+   *
+   * Carried by every obstacle rather than only by a section's, because
+   * `test/parity.test.mjs` compares the two builds' opening worlds with a deep
+   * equality: a key one build leaves off and the other sets to false is two
+   * different objects to that assertion.
+   */
+  field: boolean;
 }
 
 export interface Orb {
@@ -128,6 +146,20 @@ export function shotSlackCols(screenWidth: number): number {
 }
 
 /**
+ * How far inside the tunnel radius the ship is held, in world units.
+ *
+ * Read twice and in both builds: it is the clamp `updatePlaying` keeps the ship
+ * inside, and it is therefore also the band an asteroid field section places
+ * its rocks across - a section with no walls still wants every rock in it to be
+ * one the ship could have reached, or the field is denser than it is dodgeable.
+ *
+ * The run's own obstacles do not read it. They are held at four and a half
+ * units whatever the radius is, which is the figure `drawBullets` reasons about
+ * when it says every target sits inside the drawn span at every depth.
+ */
+export const SHIP_MARGIN = 1.5;
+
+/**
  * The two columns the tunnel's walls are drawn on for a given row.
  *
  * Three things read it, and that is why it lives here rather than in the
@@ -160,6 +192,35 @@ export function tracerLit(
 ): boolean {
   const span = tunnelSpan(row, gameTop, gameBottom, w);
   return col > span.left && col < span.right;
+}
+
+/**
+ * Whether a tracer at this column and row is drawn, which is the corridor
+ * above while the tunnel is up and the whole play area while an asteroid field
+ * section is open.
+ *
+ * The clip exists because a shot whose column has left the span is in a column
+ * no target can occupy at that depth - `drawBullets` says why at length. A
+ * section removes the premise rather than the reasoning: there are no walls to
+ * cross, and its rocks are placed across the whole band the ship can reach, so
+ * a column out by the old wall line is a column a rock is in and a shot into it
+ * is a shot the player is owed.
+ *
+ * The grid bound is what the span used to supply. Without it a shot drifting
+ * off the screen would go on registering against anything whose own block the
+ * renderer had clipped to the edge.
+ *
+ * Read by `drawBullets` and by the pulse cannon's hit test, which is the whole
+ * reason it is one function: a frame that draws no tracer registers nothing on
+ * that frame, and the two deciding that separately is how they come to state
+ * different corridors.
+ */
+export function tracerDrawn(
+  state: GameState,
+  col: number, row: number, gameTop: number, gameBottom: number, w: number
+): boolean {
+  if (state.asteroidTime > 0) return col >= 0 && col < w;
+  return tracerLit(col, row, gameTop, gameBottom, w);
 }
 
 /**
@@ -239,6 +300,61 @@ export const WARP_INTERVAL = 60;
  * the ship.
  */
 export const WARP_FLASH_TIME = 2;
+
+/**
+ * Seconds of a run between asteroid field sections: the stretch where the
+ * tunnel walls come down and the rocks arrive across the whole screen.
+ *
+ * Counted on a timer of its own rather than off `gameTime` the way
+ * `updateWarpLevel` is, and the difference is the point. A section is "every
+ * few minutes of flying", which a timer says exactly: it accumulates the
+ * `dt` the run was actually stepped and stops while a section is open, so the
+ * cadence is this interval plus ASTEROID_TIME however the frames fall. Read off
+ * `gameTime` instead and every opening would land on a multiple of this number,
+ * which is a multiple of WARP_INTERVAL whenever the two share a factor - and
+ * 150 and 60 share 30, so a fifth of the sections would open on the frame a
+ * warp transition did.
+ *
+ * Two and a half minutes also puts the first section after the run has had
+ * two warp steps and the first mines, so a player meets the open stretch
+ * already knowing what the tunnel is.
+ */
+export const ASTEROID_INTERVAL = 150;
+
+/**
+ * Seconds an asteroid field section stays open before the tunnel returns.
+ *
+ * Fifteen is long enough to cross at the speed the section opens at - the
+ * rocks are placed out to RECYCLE_Z and carried in at the run's own speed, so
+ * a player flies through most of a field's depth rather than watching it
+ * arrive - and short enough that the walls coming back is read as the section
+ * ending rather than as a new one starting.
+ */
+export const ASTEROID_TIME = 15;
+
+/**
+ * Rocks a section brings in.
+ *
+ * Added to the run's own field rather than replacing it, so the section is
+ * denser than the run around it by this count whenever it opens, whatever
+ * `updateObstacleScaling` has grown the run's own field to by then.
+ *
+ * Not on the detail ladder, and that is the one decision here worth stating.
+ * A section's rocks are a population drawn every frame for ASTEROID_TIME
+ * seconds, which is exactly the steady cost DETAIL_TIERS exists to hold down -
+ * but the ladder only ever cuts presentation. Every figure on it is something
+ * that "carries no rule, no hit test and no score", as the ladder's own comment
+ * puts it, and a rock carries all three: it damages the ship, it can be shot,
+ * and surviving the section is worth distance. Thinning it on a slow device
+ * would make the section easier there, and `leaderboard` is persisted and
+ * compared across devices.
+ *
+ * So the load goes the other way. A section raises the per-frame cost, the
+ * ladder measures the frames and pays for it out of stars and debris, and every
+ * device flies the same seventy rocks. That is the ladder working rather than
+ * the ladder being bypassed.
+ */
+export const ASTEROID_COUNT = 70;
 
 /**
  * The chance a mine shot to pieces leaves a powerup behind.
@@ -372,6 +488,22 @@ export interface GameState {
   warpLevel: number;
   /** Seconds left on the warp transition raised by the last step up. */
   warpFlash: number;
+
+  /**
+   * Seconds left of the open asteroid field section, 0 while the tunnel is up.
+   *
+   * The one flag the whole section hangs off: `drawTunnel` draws no walls while
+   * it is running, `tracerDrawn` opens the corridor to the full grid, and the
+   * HUD carries the banner saying why.
+   */
+  asteroidTime: number;
+  /**
+   * Seconds of a run since the last section closed, counting toward the next.
+   *
+   * Held still while a section is open, so the cadence is ASTEROID_INTERVAL of
+   * tunnel between sections rather than of the whole cycle.
+   */
+  asteroidTimer: number;
 
   /** Seconds left of Rapid Fire, 0 when the cannon is at its own cadence. */
   rapidFire: number;

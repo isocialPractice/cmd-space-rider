@@ -25,6 +25,7 @@ export const PROBES = {
   'column': { load: () => import('./column.mjs'), flags: ['grid', 'build', 'count'] },
   'free-flight': { load: () => import('./free-flight.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
   'overlay-anchor': { load: () => import('./overlay-anchor.mjs'), flags: [] },
+  'glyph-tuning': { load: () => import('./glyph-tuning.mjs'), flags: [] },
 };
 
 /**
