@@ -2547,3 +2547,75 @@ still be found by name.
     costs went unmeasured. The two new cases are the right ones and want no
     change.
   - From: UI/UX Override - the glyph half of the tunnel ramp
+
+## Archived 10-15-26
+
+- [x] **Band Coverage Figures**: Nothing pins which shade glyph each depth band of the tunnel is drawn in
+  - **Issue**: `drawTunnel` picks a glyph and a colour together, four bands
+    deep - `░` at the far wall, then `▒`, `▓` and `█` at the mouth - and only
+    the colour half is pinned. `the walls are drawn from the four glyphs every
+    wall figure counts`, at `test/warp.test.mjs:285`, compares the distinct
+    glyphs standing on the wall columns `.sort()`ed against a `.sort()`ed
+    `WALL_RAMP` and then counts each as present. Nothing says which glyph
+    belongs to which band, so exchanging the first and fourth rows of that
+    table - `█` at the far wall and `░` at the mouth - leaves the distinct set
+    unchanged, every count non-zero, every wall colour still shifting on a
+    warp, and `the light warp ramp climbs the way dark's does` still passing,
+    because that test walks inks. The whole suite passes with the tunnel inside
+    out. What this release's verification measured is why that matters: read
+    off the canvas a cell at a time under an emulated light scheme, with a warp
+    held open, the four bands cover 14%, 29%, 75% and 86% of their cells, so
+    the inks span 507 to 676 of channel distance from the paper - a factor of
+    1.33 - while the cells as painted span 71 to 581, a factor of 8.2. Coverage
+    carries the ramp and the ink trims it, and it is the coverage that is
+    unordered. Dark mode measures 14%, 30%, 77% and 86%, so the figure is
+    the glyph and the font rather than the scheme. (This item first wrote the
+    dark reading as five figures against a four-band ramp; `Band Coverage
+    Figures 1` corrected it here and in `CHANGELOG.md` to the four that pair
+    with light's four, dropping an unrecoverable 88%.)
+  - **Goal**: Resolve to [tunnel-ramp-glyph-order.prompt.md](.claude/prompts/tunnel-ramp-glyph-order.prompt.md)
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] An assertion in the new band map cannot fail
+  - **Issue**: `assert.equal(byBand.size, WALL_RAMP.length, ...)` at the foot of
+    `each depth band of the tunnel is drawn in its own shade glyph` in
+    `test/warp.test.mjs` is unreachable. `bandOf` returns only 0 through 3, so
+    `byBand` can never hold a fifth key, and the `WALL_RAMP.forEach` directly
+    above it already asserts that each of those four comes back as exactly one
+    glyph - which is what fails, first, for a band that was not reached, since an
+    absent band compares `[]` against `[glyph]`. No render makes `byBand.size`
+    anything but 4 by the time the equality is evaluated, so its message - "so a
+    band the figures count was not reached at 80x24" - names a state the
+    assertion above it has already rejected. Verified by reasoning rather than by
+    a failing input, which is the point: there is no input.
+  - **Goal**: Drop it, or give the thing it was written for somewhere it can
+    fail. The question it asks - whether all four bands are reached at 80x24 - is
+    the `forEach`'s job now, and if it is wanted separately from the glyph check
+    it has to be read before the per-band assertions rather than after them.
+  - From: Code Review Override - the band coverage figures and an assertion that cannot fail
+- [x] Band Coverage Figures 1
+  - **Issue**: The dark half of the coverage measurement is published as five
+    figures for a four-band ramp. The `### Added` entry for 1.0.0-alpha.0.9.4 in
+    `CHANGELOG.md` gives light as "the four bands cover 14%, 29%, 75% and 86% of
+    their cells" and then dark as "Dark mode measures 14%, 30%, 77%, 86% and
+    88%", and `drawTunnel` has four bands drawn in four glyphs, so the fifth dark
+    figure belongs to nothing either sentence names. The conclusion it is offered
+    for - "so the figure is the glyph and the font rather than the scheme" - is a
+    comparison between two lists of different lengths, and a reader cannot tell
+    which dark figure pairs with light's 29% or what the extra one measured. The
+    same five sit in the completed item's own `**Issue**`, where they came from,
+    and `test/warp.test.mjs` quotes only the four. The entry says the percentages
+    are a property of one browser's font and that nothing in the repository can
+    rebuild them, which is why the fifth cannot simply be recomputed and
+    corrected.
+  - **Goal**: Say what the fifth dark figure is, in the CHANGELOG entry and in
+    the item text that carries it, or take it out. If it is the ring-end glyph or
+    a fifth wall colour rather than a depth band, name it as that and say why
+    dark was read over one more sample than light; if dark was measured at five
+    rows rather than four bands, say that instead. Re-measuring needs chromium,
+    which this project has so far declined, so the alternative is to publish the
+    four that line up with the four bands, record that dark was read the same way
+    and reached the same conclusion, and leave the fifth out rather than leave it
+    unexplained.
+  - From: UI/UX Override - the glyph half of the tunnel ramp
+- [x] **Asteroid field variant** — Every few minutes, replace the tunnel walls with an open asteroid field section. No walls, but dense obstacles from all directions. Tunnel returns after 15 seconds.
+  - From: Bigger Features

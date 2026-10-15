@@ -301,14 +301,34 @@ function drawBlock(
  * two thirds of the screen: a tracer landing on one replaced the block glyph
  * with a bar, and the hole travelled up the wall with the shot.
  *
- * Crossing the wall is also where the shot stops being able to hit anything.
- * Targets spawn within four and a half units of the axis and the walls are
- * drawn at eight, so every target sits inside this span at every depth; a
- * shot whose column has left the span is in a column no target can occupy at
- * that depth, and stays there for the rest of its life. Stopping the tracer
- * short of the wall says so. Clamping it back into the corridor instead would
- * keep drawing a shot that can no longer hit a thing in there, and would put
- * back the column drift the aiming fix removed.
+ * Crossing the wall is also where the shot stops being able to hit all but a
+ * fraction of what is out there. Targets spawn within four and a half units of
+ * the axis and the walls stand at eight, so in world space a target is well
+ * inside the tunnel at every depth - but the clip is applied in drawn columns,
+ * and the projection is not the identity. `drawEntitiesFar` takes an
+ * obstacle's column off the depth scale while `tunnelSpan` narrows by row, so
+ * an obstacle high or low in the band at a far depth lands in a column outside
+ * its own row's span. Walked as a lattice over the band with no RNG - x in
+ * -4.5..4.5 and y in 0.5..4.5 by tenths, z by whole units to -200, on an 80x24
+ * grid - 49702 of the 729638 points that draw into the play area have their
+ * column outside `tunnelSpan`: 6.8%, and the furthest are 3 columns out. The
+ * corner of the spawn band is itself one of them, at x -4.5, y 0.5, z -151,
+ * which draws at column 32 of row 6 where the span is 32 to 48.
+ *
+ * So the honest version of the premise is "a shot whose column has left the
+ * span is in a column almost no target can occupy at that depth, and stays
+ * there for the rest of its life", and stopping the tracer short of the wall
+ * says that. Clamping it back into the corridor instead would keep drawing a
+ * shot that can hit next to nothing in there, and would put back the column
+ * drift the aiming fix removed.
+ *
+ * The 6.8% is a gap and not a rounding error: such a rock is drawn, because
+ * this runs after `drawTunnel` and paints over the margin, and the pulse
+ * cannon registers nothing against it, because `tracerDrawn` falls through to
+ * `tracerLit` with the tunnel up. A rock the player can see and aim at cannot
+ * be shot. That is pre-existing and deliberate in its mechanism; whether the
+ * clip should admit a target drawn outside the span is a gameplay change with
+ * the pulse cannon hit rates riding on it, and is not settled here.
  *
  * A left-hand shot goes dark a few frames before its mirror on the right, and
  * that is quantisation rather than a second fault. tunnelSpan is symmetric
@@ -505,14 +525,6 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
     }
   }
 
-  // Warp banner. It shares the centre of this row with the debug label, the
-  // asteroid field banner and the NEW BEST banner. It loses to the first and
-  // the last and beats the middle one: a debug run has its label up for the
-  // whole run, so the banner is held back rather than blinking over it for two
-  // seconds; NEW BEST is drawn after this and covers it on the rare frame the
-  // two coincide; and the asteroid banner is drawn before it and gives up the
-  // row for the two seconds this is live. The level counts from 1, so the first
-  // one a run ever shows reads WARP LEVEL 2.
   // Asteroid field banner. It holds the row for the whole section rather than
   // for a flash, because the walls being gone is a state the player is in and
   // not an event they missed, and it is drawn in the rocks' own colours so the
@@ -530,6 +542,14 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
       blink ? C.BRIGHT_RED : C.RED, C.BLACK);
   }
 
+  // Warp banner. It shares the centre of this row with the debug label, the
+  // asteroid field banner and the NEW BEST banner. It loses to the first and
+  // the last and beats the middle one: a debug run has its label up for the
+  // whole run, so the banner is held back rather than blinking over it for two
+  // seconds; NEW BEST is drawn after this and covers it on the rare frame the
+  // two coincide; and the asteroid banner is drawn before it and gives up the
+  // row for the two seconds this is live. The level counts from 1, so the first
+  // one a run ever shows reads WARP LEVEL 2.
   if (state.warpFlash > 0 && state.debugMode === null) {
     const blink = sin(state.uiTime * 8) > 0;
     screen.putStringCenter(HUD_ROWS, `>> WARP LEVEL ${state.warpLevel} <<`,

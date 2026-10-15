@@ -1,5 +1,90 @@
 # Changelog
 
+## [1.0.0-alpha.0.10.1] - 2026-10-15
+
+### Fixed
+
+- The asteroid section's cadence figure. `ASTEROID_INTERVAL`'s comment and the
+  0.10.0 entry below both said that reading the cadence off `gameTime` would put
+  "a fifth" of sections on a warp frame. It is a half, and the fifth belongs to
+  the other side of the pairing. Coincidences fall on multiples of
+  `lcm(150, 60) = 300`, so of the openings at 150, 300, 450, 600 every second
+  one lands on a warp: 10 of 20 sections over the first 3000 seconds, and 10 of
+  the 50 warps in that stretch. Half the sections, a fifth of the warps.
+  Countable by listing multiples of 150 and asking how many divide by 60, with
+  no engine and no browser. The decision the figure is offered for is unchanged
+  and in fact better supported, a half being the worse collision rate.
+  `index.html` stopped at "150 and 60 share 30" and stated no fraction, so the
+  browser build needed no edit.
+
+- The claim that every target sits inside the drawn span. `drawBullets` has long
+  reasoned that a shot whose column has left the corridor is in a column no
+  target can occupy, on the grounds that targets spawn within four and a half
+  units of the axis while the walls stand at eight. That is true in world space
+  and does not survive the projection: `drawEntitiesFar` takes an obstacle's
+  column off the depth scale while `tunnelSpan` narrows by row, so an obstacle
+  high or low in the band at a far depth lands in a column outside its own
+  row's span. Walked as a lattice with no RNG - x in -4.5..4.5 and y in
+  0.5..4.5 by tenths, z by whole units to -200, on an 80x24 grid - 49702 of the
+  729638 points that draw into the play area have their column outside
+  `tunnelSpan`, which is 6.8%, and the furthest are 3 columns out. The corner of
+  the spawn band is itself one of them: x -4.5, y 0.5, z -151 draws at column 32
+  of row 6, where the span is 32 to 48.
+
+  0.10.0 added three fresh restatements of that premise, at `SHIP_MARGIN`, at
+  `placeObstacle` and in the asteroid suite, each identifying the run's own
+  world-space band with a claim about the drawn span. All three now say what the
+  band actually is - the span `placeObstacle` draws an x and a y out of - and the
+  drawn-span claim is dropped. The same correction is made where it originated,
+  in `drawBullets` in both builds, with the lattice recorded as the method, and
+  in the two places that restated it by deference, `tracerDrawn` and the
+  section-opens-the-corridor case.
+
+  The behaviour this exposes is pre-existing and unchanged: such a rock is drawn,
+  because `drawEntitiesFar` runs after `drawTunnel` and paints over the margin,
+  and the pulse cannon registers nothing against it, because `tracerDrawn` falls
+  through to `tracerLit` with the tunnel up. A rock the player can see and aim at
+  cannot be shot. Whether the clip should admit a target drawn outside the span
+  is a gameplay change with the pulse cannon hit rates riding on it, and is left
+  for a decision of its own rather than taken here.
+
+- `the run's own field stays in the corridor` is now `the run's own field stays
+  in the band it is placed in`. What it asserts is the world-space band, and the
+  old name read as though it pinned the drawn span.
+
+- The warp banner's comment in `src/render.ts` sat on the asteroid banner's
+  code. `drawHUD` opened the "Warp banner." paragraph and followed it with the
+  "Asteroid field banner." paragraph and then the `asteroidTime` block, leaving
+  the `warpFlash` block it describes further down with nothing above it, so the
+  precedence note read as though it were about the asteroid code. `index.html`
+  already had the two in the other order, which is the order every other comment
+  here is written in. The paragraph is moved down onto its own block; no code
+  moved and no test changed.
+
+### Changed
+
+- The probes left out of the harness run are declared rather than inferred.
+  `callsHarness` decides the exclusion by reading each probe's source, which is
+  what lets a probe that starts calling the harness be covered with no line
+  added - and also what lets one quietly stop. Its docstring named
+  `overlay-anchor` as "the one this excludes" while `glyph-tuning`, added in
+  0.9.x, imports `loadBrowserEngine` from `test/helpers.mjs` and no engagement,
+  making it a second exclusion the comment denied and no assertion recorded.
+  `docs/development.html` already stated the pair, so the published docs and the
+  test enforcing it disagreed.
+
+  The pair is now `HARNESS_EXCLUSIONS`, with the reason each is out, and the
+  closing assertion compares the probes actually left out against that list with
+  `deepEqual` instead of asserting `overlay-anchor` alone. It fails in both
+  directions: a third exclusion has to be declared before the suite accepts it,
+  and a probe whose harness calls stop being reached fails rather than dropping
+  out of the run unnoticed. Both directions were checked by perturbation -
+  undeclaring `glyph-tuning`, and giving it an engagement import - and both
+  failed with the list named in the message. Nothing failed before either
+  change, which was the point: the missing check was the one that would have
+  fired if `glyph-tuning` later picked up an engagement import and started
+  buying a full font-size walk on every suite run.
+
 ## [1.0.0-alpha.0.10.0] - 2026-10-14
 
 ### Added
@@ -23,7 +108,10 @@
   `gameTime` the way `updateWarpLevel` reads its interval. Read off `gameTime`
   and every opening would land on a multiple of 150, which is a multiple of
   `WARP_INTERVAL` whenever the two share a factor - and 150 and 60 share 30, so
-  a fifth of all sections would open on the frame a warp transition did. The
+  half of all sections would open on the frame a warp transition did, which is a
+  fifth of the warps. Coincidences fall on multiples of `lcm(150, 60) = 300`, so
+  every second opening lands on a warp: 10 of 20 sections over the first 3000
+  seconds, and 10 of the 50 warps in that stretch. The
   timer accumulates the `dt` the run was actually stepped and holds still while
   a section is open, so the cadence is 150 seconds of tunnel between sections
   however the frames fall, and a clock jump cannot open one the run has not

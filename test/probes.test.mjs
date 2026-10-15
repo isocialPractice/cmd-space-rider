@@ -74,13 +74,32 @@ function narrowedArgs(name) {
 }
 
 /**
+ * The probes that call no harness, declared rather than inferred, so a third one
+ * has to be written down here before the suite will accept it.
+ *
+ * `callsHarness` below is what actually decides, by reading each probe's source,
+ * and this list does not drive that - it pins it. The two this excludes:
+ *
+ * - `overlay-anchor` loads the browser engine and the page's stylesheet directly
+ *   and imports nothing from test/engagement.mjs, so it has no harness call to
+ *   reach.
+ * - `glyph-tuning` loads the browser engine through test/helpers.mjs and
+ *   likewise imports no engagement, so it has none either.
+ *
+ * Neither reads a flag, which means neither walk can be narrowed and a full one
+ * is the better part of a minute - the second reason running them against the
+ * harness would buy time and no coverage. `docs/development.html` states the
+ * same pair, and the assertion at the foot of the harness test is what keeps
+ * the three of them from drifting apart.
+ */
+const HARNESS_EXCLUSIONS = ['glyph-tuning', 'overlay-anchor'];
+
+/**
  * Whether a probe calls the harness, read off its own source rather than listed
  * here, so a probe that starts calling it is covered without a line being added.
  *
- * `overlay-anchor` is the one this excludes. It loads the browser engine and the
- * page's stylesheet directly and imports nothing from test/engagement.mjs, so it
- * has no harness call to reach; it also reads no flags, which means its walk
- * cannot be narrowed and a full one is the better part of a minute.
+ * The probes this currently excludes are named in HARNESS_EXCLUSIONS above, with
+ * the reason each is out.
  */
 function callsHarness(name) {
   const src = readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
@@ -200,9 +219,21 @@ test('probes: every probe that calls the harness is run against it', async () =>
     assert.ok(printed.length, `${name} ran against the harness and reported nothing`);
   }
   assert.ok(reached.length, 'some probe calls the harness');
-  assert.ok(
-    !reached.includes('overlay-anchor'),
-    'overlay-anchor imports no harness, so running it here would buy a full viewport walk and no coverage'
+
+  // Both directions, against the declared list rather than against a probe
+  // named inline. A probe that appears here is one running for no coverage and
+  // paying a full un-narrowable walk for it; a probe that disappears from
+  // `reached` is one whose harness calls stopped being reached, which is the
+  // silent half - `callsHarness` reads the source, so dropping the engagement
+  // import removes a probe from this test with no line changed anywhere.
+  const excluded = Object.keys(PROBES).filter((name) => !reached.includes(name)).sort();
+  const declared = [...HARNESS_EXCLUSIONS].sort();
+  assert.deepEqual(
+    excluded, declared,
+    `the probes left out of the harness run are ${excluded.join(', ') || 'none'} and the`
+    + ` declared exclusions are ${declared.join(', ')} - a probe either side of that is one`
+    + ' running here for no coverage, or one whose harness calls stopped being reached'
+    + ' without the exclusion being declared'
   );
 });
 

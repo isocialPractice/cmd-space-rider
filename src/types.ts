@@ -154,8 +154,12 @@ export function shotSlackCols(screenWidth: number): number {
  * one the ship could have reached, or the field is denser than it is dodgeable.
  *
  * The run's own obstacles do not read it. They are held at four and a half
- * units whatever the radius is, which is the figure `drawBullets` reasons about
- * when it says every target sits inside the drawn span at every depth.
+ * units whatever the radius is, and that figure is a world-space band: it is
+ * the span `placeObstacle` draws an x and a y out of, not a statement about
+ * which columns the band projects into. The two are not the same thing, and
+ * `drawBullets` records the gap - 6.8% of the band's points draw into a column
+ * outside their own row's `tunnelSpan` - so a section is the exception to the
+ * placement band rather than to anything about the drawn span.
  */
 export const SHIP_MARGIN = 1.5;
 
@@ -200,11 +204,12 @@ export function tracerLit(
  * section is open.
  *
  * The clip exists because a shot whose column has left the span is in a column
- * no target can occupy at that depth - `drawBullets` says why at length. A
- * section removes the premise rather than the reasoning: there are no walls to
- * cross, and its rocks are placed across the whole band the ship can reach, so
- * a column out by the old wall line is a column a rock is in and a shot into it
- * is a shot the player is owed.
+ * almost no target can occupy at that depth - `drawBullets` says why at length,
+ * and measures the "almost" at 6.8% of the run's own band. A section removes
+ * the premise rather than the reasoning: there are no walls to cross, and its
+ * rocks are placed across the whole band the ship can reach, so a column out by
+ * the old wall line is a column a rock is in and a shot into it is a shot the
+ * player is owed.
  *
  * The grid bound is what the span used to supply. Without it a shot drifting
  * off the screen would go on registering against anything whose own block the
@@ -312,8 +317,12 @@ export const WARP_FLASH_TIME = 2;
  * cadence is this interval plus ASTEROID_TIME however the frames fall. Read off
  * `gameTime` instead and every opening would land on a multiple of this number,
  * which is a multiple of WARP_INTERVAL whenever the two share a factor - and
- * 150 and 60 share 30, so a fifth of the sections would open on the frame a
- * warp transition did.
+ * 150 and 60 share 30, so half the sections would open on the frame a warp
+ * transition did. Coincidences fall on multiples of lcm(150, 60) = 300, so of
+ * the openings at 150, 300, 450, 600 every second one lands on a warp: over
+ * the first 3000 seconds that is 10 of 20 sections and 10 of 50 warps. Half
+ * the sections, a fifth of the warps - countable by listing multiples of 150
+ * and asking how many divide by 60, with no engine and no browser.
  *
  * Two and a half minutes also puts the first section after the run has had
  * two warp steps and the first mines, so a player meets the open stretch

@@ -320,10 +320,14 @@ for (const build of BUILDS) {
     }
   });
 
-  test(`${build.name}: the run's own field stays in the corridor`, () => {
-    // The figure drawBullets reasons about - every target inside the drawn span
-    // at every depth - is this one. A section is the exception to it, and the
-    // exception has to stay attached to the flag.
+  test(`${build.name}: the run's own field stays in the band it is placed in`, () => {
+    // This pins the world-space band, which is what placeObstacle decides: x
+    // inside four and a half units, y between a half and four and a half. It is
+    // deliberately not a claim about the drawn span - drawBullets measures 6.8%
+    // of this band drawing into a column outside its own row's tunnelSpan - and
+    // the name used to say "corridor", which read as though the span were what
+    // the assertions below walked. A section is the exception to this band, and
+    // the exception has to stay attached to the flag.
     const game = quietRun(build);
     build.seedRng(20261014);
     try {
@@ -422,9 +426,9 @@ for (const build of BUILDS) {
 for (const build of BUILDS) {
   test(`${build.name}: a section opens the corridor to the whole grid`, () => {
     // The clip is there because a shot whose column has left the span is in a
-    // column no target can occupy at that depth. A section has no walls to
-    // cross and its rocks are placed across the whole band, so the premise is
-    // gone and the clip goes with it.
+    // column almost no target can occupy at that depth - drawBullets measures
+    // the "almost". A section has no walls to cross and its rocks are placed
+    // across the whole band, so the premise is gone and the clip goes with it.
     const game = quietRun(build);
     const s = game.state;
     const gameTop = HUD_ROWS;
