@@ -495,11 +495,12 @@ export class Game {
    * is a world-space band - the span this draws an x and a y out of - and the
    * walls stand outside it at eight, which is not the same as saying the band
    * projects into the drawn corridor at every depth. It mostly does and not
-   * always: `drawBullets` measures 6.8% of the band's points drawing into a
-   * column outside their own row's `tunnelSpan`. An asteroid field section's
-   * rocks take the whole band the ship can reach instead: the section has no
-   * walls, so the corridor is not a thing to stay inside, and the width opening
-   * up is what the player sees of it.
+   * always: `drawBullets` measures 6.8% of the band's points that draw into the
+   * play area landing in a column outside their own row's `tunnelSpan` - that
+   * subset of the walk is the denominator, and the band itself is the larger
+   * number. An asteroid field section's rocks take the whole band the ship can
+   * reach instead: the section has no walls, so the corridor is not a thing to
+   * stay inside, and the width opening up is what the player sees of it.
    *
    * Two draws, x then y, in that order whichever band it is. A run's whole
    * seeded world is the order these come out in, so a band that took a third

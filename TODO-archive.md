@@ -2619,3 +2619,55 @@ still be found by name.
   - From: UI/UX Override - the glyph half of the tunnel ramp
 - [x] **Asteroid field variant** — Every few minutes, replace the tunnel walls with an open asteroid field section. No walls, but dense obstacles from all directions. Tunnel returns after 15 seconds.
   - From: Bigger Features
+
+## Archived 10-16-26
+
+- [x] **A probe for the glyph tuning's own figures** - the glyph tuning quotes
+  six sets of numbers that only a scratch script can rebuild: the 96
+  hinted-against-precise comparisons behind "the fractional position is
+  honoured either way", the per-size table behind the inset's 0.099px to
+  0.500px range and the `1229/2048` em advance it follows from, the junction
+  levels behind "lifts the seam most where the slack is widest", the left
+  bearing recorded beside `glyphInset` as a known limit at font 13 and font 8,
+  the overhang past the cell that 0.8.4-alpha put in that same comment -
+  `actualBoundingBoxRight` is a whole number never less than the cell at any
+  size, and 0.299px to 1.200px past it once the inset is counted - and the ink
+  widths of the four wall glyphs against their cells. That last one was
+  published as "24 of 28 glyph-and-size pairs ink wider than their cell and
+  four ink exactly it" and 0.8.3-alpha removed it: the walls are drawn from
+  four glyphs at eleven sizes, which is 44 pairs, and 28 is those glyphs
+  against the seven distinct cell widths the sizes produce. Ink width follows
+  the advance rather than the cell, so the sixteen merged pairs are unmeasured
+  rather than covered - fonts 8 and 7 share a 5px cell off advances of 4.801px
+  and 4.201px. Re-taking it over all eleven sizes is the browser-only half of
+  this item; the overlap conclusion it was quoted under does not depend on it,
+  resting on the overhang past the cell, which was read at every size. The
+  first set is from 0.8.1-alpha, four are from 0.8.2-alpha, which corrected the
+  figures the first version of this item quoted, and the overhang is from
+  0.8.4-alpha; every one of them was read in chromium and none is reproducible
+  from the repository. The arithmetic half needs no browser and belongs beside
+  the other probes; the rasterizer half needs chromium, which the project has
+  so far declined, so this wants a decision on whether a browser probe lives
+  here at all or whether the figure is quoted with its method and left
+  unrebuildable. The pad release reading from 0.8.1-alpha has the same problem
+  - `ArrowLeft` surviving a resting pad was measured against a patched copy of
+  `index.html`, and nothing in the repository reproduces it.
+  - From: Measurement
+- [x] The warp banner's comment sits on the asteroid banner's code
+  - **Issue**: `drawHUD` in `src/render.ts:508` opens the rewritten
+    "Warp banner." paragraph, and the next thing under it is the
+    "Asteroid field banner." paragraph at line 516 and then the
+    `if (state.asteroidTime > 0 ...)` block at 526. The `if (state.warpFlash
+    > 0 ...)` block the first paragraph describes is at 533 with nothing
+    above it, so the terminal build reads as though the warp banner's
+    precedence note were about the asteroid code. `index.html:2568` has the
+    two in the other order - asteroid paragraph, asteroid block, warp
+    paragraph, warp block - which is the order this repository's comments are
+    written in everywhere else and the order the paragraphs themselves
+    describe. The two builds' comments diverged in the one edit that touched
+    both.
+  - **Goal**: Move the "Warp banner." paragraph down to sit directly above
+    `if (state.warpFlash > 0 ...)`, leaving the asteroid paragraph on the
+    asteroid block, so `src/render.ts` reads as `index.html` does. No code
+    moves and no test changes.
+  - From: Code Review Override - the section cadence figure and the drawn span premise

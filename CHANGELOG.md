@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.0-alpha.0.10.2] - 2026-10-16
+
+### Fixed
+
+- The third party to the harness exclusions, which was named as pinned and was
+  not. `HARNESS_EXCLUSIONS`' docstring closed by saying the assertion at the
+  foot of the harness test keeps the published docs, the declared list and the
+  walked set from drifting apart. It kept two of the three: the assertion
+  compares the probes the walk actually left out against the declared list and
+  reads nothing outside `test/`, and no test read `docs/development.html` at
+  all. Publishing a different pair in the docs - "`overlay-anchor` and
+  `frame-rate`" - left the suite at 684 pass, 0 fail, which is the drift the
+  docstring said could not happen. The published pair is now read back out of
+  the page and compared to the declared list beside the walked set, so a doc
+  naming a different pair fails with both lists in the message. The sentence is
+  matched by its closing words rather than by position, so the paragraph can be
+  rewritten around it, and a rewrite that drops the shape fails as an unreadable
+  sentence rather than passing on a pair nobody found.
+
+- The percentage attached to the wrong population in six summaries of it.
+  `drawBullets` measures 49702 of the 729638 lattice points that draw into the
+  play area as having their column outside their own row's `tunnelSpan`, which
+  is 6.8%, and states that denominator correctly in both builds and in the
+  0.10.1 entry above. The six places that summarised it did not: `placeObstacle`
+  and `SHIP_MARGIN` said "6.8% of the band's points", `tracerDrawn` in both
+  builds said "6.8% of the run's own band", `placeObstacle` in the browser build
+  said "6.8% of its points", and the asteroid suite's placement-band case said
+  "6.8% of this band". The band walked as stated - x in -4.5..4.5 and y in
+  0.5..4.5 by tenths, z by whole units to -200 - is 91 x 41 x 201 = 749931
+  points, of which 49702 is 6.63%, so a reader rebuilding the figure off any of
+  the six got a number that did not match the one `drawBullets` publishes. All
+  six now carry the denominator `drawBullets` already had: the band's points
+  that draw into the play area. Countable by multiplying the three walk extents,
+  with no engine and no browser.
+
+- What the placement-band assertions say when they fail. 0.10.1 renamed the
+  asteroid suite's case off "corridor" because the word read as the drawn span
+  rather than the world-space band, and the two assertion messages inside it
+  were left printing "an obstacle at x ... left the corridor" for a break of
+  `OWN_X`, `OWN_Y_LOW` or `OWN_Y_HIGH` - the one sentence a failure actually
+  prints was the last place in the case still conflating the two. Both now name
+  the placement band and the bound they broke.
+
 ## [1.0.0-alpha.0.10.1] - 2026-10-15
 
 ### Fixed

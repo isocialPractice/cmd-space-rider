@@ -157,9 +157,10 @@ export function shotSlackCols(screenWidth: number): number {
  * units whatever the radius is, and that figure is a world-space band: it is
  * the span `placeObstacle` draws an x and a y out of, not a statement about
  * which columns the band projects into. The two are not the same thing, and
- * `drawBullets` records the gap - 6.8% of the band's points draw into a column
- * outside their own row's `tunnelSpan` - so a section is the exception to the
- * placement band rather than to anything about the drawn span.
+ * `drawBullets` records the gap - of the band's points that draw into the play
+ * area, 6.8% land in a column outside their own row's `tunnelSpan` - so a
+ * section is the exception to the placement band rather than to anything about
+ * the drawn span.
  */
 export const SHIP_MARGIN = 1.5;
 
@@ -205,11 +206,11 @@ export function tracerLit(
  *
  * The clip exists because a shot whose column has left the span is in a column
  * almost no target can occupy at that depth - `drawBullets` says why at length,
- * and measures the "almost" at 6.8% of the run's own band. A section removes
- * the premise rather than the reasoning: there are no walls to cross, and its
- * rocks are placed across the whole band the ship can reach, so a column out by
- * the old wall line is a column a rock is in and a shot into it is a shot the
- * player is owed.
+ * and measures the "almost" at 6.8% of the run's own band's points that draw
+ * into the play area. A section removes the premise rather than the reasoning:
+ * there are no walls to cross, and its rocks are placed across the whole band
+ * the ship can reach, so a column out by the old wall line is a column a rock
+ * is in and a shot into it is a shot the player is owed.
  *
  * The grid bound is what the span used to supply. Without it a shot drifting
  * off the screen would go on registering against anything whose own block the

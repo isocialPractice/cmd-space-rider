@@ -323,21 +323,27 @@ for (const build of BUILDS) {
   test(`${build.name}: the run's own field stays in the band it is placed in`, () => {
     // This pins the world-space band, which is what placeObstacle decides: x
     // inside four and a half units, y between a half and four and a half. It is
-    // deliberately not a claim about the drawn span - drawBullets measures 6.8%
-    // of this band drawing into a column outside its own row's tunnelSpan - and
-    // the name used to say "corridor", which read as though the span were what
-    // the assertions below walked. A section is the exception to this band, and
-    // the exception has to stay attached to the flag.
+    // deliberately not a claim about the drawn span - of this band's points that
+    // draw into the play area, drawBullets measures 6.8% landing in a column
+    // outside their own row's tunnelSpan - and the name used to say "corridor",
+    // which read as though the span were what the assertions below walked. The
+    // messages they fail with name the placement band and the bound broken, for
+    // the same reason the case name does. A section is the exception to this
+    // band, and the exception has to stay attached to the flag.
     const game = quietRun(build);
     build.seedRng(20261014);
     try {
       for (let i = 0; i < 2000; i++) {
         const rock = ownRock(-40);
         game.placeObstacle(rock);
-        assert.ok(Math.abs(rock.x) <= OWN_X, `an obstacle at x ${rock.x} left the corridor`);
+        assert.ok(
+          Math.abs(rock.x) <= OWN_X,
+          `an obstacle at x ${rock.x} left the placement band, which holds x inside ${OWN_X}`
+        );
         assert.ok(
           rock.y >= OWN_Y_LOW && rock.y <= OWN_Y_HIGH,
-          `an obstacle at y ${rock.y} left the corridor`
+          `an obstacle at y ${rock.y} left the placement band, which holds y between`
+          + ` ${OWN_Y_LOW} and ${OWN_Y_HIGH}`
         );
       }
     } finally {

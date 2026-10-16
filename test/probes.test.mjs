@@ -89,10 +89,41 @@ function narrowedArgs(name) {
  * Neither reads a flag, which means neither walk can be narrowed and a full one
  * is the better part of a minute - the second reason running them against the
  * harness would buy time and no coverage. `docs/development.html` states the
- * same pair, and the assertion at the foot of the harness test is what keeps
- * the three of them from drifting apart.
+ * same pair, `publishedExclusions` below reads it back out of the page, and the
+ * two assertions at the foot of the harness test are what keep the three of
+ * them from drifting apart: one against the probes the walk actually left out,
+ * one against the pair the docs publish.
  */
 const HARNESS_EXCLUSIONS = ['glyph-tuning', 'overlay-anchor'];
+
+/**
+ * The exclusion pair `docs/development.html` publishes, read out of the page.
+ *
+ * The third party to the pinning, and the one that was unpinned until 0.10.2:
+ * the docs sentence is what exposed the undeclared exclusion in the first
+ * place, and nothing in the suite read it. `test/docs-site.test.mjs` names
+ * neither probe, so the published pair could be edited to any two names and
+ * the suite passed - checked by publishing "`overlay-anchor` and `frame-rate`"
+ * and running `npm test`: 684 pass, 0 fail, which is the drift the docstring
+ * above claimed could not happen.
+ *
+ * The sentence is matched by its own closing words rather than by position, so
+ * the paragraph can be rewritten around it. What it has to keep is the shape:
+ * the probe names in `<code>` immediately before "are left out". A rewrite that
+ * drops that fails here as an unreadable sentence rather than passing on a pair
+ * nobody found.
+ */
+function publishedExclusions() {
+  const page = readFileSync(join(REPO_ROOT, 'docs', 'development.html'), 'utf8');
+  const sentence = page.match(/((?:<code>[a-z-]+<\/code>(?:,\s|,?\sand\s)?)+)\s+are left out/);
+  assert.ok(
+    sentence,
+    'docs/development.html states no "<probe> and <probe> are left out" sentence - the'
+    + ' published pair is what HARNESS_EXCLUSIONS is checked against, so a paragraph that'
+    + ' no longer names the pair in that shape leaves the docs copy unpinned'
+  );
+  return [...sentence[1].matchAll(/<code>([a-z-]+)<\/code>/g)].map(([, name]) => name).sort();
+}
 
 /**
  * Whether a probe calls the harness, read off its own source rather than listed
@@ -234,6 +265,19 @@ test('probes: every probe that calls the harness is run against it', async () =>
     + ` declared exclusions are ${declared.join(', ')} - a probe either side of that is one`
     + ' running here for no coverage, or one whose harness calls stopped being reached'
     + ' without the exclusion being declared'
+  );
+
+  // And the third party to it. The walked set and the declared list are both in
+  // test/, so the pair docs/development.html publishes could name any two probes
+  // and nothing failed. It is the sentence that exposed the undeclared exclusion
+  // this list was written for, which is reason enough to hold it to the list.
+  const published = publishedExclusions();
+  assert.deepEqual(
+    published, declared,
+    `docs/development.html publishes ${published.join(', ')} as left out of the harness run`
+    + ` and the declared exclusions are ${declared.join(', ')} - the published pair is what a`
+    + ' reader goes by, so a name either side of that is documentation for a run the suite'
+    + ' is not making'
   );
 });
 
