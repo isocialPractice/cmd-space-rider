@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The sentence telling a future editor what to preserve in the harness
+  exclusions paragraph, which named half of what the test matches.
+  `docs/development.html` closed that paragraph by saying the published pair
+  "is matched by the words *are left out* closing it, which is the one part of
+  the paragraph a rewrite has to keep". The regex in `publishedExclusions`
+  matches a run of `<code>name</code>` spans followed by those words, so it
+  needs two things kept, not one: the closing words, and the probe names
+  wrapped in `<code>` immediately before them. A rewrite that kept only what
+  the page asked for failed - setting the pair in plain text, "overlay-anchor
+  and glyph-tuning are left out", returns no match, so the suite stops on
+  "docs/development.html states no ... sentence" rather than on the pair
+  comparison. The closing clause now names both halves of the shape and says
+  which failure dropping either one buys. Checked both ways against the page:
+  publishing a different name fails on the pair comparison with both lists in
+  the message, and removing the markup fails as a page stating no such
+  sentence. The docstring in `test/probes.test.mjs` had it right already, and
+  so did the 0.10.2 entry below; the published copy was the one that was wrong,
+  and it is the copy whoever rewrites that paragraph reads. The same sentence
+  opened "The pair named in this sentence" while the pair is named two
+  sentences above it, and now points there instead.
+
 ## [1.0.0-alpha.0.10.2] - 2026-10-16
 
 ### Fixed

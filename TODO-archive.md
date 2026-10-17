@@ -2671,3 +2671,27 @@ still be found by name.
     asteroid block, so `src/render.ts` reads as `index.html` does. No code
     moves and no test changes.
   - From: Code Review Override - the section cadence figure and the drawn span premise
+
+## Archived 10-17-26
+
+- [x] **Harness Exclusions**: Nothing pins the new probe's exclusion from the harness run
+  - **Issue**: `callsHarness` in `test/probes.test.mjs:79` decides which
+    probes `probes: every probe that calls the harness is run against it`
+    executes, by reading each probe's source for an import of
+    `test/engagement.mjs`. Its docstring says "`overlay-anchor` is the one
+    this excludes", and the test closes at line 203 by asserting only
+    `!reached.includes('overlay-anchor')`. `test/probes/glyph-tuning.mjs`
+    imports `loadBrowserEngine` from `../helpers.mjs` and nothing from the
+    engagement, so it is now a second exclusion that the comment denies
+    exists and no assertion records. `docs/development.html` already states
+    the pair - "`overlay-anchor` and `glyph-tuning` are left out" - so the
+    published docs and the test that enforces it disagree. Nothing fails
+    today; what is missing is the check that would fail if `glyph-tuning`
+    later picked up an engagement import and started buying a full font-size
+    walk on every suite run.
+  - **Goal**: Say "the two this excludes" in the docstring and name both with
+    the reason each is excluded, and extend the closing assertion to cover
+    `glyph-tuning` alongside `overlay-anchor` - or assert over a named list
+    of the exclusions so a third one has to be declared rather than silently
+    inferred.
+  - From: Code Review Override - the section cadence figure and the drawn span premise

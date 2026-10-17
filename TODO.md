@@ -11,36 +11,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the published pinning sentence names half of what the test needs
-
-#### Resolve Issues
-
-- [ ] Harness Exclusions 2
-  - **Issue**: The sentence 0.10.2 added to close the harness-exclusions
-    paragraph at `docs/development.html:33` tells a future editor the wrong thing
-    to preserve. It says the pair "is matched by the words *are left out* closing
-    it, which is the one part of the paragraph a rewrite has to keep".
-    The regex at `test/probes.test.mjs:118` matches a run of
-    `<code>name</code>` spans followed by those words, so it needs two things
-    kept, not one: the closing words, and the probe names wrapped in
-    `<code>` immediately before them. A rewrite that keeps only what the page
-    asks for fails - dropping the markup to plain text, "overlay-anchor and
-    glyph-tuning are left out", returns no match, so the test stops at
-    `assert.ok(sentence, ...)` with "docs/development.html states no ... sentence"
-    rather than at the pair comparison. Checked by running that regex against the
-    page with the markup removed. The docstring at `test/probes.test.mjs:112` has
-    it right - "the probe names in `<code>` immediately before" - so the
-    published copy is the one that is wrong, and it is the copy whoever rewrites
-    that paragraph reads. The same sentence also opens "The pair named in this
-    sentence" while the pair is named in the sentence before it.
-  - **Goal**: Rewrite that closing clause to name both halves of the shape the
-    test matches - the probe names in `<code>`, and the words "are left out"
-    immediately after them - instead of "the one part". Point "this sentence" at
-    the preceding sentence in the same rewrite. Then `npm test`, and re-check the
-    guard still fails on a drifted pair by publishing a different name and
-    running `node --test test/probes.test.mjs`.
-  - From: Code Review Override - the section cadence figure and the drawn span premise
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -88,29 +58,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 146 earlier items in `TODO-archive.md`, newest last.
+> 147 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Harness Exclusions**: Nothing pins the new probe's exclusion from the harness run
-  - **Issue**: `callsHarness` in `test/probes.test.mjs:79` decides which
-    probes `probes: every probe that calls the harness is run against it`
-    executes, by reading each probe's source for an import of
-    `test/engagement.mjs`. Its docstring says "`overlay-anchor` is the one
-    this excludes", and the test closes at line 203 by asserting only
-    `!reached.includes('overlay-anchor')`. `test/probes/glyph-tuning.mjs`
-    imports `loadBrowserEngine` from `../helpers.mjs` and nothing from the
-    engagement, so it is now a second exclusion that the comment denies
-    exists and no assertion records. `docs/development.html` already states
-    the pair - "`overlay-anchor` and `glyph-tuning` are left out" - so the
-    published docs and the test that enforces it disagree. Nothing fails
-    today; what is missing is the check that would fail if `glyph-tuning`
-    later picked up an engagement import and started buying a full font-size
-    walk on every suite run.
-  - **Goal**: Say "the two this excludes" in the docstring and name both with
-    the reason each is excluded, and extend the closing assertion to cover
-    `glyph-tuning` alongside `overlay-anchor` - or assert over a named list
-    of the exclusions so a third one has to be declared rather than silently
-    inferred.
-  - From: Code Review Override - the section cadence figure and the drawn span premise
 - [x] The section cadence comment quotes a fifth where it is a half
   - **Issue**: `ASTEROID_INTERVAL`'s comment at `src/types.ts:315` says that
     reading the cadence off `gameTime` would put openings on multiples of
@@ -220,4 +169,29 @@ the roadmap section each one came from.
     percentage from the summaries and leave it where the method is recorded. The
     `index.html:639` copy is the terminal wording mirrored into the browser build
     by the review that queued this, so the two move together.
+  - From: Code Review Override - the section cadence figure and the drawn span premise
+- [x] Harness Exclusions 2
+  - **Issue**: The sentence 0.10.2 added to close the harness-exclusions
+    paragraph at `docs/development.html:33` tells a future editor the wrong thing
+    to preserve. It says the pair "is matched by the words *are left out* closing
+    it, which is the one part of the paragraph a rewrite has to keep".
+    The regex at `test/probes.test.mjs:118` matches a run of
+    `<code>name</code>` spans followed by those words, so it needs two things
+    kept, not one: the closing words, and the probe names wrapped in
+    `<code>` immediately before them. A rewrite that keeps only what the page
+    asks for fails - dropping the markup to plain text, "overlay-anchor and
+    glyph-tuning are left out", returns no match, so the test stops at
+    `assert.ok(sentence, ...)` with "docs/development.html states no ... sentence"
+    rather than at the pair comparison. Checked by running that regex against the
+    page with the markup removed. The docstring at `test/probes.test.mjs:112` has
+    it right - "the probe names in `<code>` immediately before" - so the
+    published copy is the one that is wrong, and it is the copy whoever rewrites
+    that paragraph reads. The same sentence also opens "The pair named in this
+    sentence" while the pair is named in the sentence before it.
+  - **Goal**: Rewrite that closing clause to name both halves of the shape the
+    test matches - the probe names in `<code>`, and the words "are left out"
+    immediately after them - instead of "the one part". Point "this sentence" at
+    the preceding sentence in the same rewrite. Then `npm test`, and re-check the
+    guard still fails on a drifted pair by publishing a different name and
+    running `node --test test/probes.test.mjs`.
   - From: Code Review Override - the section cadence figure and the drawn span premise
