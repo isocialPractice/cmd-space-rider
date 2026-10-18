@@ -6,8 +6,84 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
-- [ ] **Boss encounters** — Every 3 minutes, spawn a large mine that takes 20 hits, fires projectiles back at the player, and drops 3 powerups on destruction. Flash "WARNING" in the HUD before it arrives.
+- [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
   - From: Bigger Features
+
+### UI/UX Override - the banner row and the far drops
+
+#### Resolve Issues
+
+- [ ] Encounter Legibility 1 - two things the encounter draws cannot be read as
+  what they are, in both builds
+  - **Issue**: Two defects, each measured on the painted canvas and each
+    reproduced identically in the terminal build and the browser build.
+    **First**, the HUD banner row keeps the ends of the banner it drew over.
+    `drawHUD` centres each banner with `putStringCenter` and writes them in
+    order with nothing clearing the row between two writes, so a shorter string
+    centred over a longer one covers the longer one's middle and leaves its ends
+    standing. A warning inside an asteroid field section renders row 3 as
+    `>> >> WARNING <<D <<` - the stray `D` is the `D` of `FIELD` - and a warning
+    across a warp step renders `>>>> WARNING << <<`, at 60x20, 80x24 and 128x45
+    alike, so it is a draw-order defect rather than a narrow-grid one. The two
+    comments in `drawHUD` that describe this overlap resolve it by draw order
+    and name the exact frame it is for, so the case is anticipated and only the
+    mechanism is wrong. The frame is reachable from engine state: the gate in
+    `updateBossEncounter` holds a warning off while a banner is already up but
+    not for the three seconds it then runs, and `updateAsteroidField` runs before
+    it and is held off only by a warp flash, so a section coming due inside a
+    live warning opens under it - stepped from `bossTimer = BOSS_INTERVAL -
+    FRAME / 2` and `asteroidTimer = ASTEROID_INTERVAL - 1.5`, both builds reach
+    frame 45 with `bossWarning` 1.50 s and `asteroidTime` 15.00 s together and
+    render that row. The same defect predates this release on the warp and
+    section pair, which renders `>>> WARP LEVEL 2 <<<`. **Second**, two of the
+    three drops a destroyed boss leaves land in one cell at 60 columns.
+    `BOSS_DROP_SPREAD` is a world distance and the drawn gap narrows with depth
+    and with the grid's width together, so killing a boss a unit at a time gives
+    three distinct glyphs down to z=-188 and two from z=-189, where the three
+    are placed at columns 29, 30 and 30 and the row renders `+~` in place of
+    `+ ! ~`. At 80 and 128 columns they never collapse at any depth they are
+    drawn at. The window is the first 786 ms of a 14.3-second approach, and it
+    is reachable: holding the trigger from the start of the WARNING, the
+    twentieth hit lands at z=-189.7 tapped at 10 Hz with Rapid Fire and at
+    z=-192.5 tapped at 15 Hz. `dropBossPowerups`' own comment says "none is
+    hidden behind another".
+  - **Goal**: Resolve to [encounter-legibility.prompt.md](.claude/prompts/encounter-legibility.prompt.md)
+  - From: Bigger Features
+
+#### Found Issues
+
+- [ ] Three figures in BOSS_SIZE_MULT's docstring describe something other than
+  what is drawn
+  - **Issue**: `src/types.ts:509` to `:513` closes with "At 3.5 the block is 8
+    cells across when the boss reaches the ship and 1 at the edge of sight,
+    against a mine's 2 and 1. On the 24-row floor the play area is 19 rows, so a
+    close boss is about two fifths of the height of it". Three of those figures
+    are wrong about the screen. **8 and 2 are what `blockSize` returns, not what
+    `drawBlock` draws**: that function takes `half = floor(size / 2)` and loops
+    `-half` to `+half` inclusive, so a size of 8 is drawn 9 cells across and a
+    size of 2 is drawn 3. Rendered at z=0 in both builds, the boss block
+    measures 9x9 cells and the mine 3x3. **24 is not the floor**: both builds
+    declare `MIN_HEIGHT = 20` - `src/index.ts:55` and `index.html:3563` - and
+    the 24 at `src/index.ts:52` is the fallback for an undefined `stdout.rows`.
+    **Two fifths is neither grid's share**: 9 rows of the 19 a 24-row grid gives
+    is 47.4%, and at the real 20-row floor the play area is 15 rows and the
+    block is clipped to 8 of them, which is 53.3% - over half, which is the
+    opposite of the reassurance the sentence is making. The browser build's
+    mirror of this comment at `index.html:773` carries the 8-and-2 sentence and
+    not the floor sentence, so only the first correction crosses to it. Nothing
+    is broken on screen - a close boss at the 20-row floor is large but legible,
+    and every other reading of it passed - this is a committed comment quoting
+    figures a reader cannot rebuild.
+  - **Goal**: Say which number is which. Keep 8 and 2 if they are named as
+    `blockSize`'s return and give the drawn extent as 9 and 3 beside them, or
+    quote the drawn figures alone; name the floor as 20 rows and 15 play rows;
+    and replace "about two fifths" with the share at the floor, 53.3%, or at
+    both grids. Mirror the `blockSize` half into `index.html`. The suite pins
+    `blockSize` itself rather than the drawn extent, so the sentence and the test
+    are currently measuring different things - a case in
+    `test/boss.test.mjs`'s drawn-block section asserting the rendered 9x9 and
+    3x3 would tie the two together.
+  - From: UI/UX Override - the banner row and the far drops
 
 ### Create and Deploy GitHub Pages Override
 
@@ -25,9 +101,6 @@ second input path. Each one spans both the terminal and browser versions.
 
 Substantial additions that change how a run plays or how the screen is laid
 out. These carry the most risk to existing gameplay and are sequenced last.
-
-- [ ] **Boss encounters** — Every 3 minutes, spawn a large mine that takes 20 hits, fires projectiles back at the player, and drops 3 powerups on destruction. Flash "WARNING" in the HUD before it arrives.
-- [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
 
 ## Polish
 
@@ -58,29 +131,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 147 earlier items in `TODO-archive.md`, newest last.
+> 148 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The section cadence comment quotes a fifth where it is a half
-  - **Issue**: `ASTEROID_INTERVAL`'s comment at `src/types.ts:315` says that
-    reading the cadence off `gameTime` would put openings on multiples of
-    150, "and 150 and 60 share 30, so a fifth of the sections would open on
-    the frame a warp transition did". `CHANGELOG.md:26` publishes the same
-    claim as "a fifth of all sections". It is a half, not a fifth, and the
-    fifth belongs to the other side of the pairing. Coincidences fall on
-    multiples of `lcm(150, 60) = 300` - 300, 600, 900 - so of the openings at
-    150, 300, 450, 600 every second one lands on a warp: 10 of 20 sections
-    over the first 3000 seconds, and 10 of 50 warps. A fifth of the *warps*
-    coincide; half the *sections* do. Checkable with no browser and no
-    engine: count multiples of 150 up to any bound and ask how many divide by
-    60. The design decision the figure is offered for is unaffected and in
-    fact strengthened - a half is a worse collision rate than a fifth - so
-    only the number and its noun are wrong.
-  - **Goal**: Correct both places to the measured pairing: half the sections
-    would open on a warp frame, which is a fifth of the warps. `index.html:686`
-    stops at "150 and 60 share 30" and states no fraction, so the browser
-    build needs no edit - which also makes it the wording to settle on if one
-    of the three is to be the canonical sentence.
-  - From: Code Review Override - the section cadence figure and the drawn span premise
 - [x] **Drawn Span Premise**: Three new comments rest on a span premise the geometry does not support
   - **Issue**: `SHIP_MARGIN`'s comment at `src/types.ts:157`, `placeObstacle`'s
     at `src/game.ts:494` and the `the run's own field stays in the corridor`
@@ -195,3 +247,5 @@ the roadmap section each one came from.
     guard still fails on a drifted pair by publishing a different name and
     running `node --test test/probes.test.mjs`.
   - From: Code Review Override - the section cadence figure and the drawn span premise
+- [x] **Encounter Legibility**: **Boss encounters** — Every 3 minutes, spawn a large mine that takes 20 hits, fires projectiles back at the player, and drops 3 powerups on destruction. Flash "WARNING" in the HUD before it arrives.
+  - From: Bigger Features
