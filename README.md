@@ -15,6 +15,7 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Cross-platform** &mdash; Runs on Windows, macOS, and Linux. Any terminal that supports 256 colors and Unicode.
 - **Neon warp tunnel** &mdash; Perspective-scrolling walls, animated ring stripes, a parallax starfield, and a warp transition every minute.
 - **Asteroid field sections** &mdash; Every two and a half minutes the walls come down for fifteen seconds and the rocks arrive across the whole screen, then the tunnel returns.
+- **Boss encounters** &mdash; Every three minutes a `>> WARNING <<` banner holds the HUD, then a large mine closes on the ship under its own power and shoots back. Twenty pulse hits bring it down for three pickups; let it reach you and it rams.
 - **Ship controls** &mdash; Steer, boost, fire a pulse cannon, and barrel roll out of trouble.
 - **Three ways in** &mdash; Keyboard, touch, or a standard gamepad, all feeding the same controls.
 - **Progressive difficulty** &mdash; Speed, obstacle density and mines all escalate with distance.

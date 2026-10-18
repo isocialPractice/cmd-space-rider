@@ -85,6 +85,12 @@ Debug runs never record a best score.
 | Barrel roll | 0.5 seconds invulnerable, then a cooldown |
 | Warp step | every 60 seconds, banner for 2 seconds |
 | Asteroid field | every 150 seconds of tunnel, open for 15, 70 rocks |
+| Boss encounter | every 180 seconds of flying, 3 second warning |
+| Boss hit points | 20 pulse hits |
+| Boss approach | 200 units in, 14 units a second |
+| Boss return fire | a shot every 1.5 seconds, 12 shield each |
+| Boss collision | 50 shield, and it pays nothing |
+| Boss destroyed | 5000 points, 3 pickups, one of each kind |
 | Grid floor | 60 columns by 20 rows |
 | Leaderboard | top 10, three characters a name |
 | Replay ghost | 10 path samples a second, 10 minutes of run |

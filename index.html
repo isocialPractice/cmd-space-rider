@@ -603,6 +603,23 @@ function shotSlackCols(screenWidth){
   const scaled=SHOT_SLACK_COLS*((screenWidth-6)/(SLACK_REF_WIDTH-6));
   return max(SHOT_SLACK_COLS,round(scaled));
 }
+// The side of the square block an entity is drawn as, at a given perspective
+// scale and size multiplier.
+//
+// Named because it is read twice from two different places: drawEntitiesFar
+// draws the block, and contacts decides what the pulse cannon met. Those two
+// disagreeing is this repository's most expensive class of defect - a target the
+// player can see and aim at that nothing registers against - and until the boss
+// arrived the formula was simply written out at both ends and happened to match.
+// A size multiplier is what makes "happened to match" stop being good enough.
+//
+// The 2.5 is the obstacle and mine block the game was tuned on, and 1 is the
+// floor: past about 47 units out the block is a single character, which is what
+// SHOT_SLACK_COLS' slack is sized for. Orbs and dropped powerups are drawn off a
+// 2 rather than this 2.5 and are not shot at, so they are not callers.
+function blockSize(scale,sizeMul=1){
+  return max(1,floor(scale*2.5*sizeMul));
+}
 // The two columns the tunnel's walls are drawn on for a given row.
 //
 // Three things read it, and that is why it sits here with the tuning constants
@@ -709,6 +726,99 @@ const ASTEROID_COUNT=70;
 // ship could have reached. The run's own obstacles do not read it - they are
 // held at four and a half units whatever the radius is.
 const SHIP_MARGIN=1.5;
+
+// Seconds of a run between boss encounters: the stretch where a single large
+// mine bears down the tunnel, shooting back.
+//
+// Counted on a timer of its own, the way ASTEROID_INTERVAL is and for a sharper
+// version of the same reason. Read the cadence off gameTime instead and every
+// encounter would open on the frame a warp transition did - not a fraction of
+// them but all of them, because 180 is a whole multiple of WARP_INTERVAL's 60.
+// The asteroid field's 150 shares only 30 with 60 and so collides on half its
+// openings; a number that divides exactly collides on every one.
+//
+// The timer does not buy that back on the first encounter. Nothing has reset
+// it by then, so it reads the same 180 gameTime does and the first warning is
+// due on a warp frame every time. What the timer buys is every encounter after
+// it: the clock restarts when a fight ends, some seconds past a multiple of
+// 180, so the second warning is due at a figure that is not a multiple of 60
+// and neither are the ones behind it. The first collision is handled instead by
+// the gate in updateBossEncounter, which holds a warning until the row is free.
+//
+// A timer also says what "every three minutes" means when an encounter itself
+// takes time: it is held still while a boss is on the board, so the gap between
+// two fights is this interval of flying rather than this interval minus however
+// long the last one ran.
+const BOSS_INTERVAL=180;
+// Seconds the WARNING banner runs before the boss is placed.
+//
+// Longer than WARP_FLASH_TIME's two seconds, because this banner is a demand
+// rather than news: a warp step has already happened by the time it is
+// announced, while this one is asking the player to break off and get ready.
+const BOSS_WARNING_TIME=3;
+// Pulse hits a boss takes before it comes apart.
+//
+// Four times a mine's five, against an approach of about fourteen seconds -
+// BOSS_SPAWN_Z over BOSS_CLOSE_SPEED - so it asks for a hit about every three
+// quarters of a second against FIRE_INTERVAL's cadence of 0.36. That leaves the
+// encounter's difficulty where it belongs: dodging what is fired back.
+const BOSS_HP=20;
+// What the boss multiplies its drawn block by, over the size depth alone gives
+// it.
+//
+// Read through blockSize by both the renderer and the hit test, which is the
+// whole point of naming it. A boss is the first entity in this game whose size
+// is not a function of depth alone, so it is the first one where a drawn block
+// and a hit test written separately could disagree about where the target is.
+// At 3.5 the block is 8 cells across when the boss reaches the ship and 1 at the
+// edge of sight, against a mine's 2 and 1.
+const BOSS_SIZE_MULT=3.5;
+// Depth the boss is placed at, as a distance out from the ship: the far edge of
+// what is drawn, so an encounter opens with the boss appearing rather than
+// arriving from somewhere off screen.
+const BOSS_SPAWN_Z=200;
+// Units a second the boss closes on the ship.
+//
+// Its own rate rather than the tunnel's advance, and that difference is the
+// encounter. Everything else is carried past the ship at whatever speed the run
+// has reached; the boss sets its own pace, so the clock the fight runs on is the
+// same at the first encounter and the tenth.
+const BOSS_CLOSE_SPEED=14;
+// Seconds between boss shots. About nine over a full approach.
+const BOSS_FIRE_INTERVAL=1.5;
+// Units a second a boss shot closes on the ship. Three times BOSS_CLOSE_SPEED,
+// so a shot always arrives before the boss that fired it, and well short of
+// BULLET_SPEED's 60: the player's cannon is meant to feel instant and this is
+// meant to be flown around.
+const BOSS_SHOT_SPEED=45;
+// Shield a boss shot takes off the ship it reaches.
+const BOSS_SHOT_DAMAGE=12;
+// Shield the boss takes off the ship it reaches, destroying itself on the way.
+//
+// Heavier than a mine's 35, and it pays nothing: a boss that rams is a boss that
+// was not shot down, so the encounter ends with no drops and no score. That is
+// the rule POWERUP_DROP_CHANCE states for a rammed mine, applied to the one
+// fight where letting it close is the easier option.
+const BOSS_RAM_DAMAGE=50;
+// Powerups a destroyed boss leaves behind: one of each kind, in POWERUP_KINDS
+// order, rather than three draws from it.
+//
+// So the reward is the same every time and the kill costs the RNG nothing. That
+// second part matters more than it looks: seeded flights are compared, and a
+// boss kill that drew three kinds and three placements would make every figure
+// quoted off one depend on whether the boss happened to die. As it stands the
+// boss draws from the RNG only through the particle bursts its hits raise, which
+// is the route every kill in the game already takes.
+const BOSS_DROPS=3;
+// Units between two of the three pickups a destroyed boss leaves. Wide enough
+// that the three read as three things at the depth a boss usually dies at; they
+// converge on their own afterwards, since updatePowerups pulls every drop toward
+// the ship.
+const BOSS_DROP_SPREAD=1.5;
+// Score a destroyed boss is worth, before the combo multiplier. Ten times a
+// mine's 500, for twenty hits rather than five against something that is
+// shooting back. A rammed boss is worth nothing.
+const BOSS_SCORE=5000;
 
 // The chance a mine shot to pieces leaves a powerup behind.
 //
@@ -1102,6 +1212,7 @@ class Game{
       combo:0,comboTimer:0,
       warpLevel:1,warpFlash:0,
       asteroidTime:0,asteroidTimer:0,
+      boss:null,bossShots:[],bossTimer:0,bossWarning:0,
       rapidFire:0,slowMotion:0,fireTimer:0,
       sounds:[],
       detail:0,frameSpent:0,frameSeen:0,frameStalls:0,
@@ -1273,6 +1384,7 @@ class Game{
     s.combo=0;s.comboTimer=0;
     s.warpLevel=1;s.warpFlash=0;
     s.asteroidTime=0;s.asteroidTimer=0;
+    s.boss=null;s.bossShots=[];s.bossTimer=0;s.bossWarning=0;
     s.rapidFire=0;s.slowMotion=0;s.fireTimer=0;
     s.obstacles=[];s.orbs=[];s.bullets=[];s.particles=[];s.powerups=[];s.mines=[];
     s.gameTime=0;s.lastObstacleIncreaseMinute=0;
@@ -1625,11 +1737,14 @@ class Game{
 
     this.updateWarpLevel();
     this.updateAsteroidField(dt);
+    this.updateBossEncounter(dt);
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance,dt);
     this.updateOrbs(advance);
     this.updateMines(advance,dt);
+    this.updateBoss(dt);
+    this.updateBossShots(dt);
     this.updatePowerups(advance,dt);
     this.updateBullets(dt,advance);
     this.updateParticles(dt,advance);
@@ -1705,6 +1820,228 @@ class Game{
   closeAsteroidField(){
     const s=this.state;
     s.obstacles=s.obstacles.filter((o)=>!o.field);
+  }
+  // The boss encounter's clock: the stretch of flying between fights, the
+  // WARNING that opens one, and the boss that arrives when it ends.
+  //
+  // Three states held in two fields. boss non-null is a fight under way and
+  // nothing here runs; bossWarning above zero is the banner counting down to
+  // one; both clear is the gap, and bossTimer is what measures it. So the timer
+  // only advances while the player is flying ordinary tunnel, which is what
+  // makes BOSS_INTERVAL an interval of flying rather than of the whole cycle.
+  //
+  // Run after updateAsteroidField so the two gates below read the state that
+  // section just set this frame rather than the previous frame's. Nothing
+  // happens in a debug scenario, on the rule the asteroid field already
+  // follows.
+  updateBossEncounter(dt){
+    const s=this.state;
+    if(s.debugMode!==null)return;
+    if(s.boss!==null)return;
+
+    if(s.bossWarning>0){
+      s.bossWarning=max(0,s.bossWarning-dt);
+      if(s.bossWarning===0)this.spawnBoss();
+      return;
+    }
+
+    s.bossTimer+=dt;
+    if(s.bossTimer<BOSS_INTERVAL)return;
+    // Held while either of the other two announcements owns the HUD row. The
+    // warp flash is the rule updateAsteroidField already follows, for the same
+    // reason: all three banners are centred on HUD_ROWS. An open asteroid field
+    // is the stronger case - its banner holds the row for the whole fifteen
+    // seconds and is drawn before this one, so a WARNING raised inside a section
+    // would not appear at all, and a boss nobody was warned about is the one
+    // outcome the warning exists to prevent. The timer is left where it is
+    // rather than reset, so the warning opens on the first frame the row is
+    // free: at most WARP_FLASH_TIME or the rest of a section late, and never
+    // skipped.
+    if(s.warpFlash>0||s.asteroidTime>0)return;
+    s.bossWarning=BOSS_WARNING_TIME;
+  }
+  // Place the boss at the far edge of sight, dead on the tunnel's axis.
+  //
+  // Centred rather than drawn out of the band a mine is placed in, and that is a
+  // decision about what the fight is. A mine is placed anywhere in the band
+  // because finding it is part of dodging it; a boss is announced three seconds
+  // ahead and then has to be hit twenty times, so where it is should be the one
+  // thing the player does not have to work out.
+  //
+  // The axis is also the column the corridor is never narrower than, so the
+  // whole of the boss's block is inside the span tracerDrawn clips a tracer to
+  // at every depth it is drawn at. That matters more here than anywhere else:
+  // drawBullets records that 6.8% of the placement band's points which draw into
+  // the play area land in a column outside their own row's tunnelSpan, and a
+  // target there is drawn but cannot be shot. One such frame costs a mine
+  // nothing; a boss parked out there would be twenty unlandable hits.
+  //
+  // y is the middle of the placement band rather than of the ship's own range:
+  // the band is 0.5 to 4.5 and the ship reaches 0 to 6.5. It draws nothing from
+  // the RNG - see BOSS_DROPS for why that is worth having.
+  spawnBoss(){
+    this.state.boss={x:0,y:2.5,z:-BOSS_SPAWN_Z,hp:BOSS_HP,fireTimer:0};
+  }
+  // The boss's own frame: it closes, it fires, and if it reaches the ship it
+  // rams.
+  //
+  // Its depth moves at BOSS_CLOSE_SPEED rather than by the tunnel's advance,
+  // which is why this takes no advance at all: an encounter runs on the same
+  // clock whatever speed the run has reached.
+  //
+  // Arrival is checked before firing, and that order is load-bearing rather than
+  // tidy. fireBossShot reads the direction from the boss to the ship, so it
+  // needs a boss still short of the ship; checking afterwards would let one
+  // frame fire from a depth of zero or past it.
+  //
+  // The ram is the exit for a boss that was not shot down, and it pays nothing:
+  // no drops, no score, BOSS_RAM_DAMAGE off the shield. A barrel roll turns the
+  // damage aside as it does a mine's, and the boss is spent either way.
+  updateBoss(dt){
+    const s=this.state;
+    const b=s.boss;
+    if(b===null)return;
+
+    b.z+=BOSS_CLOSE_SPEED*dt;
+
+    if(b.z>=0){
+      this.spawnParticles(b.x,b.y,b.z,9,20);
+      s.shake=SHAKE_TIME;
+      this.cue('mine');
+      this.endBossEncounter();
+      if(this.invincible())return;
+      this.cue('damage');
+      s.damageFlash=1.0;
+      s.shield-=BOSS_RAM_DAMAGE;
+      if(s.shield<=0){s.shield=0;this.endGame()}
+      return;
+    }
+
+    b.fireTimer+=dt;
+    if(b.fireTimer>=BOSS_FIRE_INTERVAL){
+      // The overshoot is carried into the next interval rather than discarded,
+      // so the shots over an approach stay evenly spaced however frames fall.
+      b.fireTimer-=BOSS_FIRE_INTERVAL;
+      this.fireBossShot(b);
+    }
+  }
+  // One shot, aimed at where the ship is on the frame it leaves.
+  //
+  // The velocity is the direction from the boss to the ship scaled to
+  // BOSS_SHOT_SPEED, so the shot is a statement about where the ship was and
+  // moving is what makes it a miss. Nothing is led: a leading shot would have to
+  // be told what the player is about to do, which is either a guess or an
+  // unavoidable hit.
+  //
+  // The direction can never be degenerate here, because updateBoss has already
+  // taken the arrival exit for a boss at or past the ship, so the depth leg is
+  // non-zero and the length cannot be. All three components are carried rather
+  // than two and a fixed depth rate: storing a flight time and dividing by it
+  // works at every range but one, since a shot fired from almost on top of the
+  // ship has a flight shorter than a frame and the lateral rates out of that
+  // division throw it off the grid in the single step it gets.
+  //
+  // It draws nothing from the RNG.
+  fireBossShot(b){
+    const s=this.state;
+    const dx=s.shipX-b.x;
+    const dy=s.shipY-b.y;
+    const dz=-b.z;
+    const len=sqrt(dx*dx+dy*dy+dz*dz);
+    s.bossShots.push({
+      x:b.x,y:b.y,z:b.z,
+      vx:(dx/len)*BOSS_SHOT_SPEED,
+      vy:(dy/len)*BOSS_SHOT_SPEED,
+      vz:(dz/len)*BOSS_SHOT_SPEED,
+    });
+  }
+  // Boss shots: straight lines in world space, and what they do on arrival.
+  //
+  // They are not carried by the tunnel's advance, the same way the player's own
+  // bullets are not. A shot is under power, and the tunnel streaming past is the
+  // player's motion through it rather than a current the shot sits in.
+  //
+  // A shot outlives the boss that sent it, so this runs whether or not there is
+  // one on the board. That is deliberate: a shot sent a second before the boss
+  // died is still a shot to be left, and retiring the volley with its owner
+  // would make the last hit a way of deleting it.
+  //
+  // The collision is the bounding-box overlap on the character grid that mines
+  // and dropped powerups already use, read against the ship's drawn sprite and
+  // asymmetric in the same direction. A barrel roll turns it aside, and the shot
+  // is spent either way rather than left to try again.
+  updateBossShots(dt){
+    const s=this.state;
+    const shipScr=this.toScreen(s.shipX,s.shipY,0);
+
+    for(let i=s.bossShots.length-1;i>=0;i--){
+      const p=s.bossShots[i];
+      p.x+=p.vx*dt;
+      p.y+=p.vy*dt;
+      p.z+=p.vz*dt;
+      // Past the ship it is a miss, and unlike a rock there is nothing to
+      // recycle: a shot is the record of one trigger pull.
+      if(p.z>10){s.bossShots.splice(i,1);continue}
+      if(p.z<=-20||p.z>=5)continue;
+
+      const pScr=this.toScreen(p.x,p.y,p.z);
+      const half=floor(max(1,floor(pScr.scale*2))/2);
+      const drow=shipScr.row-pScr.row;
+      if(abs(shipScr.col-pScr.col)>SHIP_HALF_W+half)continue;
+      if(drow>2+half||drow<-(1+half))continue;
+
+      s.bossShots.splice(i,1);
+      if(this.invincible())continue;
+      s.shake=SHAKE_TIME;
+      s.damageFlash=1.0;
+      this.cue('damage');
+      this.spawnParticles(p.x,p.y,p.z,9,10);
+      s.shield-=BOSS_SHOT_DAMAGE;
+      if(s.shield<=0){s.shield=0;this.endGame();return}
+    }
+  }
+  // The boss shot down: the burst, the score, the three drops, and the clock on
+  // the next encounter. Worth BOSS_SCORE against the combo multiplier, so a boss
+  // killed inside a chain pays what the chain says.
+  killBoss(b){
+    const s=this.state;
+    this.spawnParticles(b.x,b.y,b.z,9,20);
+    this.cue('mine');
+    s.shake=SHAKE_TIME;
+    s.score+=BOSS_SCORE*this.registerKill();
+    this.dropBossPowerups(b.x,b.y,b.z);
+    this.endBossEncounter();
+  }
+  // The three pickups a destroyed boss leaves: one of each kind, side by side
+  // across the block it died in.
+  //
+  // One of each rather than three draws from POWERUP_KINDS, and at fixed offsets
+  // rather than scattered, so the whole drop costs the RNG nothing - see
+  // BOSS_DROPS. The offsets come off the kind's own index, so the three land in
+  // the order POWERUP_KINDS lists them and none is hidden behind another.
+  //
+  // It goes through neither dropPowerup nor its chance roll. A boss drop is the
+  // reward for twenty hits rather than a one-in-three on a kill, and the roll
+  // would be three more draws besides.
+  dropBossPowerups(x,y,z){
+    const s=this.state;
+    const mid=(BOSS_DROPS-1)/2;
+    for(let i=0;i<BOSS_DROPS;i++){
+      s.powerups.push({
+        x:x+(i-mid)*BOSS_DROP_SPREAD,y,z,
+        kind:POWERUP_KINDS[i%POWERUP_KINDS.length],
+      });
+    }
+  }
+  // Take the boss off the board and start the clock on the next encounter. Both
+  // exits call it - shot down and rammed - so there is one place the timer
+  // restarts and one place the warning is cleared. Shots already in the air are
+  // left where they are, per updateBossShots.
+  endBossEncounter(){
+    const s=this.state;
+    s.boss=null;
+    s.bossWarning=0;
+    s.bossTimer=0;
   }
   // Dropped powerups: carried in by the tunnel and pulled toward the ship.
   //
@@ -1982,7 +2319,13 @@ class Game{
   // Both sides move: the shot outward by its travel, the target inward by
   // `advance`, which updateObstacles has already applied by the time this runs -
   // so the target started the frame at tz - advance.
-  contacts(aimX,bulletY,bulletFromZ,travel,tx,ty,tz,advance,slackCols){
+  // sizeMul is the target's size multiplier, read through the same blockSize
+  // the renderer draws the block with. Every target was the same size at a
+  // given depth until the boss arrived, so the two ends could write the
+  // formula out separately and happen to agree; a multiplier is what makes
+  // that stop being true. A boss tested at 1 would reject every shot that
+  // landed on the outer rings of a block the player can plainly see.
+  contacts(aimX,bulletY,bulletFromZ,travel,tx,ty,tz,advance,slackCols,sizeMul=1){
     const s=this.state;
     const gameTop=HUD_ROWS;
     const gameBottom=s.screenHeight-FOOTER_ROWS;
@@ -2004,7 +2347,7 @@ class Game{
     let lo=Infinity;
     let hi=-Infinity;
     for(const z of [tz-advance,tz]){
-      widest=max(widest,floor(max(1,floor(this.projScale(z)*2.5))/2));
+      widest=max(widest,floor(blockSize(this.projScale(z),sizeMul)/2));
       const col=this.toScreen(tx,ty,z).col;
       lo=min(lo,col);
       hi=max(hi,col);
@@ -2024,7 +2367,7 @@ class Game{
       // drawBullets drops the whole tracer when its lower half is off the play
       // area, and draws the upper half only when there is a row above for it.
       if(bScr.row<gameTop||bScr.row>=gameBottom)continue;
-      const half=floor(max(1,floor(this.projScale(targetZ)*2.5))/2);
+      const half=floor(blockSize(this.projScale(targetZ),sizeMul)/2);
       if(abs(bScr.col-tScr.col)>half+slackCols)continue;
       // The block is clipped to the play area as drawBlock clips it; the tracer
       // is its own row and, where there is room for it, the row above.
@@ -2119,6 +2462,27 @@ class Game{
         }
       }
       if(hit)continue;
+      // Bullet-boss collision, ahead of the mines because there is at most
+      // one of it and a bolt that met it is spent. One target, so no loop.
+      //
+      // The advance passed in is the boss's own BOSS_CLOSE_SPEED step rather
+      // than the tunnel's, because that is how far it actually moved this
+      // frame: updateBoss has already run, so boss.z is where the frame left
+      // it and boss.z minus that advance is where it began. Handing over the
+      // tunnel's advance would sweep a stretch of depth it was never in.
+      //
+      // Never in a debug scenario, because updateBossEncounter never places
+      // one there. The check is here so a boss staged by hand in a test, or
+      // by a scenario added later, cannot be shot inside a screen that
+      // exists to count something else.
+      const boss=s.boss;
+      if(boss!==null&&!s.debugMode&&this.contacts(aimX,b.y,fromZ,travel,
+          boss.x,boss.y,boss.z,BOSS_CLOSE_SPEED*dt,slackCols,BOSS_SIZE_MULT)){
+        boss.hp-=1;this.spawnParticles(boss.x,boss.y,boss.z,9,5);
+        s.bullets.splice(i,1);
+        if(boss.hp<=0)this.killBoss(boss);
+        continue;
+      }
       // Bullet-mine collision, on the same rule.
       if(!s.debugMode||s.debugMode==='mines'||s.debugMode==='mineCollision'||s.debugMode==='chaos'){
         for(let j=s.mines.length-1;j>=0;j--){
@@ -2328,7 +2692,7 @@ function drawEntitiesFar(screen,state,gameTop,gameBottom){
     if(o.z<-state.maxViewZ||o.z>5)continue;
     const pos=gameToScreen(o.x,o.y,o.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
     if(pos.row<gameTop||pos.row>=gameBottom)continue;
-    const size=max(1,floor(pos.scale*2.5));
+    const size=blockSize(pos.scale);
     const glow=sin(state.time*3+o.z)*0.3+0.5;
     const color=glow>0.5?C.BRIGHT_RED:C.RED;
     const ch=size>=2?'\u2593':'\u25A0';
@@ -2338,11 +2702,42 @@ function drawEntitiesFar(screen,state,gameTop,gameBottom){
     if(m.z<-state.maxViewZ||m.z>5)continue;
     const pos=gameToScreen(m.x,m.y,m.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
     if(pos.row<gameTop||pos.row>=gameBottom)continue;
-    const size=max(1,floor(pos.scale*2.5));
+    const size=blockSize(pos.scale);
     const blink=sin(state.time*8)>0;
     const color=blink?C.BRIGHT_RED:C.GRAY;
     const ch=blink?'\u25C8':'\u25A0';
     drawBlock(screen,pos.col,pos.row,size,ch,color,gameTop,gameBottom);
+  }
+  // The boss, as the mine it is at BOSS_SIZE_MULT times the size depth gives
+  // it. The size comes from blockSize, which is the function the pulse
+  // cannon's hit test reads as well, so what is drawn and what can be shot
+  // are one block by construction rather than by two formulas agreeing.
+  //
+  // It blinks on the mines' own clock and in its own colours - magenta
+  // against their red - so it reads as the same family running hotter rather
+  // than as a new kind of thing to work out mid-encounter.
+  const boss=state.boss;
+  if(boss!==null&&boss.z>=-state.maxViewZ&&boss.z<=5){
+    const pos=gameToScreen(boss.x,boss.y,boss.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row>=gameTop&&pos.row<gameBottom){
+      const blink=sin(state.time*8)>0;
+      drawBlock(screen,pos.col,pos.row,blockSize(pos.scale,BOSS_SIZE_MULT),
+        blink?'\u25C9':'\u25CE',blink?C.BRIGHT_MAGENTA:C.MAGENTA,
+        gameTop,gameBottom);
+    }
+  }
+  // The boss's shots. Drawn off a 2 rather than the block's 2.5, the way an
+  // orb and a dropped powerup are, because what matters about one is where it
+  // is rather than how much of the screen it covers - and the hit test that
+  // decides whether it reached the ship reads the same 2.
+  for(const p of state.bossShots){
+    if(p.z<-state.maxViewZ||p.z>5)continue;
+    const pos=gameToScreen(p.x,p.y,p.z,w,h,gameTop,gameBottom,state.tunnelRadius,state.maxViewZ);
+    if(pos.row<gameTop||pos.row>=gameBottom)continue;
+    const size=max(1,floor(pos.scale*2));
+    const pulse=sin(state.time*10+p.z)>0;
+    drawBlock(screen,pos.col,pos.row,size,'\u25BC',
+      pulse?C.BRIGHT_MAGENTA:C.BRIGHT_RED,gameTop,gameBottom);
   }
   for(const o of state.orbs){
     if(o.collected||o.z<-state.maxViewZ||o.z>5)continue;
@@ -2621,6 +3016,34 @@ function drawHUD(screen,state){
       blink?C.BRIGHT_WHITE:C.BRIGHT_MAGENTA,C.BLACK);
   }
 
+  // Boss warning banner. It owns this row for the three seconds before the boss
+  // is placed, and it beats both the banners above because it is the only one of
+  // the three asking the player to do something: a warp step and an open section
+  // are states that have already arrived, while this is the last notice before
+  // something that shoots back does. It loses to NEW BEST below, which is
+  // already drawn last for the same kind of reason.
+  //
+  // updateBossEncounter holds a warning off while either of the other two is
+  // live rather than relying on this order, so the overlap this would resolve is
+  // one the engine is trying not to produce. The order is here for the frame
+  // where a section opened just before a warning was due and the warning has
+  // been waiting since.
+  if(state.bossWarning>0&&state.debugMode===null){
+    const blink=sin(state.uiTime*12)>0;
+    screen.putStringCenter(HUD_ROWS,'>> WARNING <<',
+      blink?C.BRIGHT_RED:C.BRIGHT_YELLOW,C.BLACK);
+  }
+  // The boss's remaining hit points, right-aligned on this row while a fight is
+  // under way. Twenty hits is too many to count by eye, and without a readout
+  // the player has no way to tell a boss two shots from death from one they have
+  // barely scratched. It shares the right of this row with the debug tracker and
+  // cannot collide with it: a boss is never placed in a debug scenario, and the
+  // tracker is only drawn in one.
+  if(state.boss!==null&&state.debugMode===null){
+    const label=`BOSS ${state.boss.hp}/${BOSS_HP}`;
+    screen.putString(w-label.length-2,HUD_ROWS,label,
+      state.boss.hp<=BOSS_HP/4?C.BRIGHT_YELLOW:C.BRIGHT_MAGENTA,C.BLACK);
+  }
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
   // with the debug label above.
   if(state.newBestFlash>0){

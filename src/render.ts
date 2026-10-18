@@ -4,6 +4,7 @@ import { ScreenBuffer } from './screen';
 import {
   GameState, C, DEBUG_MODE_NAMES, BASE_SPEED_START, SHAKE_TIME, ROLL_TIME,
   tunnelSpan, tracerDrawn, POWERUP_GLYPHS, detailTier,
+  blockSize, BOSS_HP, BOSS_SIZE_MULT,
 } from './types';
 
 // The tunnel's geometry moved to types.ts, where the hit test can read the same
@@ -220,7 +221,7 @@ function drawEntitiesFar(screen: ScreenBuffer, state: GameState, gameTop: number
     if (o.z < -state.maxViewZ || o.z > 5) continue;
     const pos = gameToScreen(o.x, o.y, o.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
     if (pos.row < gameTop || pos.row >= gameBottom) continue;
-    const size = max(1, floor(pos.scale * 2.5));
+    const size = blockSize(pos.scale);
     const glow = sin(state.time * 3 + o.z) * 0.3 + 0.5;
     const color = glow > 0.5 ? C.BRIGHT_RED : C.RED;
     const ch = size >= 2 ? '\u2593' : '\u25A0'; // ▓ or ■
@@ -232,12 +233,46 @@ function drawEntitiesFar(screen: ScreenBuffer, state: GameState, gameTop: number
     if (m.z < -state.maxViewZ || m.z > 5) continue;
     const pos = gameToScreen(m.x, m.y, m.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
     if (pos.row < gameTop || pos.row >= gameBottom) continue;
-    const size = max(1, floor(pos.scale * 2.5));
+    const size = blockSize(pos.scale);
     // Blink between red and dark
     const blink = sin(state.time * 8) > 0;
     const color = blink ? C.BRIGHT_RED : C.GRAY;
     const ch = blink ? '\u25C8' : '\u25A0'; // ◈ or ■
     drawBlock(screen, pos.col, pos.row, size, ch, color, gameTop, gameBottom);
+  }
+
+  // Draw the boss, as the mine it is at BOSS_SIZE_MULT times the size depth
+  // gives it. The size comes from `blockSize`, which is the function the pulse
+  // cannon's hit test reads as well, so what is drawn and what can be shot are
+  // one block by construction rather than by two formulas agreeing.
+  //
+  // It blinks on the mines' own clock and in its own colours - magenta against
+  // their red - so it reads as the same family running hotter rather than as a
+  // new kind of thing to work out mid-encounter.
+  const boss = state.boss;
+  if (boss !== null && boss.z >= -state.maxViewZ && boss.z <= 5) {
+    const pos = gameToScreen(boss.x, boss.y, boss.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
+    if (pos.row >= gameTop && pos.row < gameBottom) {
+      const blink = sin(state.time * 8) > 0;
+      drawBlock(screen, pos.col, pos.row, blockSize(pos.scale, BOSS_SIZE_MULT),
+        blink ? '\u25C9' : '\u25CE', // ◉ or ◎
+        blink ? C.BRIGHT_MAGENTA : C.MAGENTA,
+        gameTop, gameBottom);
+    }
+  }
+
+  // Draw the boss's shots. Drawn off a 2 rather than the block's 2.5, the way
+  // an orb and a dropped powerup are, because what matters about one is where
+  // it is rather than how much of the screen it covers - and the hit test that
+  // decides whether it reached the ship reads the same 2.
+  for (const p of state.bossShots) {
+    if (p.z < -state.maxViewZ || p.z > 5) continue;
+    const pos = gameToScreen(p.x, p.y, p.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
+    if (pos.row < gameTop || pos.row >= gameBottom) continue;
+    const size = max(1, floor(pos.scale * 2));
+    const pulse = sin(state.time * 10 + p.z) > 0;
+    drawBlock(screen, pos.col, pos.row, size, '\u25BC', // ▼
+      pulse ? C.BRIGHT_MAGENTA : C.BRIGHT_RED, gameTop, gameBottom);
   }
 
   // Draw orbs
@@ -554,6 +589,38 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
     const blink = sin(state.uiTime * 8) > 0;
     screen.putStringCenter(HUD_ROWS, `>> WARP LEVEL ${state.warpLevel} <<`,
       blink ? C.BRIGHT_WHITE : C.BRIGHT_MAGENTA, C.BLACK);
+  }
+
+  // Boss warning banner. It owns this row for the three seconds before the
+  // boss is placed, and it beats both the banners above because it is the only
+  // one of the three asking the player to do something: a warp step and an open
+  // section are states that have already arrived, while this is the last notice
+  // before something that shoots back does. It loses to NEW BEST below, which
+  // is already drawn last for the same kind of reason.
+  //
+  // `updateBossEncounter` holds a warning off while either of the other two is
+  // live rather than relying on this order, so the overlap this would resolve
+  // is one the engine is trying not to produce. The order is here for the frame
+  // where a section opened just before a warning was due and the warning has
+  // been waiting since.
+  if (state.bossWarning > 0 && state.debugMode === null) {
+    const blink = sin(state.uiTime * 12) > 0;
+    screen.putStringCenter(HUD_ROWS, '>> WARNING <<',
+      blink ? C.BRIGHT_RED : C.BRIGHT_YELLOW, C.BLACK);
+  }
+
+  // The boss's remaining hit points, right-aligned on this row while a fight is
+  // under way. Twenty hits is too many to count by eye, and without a readout
+  // the player has no way to tell a boss two shots from death from one they
+  // have barely scratched.
+  //
+  // It shares the right of this row with the debug tracker and cannot collide
+  // with it: a boss is never placed in a debug scenario, and the tracker is
+  // only drawn in one.
+  if (state.boss !== null && state.debugMode === null) {
+    const label = `BOSS ${state.boss.hp}/${BOSS_HP}`;
+    screen.putString(w - label.length - 2, HUD_ROWS, label,
+      state.boss.hp <= BOSS_HP / 4 ? C.BRIGHT_YELLOW : C.BRIGHT_MAGENTA, C.BLACK);
   }
 
   // NEW BEST banner. It only fires on normal runs, so it never shares this row

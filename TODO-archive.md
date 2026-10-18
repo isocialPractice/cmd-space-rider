@@ -2695,3 +2695,27 @@ still be found by name.
     of the exclusions so a third one has to be declared rather than silently
     inferred.
   - From: Code Review Override - the section cadence figure and the drawn span premise
+
+## Archived 10-18-26
+
+- [x] The section cadence comment quotes a fifth where it is a half
+  - **Issue**: `ASTEROID_INTERVAL`'s comment at `src/types.ts:315` says that
+    reading the cadence off `gameTime` would put openings on multiples of
+    150, "and 150 and 60 share 30, so a fifth of the sections would open on
+    the frame a warp transition did". `CHANGELOG.md:26` publishes the same
+    claim as "a fifth of all sections". It is a half, not a fifth, and the
+    fifth belongs to the other side of the pairing. Coincidences fall on
+    multiples of `lcm(150, 60) = 300` - 300, 600, 900 - so of the openings at
+    150, 300, 450, 600 every second one lands on a warp: 10 of 20 sections
+    over the first 3000 seconds, and 10 of 50 warps. A fifth of the *warps*
+    coincide; half the *sections* do. Checkable with no browser and no
+    engine: count multiples of 150 up to any bound and ask how many divide by
+    60. The design decision the figure is offered for is unaffected and in
+    fact strengthened - a half is a worse collision rate than a fifth - so
+    only the number and its noun are wrong.
+  - **Goal**: Correct both places to the measured pairing: half the sections
+    would open on a warp frame, which is a fifth of the warps. `index.html:686`
+    stops at "150 and 60 share 30" and states no fraction, so the browser
+    build needs no edit - which also makes it the wording to settle on if one
+    of the three is to be the canonical sentence.
+  - From: Code Review Override - the section cadence figure and the drawn span premise

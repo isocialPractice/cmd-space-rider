@@ -57,6 +57,54 @@ export interface Mine {
   hp: number;
 }
 
+/**
+ * The boss encounter's one adversary: a mine grown large enough to take a
+ * sustained beating, bearing down the tunnel under its own power.
+ *
+ * A single nullable field on the state rather than an array, because there is
+ * never more than one. The encounter is one fight, and `updateBossEncounter`
+ * opens the next only once this one has ended, so nothing here has to decide
+ * which of two bosses a shot met or which one the HUD is counting down.
+ *
+ * It carries no `scale` of its own, unlike a mine. Every boss is drawn at
+ * BOSS_SIZE_MULT times the size depth already gives it, and a per-boss figure
+ * would be a second size for the hit test to get wrong - which is the defect
+ * `blockSize` exists to make impossible.
+ */
+export interface Boss {
+  x: number; y: number; z: number;
+  /** Pulse hits left before it comes apart. Opens at BOSS_HP. */
+  hp: number;
+  /** Seconds since its last shot, counting toward BOSS_FIRE_INTERVAL. */
+  fireTimer: number;
+}
+
+/**
+ * One shot the boss has sent back, in flight toward where the ship was when it
+ * was fired.
+ *
+ * The aim is baked into the velocity at the moment of firing rather than
+ * recomputed per frame, so a shot is dodged by moving after it leaves rather
+ * than by outrunning something that follows. The far end of an encounter is
+ * where that matters: a shot fired from the edge of sight is seconds in the
+ * air and the ship has the whole of that to leave, while one fired from close
+ * in arrives in a third of a second and has to be read before it is sent.
+ * Nothing about the rule changes between the two - only the geometry does,
+ * which is why there is no range gate on the firing.
+ *
+ * All three components are carried rather than the two lateral ones and a
+ * fixed depth rate, because the velocity is one direction scaled to
+ * BOSS_SHOT_SPEED. Storing a flight time instead and dividing by it works at
+ * every range but one: a shot fired from almost on top of the ship has a
+ * flight shorter than a frame, and the lateral rates that come out of that
+ * division are large enough to throw the shot off the grid in the single step
+ * it gets. A direction has no such case.
+ */
+export interface BossShot {
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
+}
+
 export interface Bullet {
   x: number; y: number; z: number;
   life: number;
@@ -163,6 +211,28 @@ export function shotSlackCols(screenWidth: number): number {
  * the drawn span.
  */
 export const SHIP_MARGIN = 1.5;
+
+/**
+ * The side of the square block an entity is drawn as, at a given perspective
+ * scale and size multiplier.
+ *
+ * Named because it is read twice from two different places: `drawEntitiesFar`
+ * draws the block, and `contacts` decides what the pulse cannon met. Those two
+ * disagreeing is this repository's most expensive class of defect - a target
+ * the player can see and aim at that nothing registers against - and until the
+ * boss arrived the formula was simply written out at both ends and happened to
+ * match. A size multiplier is what makes "happened to match" stop being good
+ * enough, so there is one function now and both ends call it.
+ *
+ * The 2.5 is the obstacle and mine block the game was tuned on, and 1 is the
+ * floor: past about 47 units out the block is a single character, which is
+ * what SHOT_SLACK_COLS' slack is sized for. Orbs and dropped powerups are
+ * drawn off a 2 rather than this 2.5 and are not shot at, so they are not
+ * callers.
+ */
+export function blockSize(scale: number, sizeMul = 1): number {
+  return Math.max(1, Math.floor(scale * 2.5 * sizeMul));
+}
 
 /**
  * The two columns the tunnel's walls are drawn on for a given row.
@@ -367,6 +437,168 @@ export const ASTEROID_TIME = 15;
 export const ASTEROID_COUNT = 70;
 
 /**
+ * Seconds of a run between boss encounters: the stretch where a single large
+ * mine bears down the tunnel, shooting back.
+ *
+ * Counted on a timer of its own, the way ASTEROID_INTERVAL is and for a
+ * sharper version of the same reason. Read the cadence off `gameTime` instead
+ * and every encounter would open on the frame a warp transition did - not a
+ * fraction of them but all of them, because 180 is a whole multiple of
+ * WARP_INTERVAL's 60. The asteroid field's 150 shares only 30 with 60 and so
+ * collides on half its openings; a number that divides exactly collides on
+ * every one. Countable with no engine and no browser: list the multiples of
+ * 180 and ask how many divide by 60.
+ *
+ * The timer does not buy that back on the first encounter, and this comment
+ * would be overselling itself if it did not say so. Nothing has reset the
+ * timer by then, so it reads the same 180 `gameTime` does and the first
+ * warning is due on a warp frame every time. What the timer buys is every
+ * encounter after it: the clock restarts when a fight ends, which is some
+ * seconds past a multiple of 180, so the second warning is due at a figure
+ * that is not a multiple of 60 and neither are the ones behind it. The first
+ * collision is handled instead by the gate in `updateBossEncounter`, which
+ * holds a warning back until the row is free.
+ *
+ * A timer also says what "every three minutes" means when an encounter itself
+ * takes time. It accumulates the `dt` the run was actually stepped and is held
+ * still while a boss is on the board, so the gap between two fights is this
+ * interval of flying rather than this interval minus however long the last one
+ * ran.
+ *
+ * Three minutes puts the first encounter after two asteroid field sections and
+ * three warp steps, so a player meets it already knowing what the tunnel does
+ * on its own.
+ */
+export const BOSS_INTERVAL = 180;
+
+/**
+ * Seconds the WARNING banner runs before the boss is placed.
+ *
+ * Longer than WARP_FLASH_TIME's two seconds, because this banner is a demand
+ * rather than news: a warp step has already happened by the time it is
+ * announced, while this one is asking the player to stop collecting and get
+ * ready. Three seconds at the speed a run is flying by then is most of a
+ * screen's worth of tunnel, which is enough to break off a chase and centre
+ * up.
+ */
+export const BOSS_WARNING_TIME = 3;
+
+/**
+ * Pulse hits a boss takes before it comes apart.
+ *
+ * Four times a mine's five, against an approach that lasts about fourteen
+ * seconds - BOSS_SPAWN_Z over BOSS_CLOSE_SPEED - so it asks for a hit about
+ * every three quarters of a second. FIRE_INTERVAL's cadence is 0.36, so the
+ * cannon can do it at a little over half rate and a tapped trigger can do it
+ * comfortably, which leaves the rest of the encounter's difficulty where it
+ * belongs: dodging what is being fired back.
+ */
+export const BOSS_HP = 20;
+
+/**
+ * What the boss multiplies its drawn block by, over the size depth alone would
+ * give it.
+ *
+ * Read through `blockSize` by both the renderer and the hit test, which is the
+ * whole point of naming it. A boss is the first entity in this game whose size
+ * is not a function of depth alone, so it is the first one where a drawn block
+ * and a hit test written separately could disagree about where the target is -
+ * the defect `drawBullets` and `placeObstacle` have each had a correction for.
+ * One function, read twice.
+ *
+ * At 3.5 the block is 8 cells across when the boss reaches the ship and 1 at
+ * the edge of sight, against a mine's 2 and 1. On the 24-row floor the play
+ * area is 19 rows, so a close boss is about two fifths of the height of it:
+ * large enough to read as a different thing from a mine, and short of filling
+ * the screen.
+ */
+export const BOSS_SIZE_MULT = 3.5;
+
+/**
+ * Depth the boss is placed at, as a distance out from the ship.
+ *
+ * The far edge of what is drawn, so an encounter opens with the boss appearing
+ * rather than arriving from somewhere off screen. It matches the opening
+ * `maxViewZ` rather than reading it, so the figure the approach time is
+ * computed from is a constant a test can name.
+ */
+export const BOSS_SPAWN_Z = 200;
+
+/**
+ * Units a second the boss closes on the ship.
+ *
+ * Its own rate rather than the tunnel's advance, and that difference is the
+ * encounter. Everything else in the tunnel is carried past the ship at
+ * whatever speed the run has reached, so the player's only choice about an
+ * obstacle is where to be when it arrives. The boss sets its own pace, which
+ * makes the clock the fight runs on the same whatever the run's speed is: 200
+ * units at 14 a second is a little over fourteen seconds, at the first
+ * encounter and at the tenth.
+ */
+export const BOSS_CLOSE_SPEED = 14;
+
+/** Seconds between boss shots. About nine over a full approach. */
+export const BOSS_FIRE_INTERVAL = 1.5;
+
+/**
+ * Units a second a boss shot closes on the ship.
+ *
+ * Three times BOSS_CLOSE_SPEED, so a shot always reaches the ship before the
+ * boss that fired it does, and well short of BULLET_SPEED's 60: the player's
+ * cannon is meant to feel instant and this is meant to be flown around.
+ */
+export const BOSS_SHOT_SPEED = 45;
+
+/** Shield a boss shot takes off the ship it reaches. */
+export const BOSS_SHOT_DAMAGE = 12;
+
+/**
+ * Shield the boss takes off the ship it reaches, destroying itself on the way.
+ *
+ * Heavier than a mine's 35, and it pays nothing: a boss that rams is a boss
+ * that was not shot down, so the encounter ends with no drops and no score.
+ * That is the same rule POWERUP_DROP_CHANCE states for a rammed mine, applied
+ * to the one fight where letting it close is the easier option.
+ */
+export const BOSS_RAM_DAMAGE = 50;
+
+/**
+ * Powerups a destroyed boss leaves behind.
+ *
+ * One of each kind, in POWERUP_KINDS order, rather than three draws from it -
+ * so the reward is the same every time and the kill costs the RNG nothing.
+ * That second part is worth more than it looks: `test/engagement.mjs` seeds
+ * flights and compares them, and a boss kill that drew three kinds and three
+ * placements would make every figure quoted off a seeded flight depend on
+ * whether the boss happened to die. As it stands the boss draws from the RNG
+ * only through the particle bursts its hits raise, which is the route every
+ * kill in the game already takes.
+ *
+ * It is POWERUP_KINDS.length by construction, and the suite pins the two
+ * together: a fourth kind added without a thought here would otherwise leave
+ * one of them undroppable by the one source that drops all of them.
+ */
+export const BOSS_DROPS = 3;
+
+/**
+ * Units between two of the three pickups a destroyed boss leaves.
+ *
+ * Wide enough that the three are drawn as three things at the depth a boss
+ * usually dies at rather than as one glyph with two behind it. They converge
+ * on their own afterwards - `updatePowerups` pulls every drop toward the ship
+ * at POWERUP_DRIFT - so this only has to hold for the moment they appear.
+ */
+export const BOSS_DROP_SPREAD = 1.5;
+
+/**
+ * Score a destroyed boss is worth, before the combo multiplier.
+ *
+ * Ten times a mine's 500, for twenty hits rather than five against something
+ * that is shooting back. A rammed boss is worth nothing, per BOSS_RAM_DAMAGE.
+ */
+export const BOSS_SCORE = 5000;
+
+/**
  * The chance a mine shot to pieces leaves a powerup behind.
  *
  * Only a kill drops one. Ramming a mine destroys it too, but that is the
@@ -514,6 +746,26 @@ export interface GameState {
    * tunnel between sections rather than of the whole cycle.
    */
   asteroidTimer: number;
+
+  /**
+   * The boss bearing down the tunnel, or null between encounters.
+   *
+   * Null is the ordinary state and the one the game opens in, so every reader
+   * of it is a null check rather than a length check. See `Boss` for why there
+   * is only ever one.
+   */
+  boss: Boss | null;
+  /** Shots the boss has sent back, still in the air. Outlives the boss. */
+  bossShots: BossShot[];
+  /**
+   * Seconds of a run since the last encounter ended, counting to the next.
+   *
+   * Held still from the frame a WARNING starts to the frame the boss leaves
+   * the board, so the cadence is BOSS_INTERVAL of flying between fights.
+   */
+  bossTimer: number;
+  /** Seconds left of the WARNING banner, 0 when none is running. */
+  bossWarning: number;
 
   /** Seconds left of Rapid Fire, 0 when the cannon is at its own cadence. */
   rapidFire: number;

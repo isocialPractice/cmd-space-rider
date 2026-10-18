@@ -47,6 +47,38 @@ test('both builds agree on the shared tuning constants', () => {
   // Read twice in each build - the ship's clamp and a section's placement band -
   // so the two agreeing is what keeps every rock in a section dodgeable in both.
   assert.equal(browser.SHIP_MARGIN, terminalTypes.SHIP_MARGIN);
+  // The boss encounter. Every one of these decides something a run is scored
+  // on - when a fight opens, how long it lasts, what it costs and what it pays -
+  // so a build carrying a different one is a build playing a different game on
+  // the same leaderboard, which is the reason the asteroid field's three are
+  // pinned above.
+  assert.equal(browser.BOSS_INTERVAL, terminalTypes.BOSS_INTERVAL);
+  assert.equal(browser.BOSS_WARNING_TIME, terminalTypes.BOSS_WARNING_TIME);
+  assert.equal(browser.BOSS_HP, terminalTypes.BOSS_HP);
+  assert.equal(browser.BOSS_SIZE_MULT, terminalTypes.BOSS_SIZE_MULT);
+  assert.equal(browser.BOSS_SPAWN_Z, terminalTypes.BOSS_SPAWN_Z);
+  assert.equal(browser.BOSS_CLOSE_SPEED, terminalTypes.BOSS_CLOSE_SPEED);
+  assert.equal(browser.BOSS_FIRE_INTERVAL, terminalTypes.BOSS_FIRE_INTERVAL);
+  assert.equal(browser.BOSS_SHOT_SPEED, terminalTypes.BOSS_SHOT_SPEED);
+  assert.equal(browser.BOSS_SHOT_DAMAGE, terminalTypes.BOSS_SHOT_DAMAGE);
+  assert.equal(browser.BOSS_RAM_DAMAGE, terminalTypes.BOSS_RAM_DAMAGE);
+  assert.equal(browser.BOSS_DROPS, terminalTypes.BOSS_DROPS);
+  assert.equal(browser.BOSS_DROP_SPREAD, terminalTypes.BOSS_DROP_SPREAD);
+  assert.equal(browser.BOSS_SCORE, terminalTypes.BOSS_SCORE);
+});
+
+test('both builds size a drawn block the same way', () => {
+  // Read by the renderer and by the pulse cannon's hit test in each build, so a
+  // build whose formula differs draws a target the other build's player could
+  // not shoot at the same aim. The multiplier is checked as well as the plain
+  // case, because the boss is the one caller that passes one.
+  for (const scale of [0.15, 0.4, 0.575, 0.83, 1]) {
+    assert.equal(browser.blockSize(scale), terminalTypes.blockSize(scale));
+    assert.equal(
+      browser.blockSize(scale, browser.BOSS_SIZE_MULT),
+      terminalTypes.blockSize(scale, terminalTypes.BOSS_SIZE_MULT),
+    );
+  }
 });
 
 test('both builds hold the same detail ladder', () => {

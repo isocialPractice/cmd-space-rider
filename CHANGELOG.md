@@ -1,6 +1,142 @@
 # Changelog
 
-## Unreleased
+## [1.0.0-alpha.0.11.0] - 2026-10-18
+
+### Added
+
+- Boss encounters. Every `BOSS_INTERVAL` seconds of flying a `>> WARNING <<`
+  banner holds the HUD for `BOSS_WARNING_TIME`, and then a single large mine
+  appears at the far edge of sight and closes on the ship under its own power,
+  firing back as it comes. It takes `BOSS_HP` pulse hits, is worth `BOSS_SCORE`
+  against the combo multiplier, and leaves `BOSS_DROPS` pickups behind - one of
+  each kind. Reach the ship and it rams instead, for `BOSS_RAM_DAMAGE` and no
+  reward at all. The figures are 180, 3, 20, 5000, 3 and 50, and both builds
+  read them from one place, pinned in `test/parity.test.mjs` alongside the
+  asteroid field's three: a build carrying a different one is a build playing a
+  different game on the same leaderboard.
+
+  The encounter is three states held in two fields. `boss` non-null is a fight
+  under way; `bossWarning` above zero is the banner counting down to one; both
+  clear is the gap between fights, and `bossTimer` is what measures it. So the
+  timer only advances while the player is flying ordinary tunnel, which is what
+  makes 180 an interval of flying rather than of the whole cycle - the same
+  arrangement `asteroidTimer` has, for a sharper version of the same reason.
+  Read the cadence off `gameTime` instead and every encounter would open on the
+  frame a warp transition did: not a fraction of them but all of them, because
+  180 is a whole multiple of `WARP_INTERVAL`'s 60. The asteroid field's 150
+  shares only 30 with 60 and so collides on half its openings; a number that
+  divides exactly collides on every one. Countable by listing the multiples of
+  180 and asking how many divide by 60.
+
+  The timer does not buy that back on the first encounter, and the entry would
+  be overselling it if it did not say so. Nothing has reset the timer by then,
+  so it reads the same 180 `gameTime` does and the first warning of a run is due
+  on a warp frame every time. What the timer buys is every encounter after it:
+  the clock restarts when a fight ends, some seconds past a multiple of 180, so
+  the second warning is due at a figure that is not a multiple of 60 and neither
+  are the ones behind it. The first collision is handled by the gate instead -
+  a warning is held off while a warp flash is live or an asteroid field section
+  is open, with the timer left where it is rather than reset, so the hold is at
+  most `WARP_FLASH_TIME` or the rest of a section and never a cancellation. The
+  section is the stronger of the two cases: its banner holds that row for the
+  whole fifteen seconds and is drawn before the warning, so a warning raised
+  inside one would not appear at all, and a boss nobody was warned about is the
+  one outcome the warning exists to prevent.
+
+  Five decisions in it are worth recording, because each had a plausible
+  alternative.
+
+  It closes at `BOSS_CLOSE_SPEED` rather than being carried in by the tunnel's
+  advance, and that difference is the encounter. Everything else in the tunnel
+  arrives at whatever speed the run has reached, so the player's only choice
+  about a rock is where to be when it gets there; the boss sets its own pace, so
+  the clock a fight runs on is the same at the first encounter and the tenth -
+  200 units at 14 a second, a little over fourteen seconds. That prices the rest
+  of it: 20 hits over that approach asks for one about every three quarters of a
+  second, against `FIRE_INTERVAL`'s cadence of 0.36, so the cannon can do it at
+  a little over half rate and the difficulty sits where it belongs, which is
+  dodging what is being fired back. `test/boss.test.mjs` pins both figures and
+  flies two runs at four times the speed of each other to show the approach does
+  not shorten.
+
+  It is placed on the tunnel's axis rather than drawn out of the band a mine is
+  placed in. A mine is placed anywhere in the band because finding it is part of
+  dodging it, while a boss is announced three seconds ahead and then has to be
+  hit twenty times, so where it is should be the one thing the player does not
+  have to work out. The axis is also the column the corridor is never narrower
+  than, which matters more here than anywhere else: `drawBullets` measures 6.8%
+  of the placement band's points that draw into the play area as landing in a
+  column outside their own row's `tunnelSpan`, where a target is drawn but
+  cannot be shot. One such frame costs a mine nothing - five hits to land and
+  the mine is moving - while a boss parked out there would be twenty unlandable
+  hits.
+
+  Its shots are aimed at where the ship is on the frame each one leaves, and
+  nothing is led. The velocity is the direction from the boss to the ship scaled
+  to `BOSS_SHOT_SPEED`, so a shot is a statement about where the ship was and
+  moving is what makes it a miss. The geometry does the difficulty curve on its
+  own, which is why there is no range gate on the firing: a shot sent from the
+  edge of sight is four seconds in the air and the ship has the whole of that to
+  leave, while one sent from close in arrives in a third of a second and has to
+  be read before it is fired. All three velocity components are carried rather
+  than two and a fixed depth rate, because storing a flight time and dividing by
+  it works at every range but one - a shot fired from almost on top of the ship
+  has a flight shorter than a frame, and the lateral rates out of that division
+  throw it off the grid in the single step it gets. Checking arrival before
+  firing is what makes the degenerate case unreachable rather than merely
+  unlikely.
+
+  A shot outlives the boss that sent it. A volley sent a second before the last
+  hit landed is still a volley to be flown around, and retiring it with its
+  owner would make the killing shot a way of deleting it.
+
+  The drop is one of each kind at fixed offsets rather than three draws from
+  `POWERUP_KINDS`, so the reward is the same every time and the kill costs the
+  RNG nothing. That second part is worth more than it looks: seeded flights are
+  compared against each other, and a boss kill that drew three kinds and three
+  placements would make every figure quoted off a seeded flight depend on
+  whether the boss happened to die. As it stands the whole system - the
+  placement, the aim, the drop - draws nothing, and the only route an encounter
+  reaches the RNG by is the particle bursts its hits raise, which is the route
+  every kill in the game already takes. `test/boss.test.mjs` counts the draws
+  through a wrapped `RNG.next` to pin it. `BOSS_DROPS` being
+  `POWERUP_KINDS.length` is pinned too, since one source drops all of them and a
+  fourth kind added without a thought here would leave it undroppable by the
+  only thing that drops the set.
+
+  On screen the boss is the mine it is at `BOSS_SIZE_MULT` times the size depth
+  gives it: `blockSize` returns 8 when it reaches the ship and 1 at the edge of
+  sight, against a mine's 2 and 1, and `drawBlock` paints that as a block 9
+  cells across and then 1, against a mine's 3 and 1 - the function loops
+  `-floor(size / 2)` to `+floor(size / 2)` inclusive, so an even size draws one
+  cell wider than it reads. It blinks on the mines' own clock and in magenta
+  against their red, so it reads as the same family running hotter rather than
+  as a new kind of thing to work out mid-encounter. Its shots are drawn off the
+  2 an orb and a dropped powerup use rather than the block's 2.5, because what
+  matters about one is where it is. The HUD carries `BOSS <n>/20` right-aligned
+  on the banner row for the whole fight - twenty hits is too many to count by
+  eye, and without the readout there is no way to tell a boss two shots from
+  death from one that has barely been scratched. It cannot collide with the
+  debug tracker that shares that side of the row, because a boss is never placed
+  in a debug scenario and the tracker is only drawn in one.
+
+### Changed
+
+- The block an entity is drawn as is now sized by one function, `blockSize`,
+  read by the renderer and by the pulse cannon's hit test in both builds.
+  `drawEntitiesFar` and `contacts` each wrote `max(1, floor(scale * 2.5))` out
+  separately before this and happened to agree, which was good enough for as
+  long as every target was the same size at a given depth. The boss is the first
+  one that is not: it carries a size multiplier, and a hit test reading the
+  unmultiplied block would have taken only the middle of a target the player can
+  plainly see - twenty hits to land and most of the block inert, which is the
+  shape of defect `drawBullets` and `placeObstacle` have each already carried a
+  correction for. `contacts` takes the multiplier as a trailing argument
+  defaulting to 1, so nothing but the boss passes one and no existing hit test
+  changes. `test/parity.test.mjs` compares the two builds' answers across the
+  projection, with and without the multiplier, and `test/boss.test.mjs` walks
+  the ship outward until a volley stops registering to show the outer rings of
+  the boss's block are live.
 
 ### Fixed
 
