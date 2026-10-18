@@ -85,6 +85,68 @@ its origin survives archiving into `## Complete`.
     3x3 would tie the two together.
   - From: UI/UX Override - the banner row and the far drops
 
+- [ ] BOSS_INTERVAL's comment counts two asteroid field sections where a run
+  has flown one
+  - **Issue**: `src/types.ts:468` closes with "Three minutes puts the first
+    encounter after two asteroid field sections and three warp steps, so a
+    player meets it already knowing what the tunnel does on its own." The warp
+    figure is right and the section figure is double. `asteroidTimer` only
+    accumulates while `asteroidTime` is zero and `openAsteroidField` resets it
+    to 0, so sections open at 150 seconds of flying and then at 150 + 15 + 150
+    = 315 - one opening before three minutes, not two, and no reading of the
+    cadence gives two, since even off `gameTime` 180 / 150 is 1.2. Measured by
+    flying an unseeded run with the shield held up and counting the frames
+    `asteroidTime` rises off zero: the first warning lands at `gameTime`
+    182.03 - 180 plus the 2 seconds the warp gate holds it, which is the
+    comment's own first-collision case working - and exactly 1 section and 3
+    warp steps have gone by, with `warpLevel` at 4. The claim the figure is
+    offered for survives either way, since one section and three warp steps is
+    still a tunnel a player has been shown; only the count is wrong. The
+    browser build's mirror of this comment ends at `index.html:751` with "this
+    interval minus however long the last one ran" and states no such figure, so
+    the correction does not cross to it.
+  - **Goal**: Say one asteroid field section, or drop the section count and
+    name the three warp steps alone. If the sentence is worth a figure a reader
+    can rebuild, give the cadence beside it - sections at 150 and 315 seconds
+    of flying against an encounter at 180 - rather than a bare count. A case in
+    `test/asteroid-field.test.mjs` or `test/boss.test.mjs` walking a run to the
+    first warning and asserting the 1 and the 3 would stop the pair drifting
+    again, since both figures are engine state and neither is pinned now.
+  - From: UI/UX Override - the banner row and the far drops
+
+- [ ] The ship's own collision box still sizes the drawn block longhand, so
+  `blockSize` is not the one place its docstring says it is
+  - **Issue**: `blockSize` was added to end two readers of one formula
+    disagreeing, and its docstring at `src/types.ts:215` states the scope as
+    "it is read twice from two different places: `drawEntitiesFar` draws the
+    block, and `contacts` decides what the pulse cannon met", closing "so there
+    is one function now and both ends call it". There are four readers of that
+    block, not two. The ship's own collision boxes still write
+    `max(1, floor(scale * 2.5))` out by hand against the same drawn block -
+    `src/game.ts:1430` for an obstacle and `:1519` for a mine, mirrored at
+    `index.html:2192` and `:2255` - and none of the four was converted. They
+    agree today, so nothing is broken on screen; what is wrong is that the
+    docstring tells a later reader the formula lives in one place. Name the
+    input: change the 2.5 in `blockSize` to any other figure and both builds
+    draw a block of the new size which the pulse cannon tests correctly and the
+    ship collides with on the old one - the player would clip an obstacle a
+    character short of touching it, or pass through the edge of one, which is
+    the same see-it-but-it-does-not-register defect in the other direction and
+    the one the function exists to rule out. The hazard is the docstring's
+    promise rather than the duplication: a reader who believes it will change
+    the 2.5 and not go looking.
+  - **Goal**: Either finish the consolidation or narrow the claim, and
+    finishing it is the better of the two since the formula is identical at all
+    four sites. Have the obstacle and mine ship-collision boxes call
+    `blockSize(oScr.scale)` and `blockSize(mScr.scale)` in both builds, then
+    say in the docstring that every reader of the block goes through it and
+    name them. `drawBlock`'s caller is the renderer and takes the same figure,
+    so no projection changes. The suite pins `blockSize` itself and the
+    cannon's agreement with it, but nothing asserts the ship's box reads the
+    same size, so a case staging an obstacle at a known depth and walking the
+    ship in until contact registers would hold the fourth reader too.
+  - From: UI/UX Override - the banner row and the far drops
+
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
