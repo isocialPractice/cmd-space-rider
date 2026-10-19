@@ -1,5 +1,147 @@
 # Changelog
 
+## [1.0.0-alpha.0.11.1] - 2026-10-19
+
+### Fixed
+
+- The HUD banner row keeping the ends of the banner it drew over. `drawHUD`
+  centres four banners on one row and writes them in priority order - asteroid
+  field, warp, boss warning, NEW BEST - with nothing clearing the row between
+  two writes, so a shorter banner over a longer one covered the longer one's
+  middle and left its ends standing. The row then read as one banner's shoulders
+  wrapped around another banner's text: a warning inside a section rendered
+  `>> >> WARNING <<D <<`, where the stray `D` is the `D` of `FIELD`, a warning
+  across a warp step rendered `>>>> WARNING << <<`, a warp step inside a section
+  rendered `>>> WARP LEVEL 2 <<<`, and a new best inside a section rendered
+  `>> A[ NEW BEST ]D <<`. The same four strings at 60x20, 80x24 and 128x45
+  alike, so it was a draw-order defect rather than a narrow-grid one.
+
+  Two comments in `drawHUD` already described the overlap and resolved it by
+  draw order, which is the part that does not work: the warp banner's paragraph
+  said the asteroid banner "gives up the row" for it, and the boss warning's
+  said it "beats both the banners above" and went on to name the exact frame it
+  is for. The case was anticipated; only the mechanism was wrong. Every banner
+  now goes through one `drawBanner`, which blanks the centred field before it
+  writes, so the row carries one banner rather than the union of two and the
+  order is a priority rather than a hope. The span is `BANNER_FIELD`, 20
+  characters, the width of the widest banner the row can hold: measured with
+  `COMBO x8` and `BOSS 20/20` up together at the 60-column floor, which is the
+  tightest the row ever is, the centred field leaves 10 cells of gap on the left
+  and 8 on the right, and both only widen as the grid does.
+
+  The frame is reachable from engine state rather than only from a rig. The gate
+  in `updateBossEncounter` holds a warning off while a banner is up, but it
+  gates raising one and not the three seconds it then runs, and
+  `updateAsteroidField` runs before it held off only by a warp flash - so a
+  section coming due inside a live warning opens under it. Stepped from
+  `bossTimer = BOSS_INTERVAL - FRAME / 2` and
+  `asteroidTimer = ASTEROID_INTERVAL - 1.5`, both builds reach a frame carrying
+  a 1.50 s warning and a 15.00 s section together, and `test/boss.test.mjs`
+  flies to that frame and reads the row rather than staging the two fields.
+  Each pairing is read at three grids, and the warp step inside a section is
+  pinned in `test/warp.test.mjs`, which is the banner it belongs to - and the
+  commonest of the four, since a section runs `ASTEROID_TIME` and a step comes
+  every `WARP_INTERVAL`, so about a quarter of all sections contain one.
+
+- Two of the three pickups a destroyed boss leaves landing in one cell at 60
+  columns. `BOSS_DROP_SPREAD` is 1.5 world units and the drawn gap between two
+  drops is that distance through `gameToScreen`'s column term,
+  `(x / tunnelRadius) * ((w - 6) / 2) * scale`, so it narrows with depth and
+  with the grid's width together. Walked a unit at a time on the painted canvas,
+  killing a boss at every depth from z=-5 out, 1.5 units held at 80 and 128
+  columns at every depth a drop is drawn at and collapsed at 60 from z=-189: the
+  three were placed at columns 29, 30 and 30 and the row rendered `+~` where it
+  should have rendered `+ ! ~`, showing two pickups for a kill that paid three.
+  The window is the first 786 ms of a 14.3-second approach and a hand reaches
+  it - holding the trigger from the start of the WARNING, the twentieth hit
+  lands at z=-189.7 tapped at 10 Hz under Rapid Fire and at z=-192.5 tapped at
+  15 Hz. `dropBossPowerups`' own comment said "none is hidden behind another",
+  unconditionally.
+
+  The gap now comes from a new `bossDropSpread`, which takes the depth's scale
+  and the grid's width and returns the wider of `BOSS_DROP_SPREAD` and the world
+  distance worth one drawn column, `tunnelRadius / (colRange * scale)`. `floor`
+  of two columns a full column apart cannot land on one cell at any width, so
+  the three hold at every depth on every grid. Reading the projection to place
+  something in the world is the one thing the engine does not otherwise do, and
+  it is the honest way round here, because what the constant asks for is that
+  the three are "drawn as three things" - which is a property of the screen. It
+  is also the only one of the three available routes with no cost at the near
+  end: widening the constant to 2 loses a drop on a kill inside z=-6, where 1.5
+  keeps all three to z=-3, and spreading the drops in depth puts one past the
+  ship on a close kill, where it is gone before it is drawn. The constant is now
+  the floor rather than the gap, and it is still the figure used at every depth
+  from 78 columns up and everywhere near the ship; a narrower grid widens it at
+  its far end and nowhere else - 60 to 68 columns over the range a drop is drawn
+  in, and 69 to 77 only past it - to 1.730 at z=-195 on the 60-column floor,
+  which is the deepest a drop is drawn at there, and 1.975 at the 0.15 the scale
+  itself floors out at, both well inside the 4.5 units `placeObstacle` uses and
+  the 6.5 the ship can reach.
+
+  Pinned by a depth sweep in `test/boss.test.mjs` at 60x20 as well as at 80x24
+  and 128x45. The narrow grid is the entire reason the file's 90 passing checks
+  did not catch this, and the step has to be a single unit because the crossing
+  was one unit wide.
+
+- The ship's own collision boxes sizing the drawn block longhand. `blockSize`'s
+  docstring stated its scope as "read twice from two different places:
+  `drawEntitiesFar` draws the block, and `contacts` decides what the pulse
+  cannon met", closing "so there is one function now and both ends call it".
+  There were four readers of that block. The ship's obstacle and mine boxes
+  still wrote `max(1, floor(scale * 2.5))` out by hand against the same drawn
+  block, in both builds, and none of the four was converted. They agreed, so
+  nothing was wrong on screen; what was wrong is that the docstring told a later
+  reader the formula lived in one place. Change the 2.5 and both builds would
+  have drawn a block of the new size that the cannon tested correctly and the
+  ship collided with on the old one, which is the same see-it-but-nothing-
+  registers defect the function exists to rule out, in the other direction. All
+  four now call `blockSize`, and the docstring names them.
+
+  The suite pinned `blockSize` and the cannon's agreement with it and asserted
+  nothing about the ship's box, so `test/boss.test.mjs` now walks the ship in
+  past an obstacle at a known depth, 121 positions a twentieth of a unit apart,
+  and requires a contact to register on exactly the frames where the ship's
+  drawn sprite and the obstacle's drawn block share a column. It names no
+  formula, which is the point: it compares the box against the painted block
+  rather than against a second copy of the arithmetic.
+
+- Three figures in `BOSS_SIZE_MULT`'s docstring describing something other than
+  what is drawn. It closed with "At 3.5 the block is 8 cells across when the
+  boss reaches the ship and 1 at the edge of sight, against a mine's 2 and 1. On
+  the 24-row floor the play area is 19 rows, so a close boss is about two fifths
+  of the height of it". The 8 and the 2 are what `blockSize` returns and not
+  what `drawBlock` draws: that function takes `half = floor(size / 2)` and loops
+  `-half` to `+half` inclusive, so a size of 8 paints 9 cells across and a size
+  of 2 paints 3, and rendered at z=0 in both builds the boss block measures 9 by
+  9 and the mine 3 by 3. The 24 is not the floor either - both builds declare
+  `MIN_HEIGHT` as 20, and the 24 beside it is the fallback for an undefined
+  `stdout.rows`. And two fifths is neither grid's share: the 9 rows of a 24-row
+  grid's 19 play rows is 47.4%, and at the real 20-row floor the play area is 15
+  rows and the block is clipped to 8 of them, which is 53.3% - over half, the
+  opposite of the reassurance the sentence was making. Nothing was wrong on
+  screen; a close boss at the floor is large but legible. The docstring now says
+  which figure is which, names the floor and both play areas, and gives both
+  shares, and `test/boss.test.mjs` reads the drawn extent and the row share off
+  the canvas at both grids with the ship parked clear of the block.
+
+- `BOSS_INTERVAL`'s comment counting two asteroid field sections where a run has
+  flown one. It closed with "Three minutes puts the first encounter after two
+  asteroid field sections and three warp steps". The warp figure is right and
+  the section figure was double: `asteroidTimer` only accumulates while
+  `asteroidTime` is zero and `openAsteroidField` resets it, so a section's own
+  clock is an interval of flying too and openings fall at 150 and then at
+  150 + 15 + 150 = 315 seconds, one before three minutes rather than two - and
+  no reading of the cadence gives two, since even off `gameTime` 180 / 150 is
+  1.2. Flown unseeded with the shield held up, the first warning lands at
+  `gameTime` 182.03, which is the 180 plus the two seconds the warp gate holds
+  it for, with exactly one section and three warp steps behind it and
+  `warpLevel` at 4. The claim the figure was offered for survives either way,
+  since one section and three warp steps is still a tunnel the player has been
+  shown; only the count was wrong. Both figures are engine state and neither was
+  pinned, so `test/boss.test.mjs` now flies a run to the first warning and
+  counts them. The browser build's mirror of the comment states no such figure,
+  so the correction does not cross to it.
+
 ## [1.0.0-alpha.0.11.0] - 2026-10-18
 
 ### Added

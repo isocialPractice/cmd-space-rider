@@ -216,19 +216,28 @@ export const SHIP_MARGIN = 1.5;
  * The side of the square block an entity is drawn as, at a given perspective
  * scale and size multiplier.
  *
- * Named because it is read twice from two different places: `drawEntitiesFar`
- * draws the block, and `contacts` decides what the pulse cannon met. Those two
- * disagreeing is this repository's most expensive class of defect - a target
- * the player can see and aim at that nothing registers against - and until the
- * boss arrived the formula was simply written out at both ends and happened to
- * match. A size multiplier is what makes "happened to match" stop being good
- * enough, so there is one function now and both ends call it.
+ * Named because every reader of that block goes through it, and there are four
+ * of them: `drawEntitiesFar` draws it, `contacts` decides what the pulse cannon
+ * met, and `updateObstacles` and `updateMines` size the box the ship collides
+ * with. Any two of those disagreeing is this repository's most expensive class
+ * of defect - a target the player can see and aim at that nothing registers
+ * against - and until the boss arrived the formula was simply written out at
+ * each end and happened to match. A size multiplier is what makes "happened to
+ * match" stop being good enough, so there is one function now and all four
+ * call it: change the 2.5 and the drawn block, the cannon's hit test and both
+ * ship-collision boxes move together.
  *
  * The 2.5 is the obstacle and mine block the game was tuned on, and 1 is the
  * floor: past about 47 units out the block is a single character, which is
  * what SHOT_SLACK_COLS' slack is sized for. Orbs and dropped powerups are
  * drawn off a 2 rather than this 2.5 and are not shot at, so they are not
  * callers.
+ *
+ * What it returns is the side of the block, not the number of cells painted.
+ * `drawBlock` takes `half = floor(size / 2)` and loops `-half` to `+half`
+ * inclusive, so an odd size paints that many columns and an even one paints a
+ * column more: a size of 2 is drawn 3 cells across and a size of 8 is drawn 9.
+ * Every figure quoted off this function says which of the two it is.
  */
 export function blockSize(scale: number, sizeMul = 1): number {
   return Math.max(1, Math.floor(scale * 2.5 * sizeMul));
@@ -465,9 +474,16 @@ export const ASTEROID_COUNT = 70;
  * interval of flying rather than this interval minus however long the last one
  * ran.
  *
- * Three minutes puts the first encounter after two asteroid field sections and
+ * Three minutes puts the first encounter after one asteroid field section and
  * three warp steps, so a player meets it already knowing what the tunnel does
- * on its own.
+ * on its own. One section rather than two, because a section's own clock is
+ * also an interval of flying: `asteroidTimer` only accumulates while
+ * `asteroidTime` is zero and `openAsteroidField` resets it, so sections open at
+ * 150 and then at 150 + ASTEROID_TIME + 150 = 315 seconds of flying, against an
+ * encounter due at 180. Flown unseeded with the shield held up, the first
+ * warning lands at `gameTime` 182.03 - the 180 plus the two seconds the warp
+ * gate below holds it for, which is the first-collision case above working -
+ * with that one section behind it and `warpLevel` at 4.
  */
 export const BOSS_INTERVAL = 180;
 
@@ -506,11 +522,21 @@ export const BOSS_HP = 20;
  * the defect `drawBullets` and `placeObstacle` have each had a correction for.
  * One function, read twice.
  *
- * At 3.5 the block is 8 cells across when the boss reaches the ship and 1 at
- * the edge of sight, against a mine's 2 and 1. On the 24-row floor the play
- * area is 19 rows, so a close boss is about two fifths of the height of it:
- * large enough to read as a different thing from a mine, and short of filling
- * the screen.
+ * At 3.5 `blockSize` returns 8 when the boss reaches the ship and 1 at the edge
+ * of sight, against a mine's 2 and 1. What is drawn is a cell wider at the top
+ * of that range, because `drawBlock` loops `-half` to `+half` inclusive: a size
+ * of 8 paints 9 cells across and a size of 2 paints 3, so a boss at z=0
+ * measures 9 by 9 on the painted canvas and a mine 3 by 3.
+ *
+ * The floor both builds enforce is 20 rows, not 24 - MIN_HEIGHT in
+ * `src/index.ts` and in `index.html`, where the 24 beside it is only the
+ * fallback for an undefined `stdout.rows`. The play area is the grid less
+ * HUD_ROWS and FOOTER_ROWS, so it is 15 rows at that floor and 19 on a 24-row
+ * grid, and the 9-row block is clipped to 8 of the 15: 53.3% of the play area
+ * at the floor against 47.4% on a 24-row grid. So a close boss is about half
+ * the height of the play area - large enough to read as a different thing from
+ * a mine, and short of filling the screen, though only just at the narrowest
+ * grid the game will start on.
  */
 export const BOSS_SIZE_MULT = 3.5;
 
@@ -581,14 +607,63 @@ export const BOSS_RAM_DAMAGE = 50;
 export const BOSS_DROPS = 3;
 
 /**
- * Units between two of the three pickups a destroyed boss leaves.
+ * The narrowest gap between two of the three pickups a destroyed boss leaves,
+ * in world units.
  *
- * Wide enough that the three are drawn as three things at the depth a boss
- * usually dies at rather than as one glyph with two behind it. They converge
- * on their own afterwards - `updatePowerups` pulls every drop toward the ship
- * at POWERUP_DRIFT - so this only has to hold for the moment they appear.
+ * A floor rather than the gap itself, because the gap has to be read on the
+ * screen and this is a world distance. `bossDropSpread` widens it where the
+ * projection would put two drops in one cell; this is what it uses everywhere
+ * else, which is every depth a boss is normally killed at and every grid from
+ * 80 columns up. They converge on their own afterwards - `updatePowerups` pulls
+ * every drop toward the ship at POWERUP_DRIFT - so the spread only has to hold
+ * for the moment they appear.
  */
 export const BOSS_DROP_SPREAD = 1.5;
+
+/**
+ * The gap to place the three boss drops at, given the depth they are dropped at
+ * and the width they will be drawn on.
+ *
+ * BOSS_DROP_SPREAD on its own is a world distance, and what the three drops
+ * have to be is three readable glyphs - which is a screen property. The drawn
+ * gap between two of them is the world gap through `gameToScreen`'s column
+ * term, `(x / tunnelRadius) * ((w - 6) / 2) * scale`, so it narrows with depth
+ * and with the grid's width together. Walked a unit at a time on the painted
+ * canvas, 1.5 units held at 80 and 128 columns at every depth a drop is drawn
+ * at and collapsed at 60 from z=-189 out: the three were placed at columns 29,
+ * 30 and 30 and the row rendered `+~` where it should have rendered `+ ! ~`,
+ * showing two pickups for a kill that paid three. That window is the first
+ * 786 ms of a 14.3-second approach and a hand can reach it - a trigger held
+ * from the start of the WARNING lands the twentieth hit at z=-189.7 tapped at
+ * 10 Hz under Rapid Fire, and at z=-192.5 tapped at 15 Hz.
+ *
+ * So the gap is derived rather than fixed: one column of drawn separation is
+ * `tunnelRadius / (colRange * scale)` world units, and `floor` of two columns a
+ * full column apart cannot land on one cell at any width. The floor is what
+ * keeps it from being tighter than the constant where the projection is
+ * generous, which is everywhere near the ship: at 80 columns and up the figure
+ * is the constant at every depth, and only the 60-column floor ever widens it -
+ * to 1.730 at z=-195, the deepest a drop is drawn at there, and to 1.975 at the
+ * 0.15 the scale itself floors out at. Both are well inside the 4.5 units
+ * `placeObstacle` uses and the 6.5 the ship can reach, so a widened drop is
+ * still one the player can go and get, and the near end is untouched: a kill
+ * inside z=-8 places the three at the constant on every grid.
+ *
+ * Reading the screen to place something in the world is the one thing the
+ * engine does not otherwise do, and it is the honest way round here: what
+ * BOSS_DROP_SPREAD's own docstring asks for is that the three are "drawn as
+ * three things", so the figure that delivers it belongs to the projection.
+ * Widening the constant instead would have cost the near end - a spread of 2
+ * loses a drop on a kill inside z=-6, where 1.5 keeps all three to z=-3 - and
+ * a spread in depth puts a drop past the ship on a close kill, where it is
+ * gone before it is drawn.
+ */
+export function bossDropSpread(
+  scale: number, screenWidth: number, tunnelRadius: number
+): number {
+  const colRange = (screenWidth - 6) / 2;
+  return Math.max(BOSS_DROP_SPREAD, tunnelRadius / (colRange * scale));
+}
 
 /**
  * Score a destroyed boss is worth, before the combo multiplier.

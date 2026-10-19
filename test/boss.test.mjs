@@ -19,6 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { REPO_ROOT, loadBrowserEngine, fakeStorage, rowText, FRAME } from './helpers.mjs';
@@ -218,6 +219,45 @@ for (const build of BUILDS) {
     // the first encounter, so it reads the same 180 the warp step does. The
     // gate above is what handles it, not the choice of clock.
     assert.equal(build.BOSS_INTERVAL % build.WARP_INTERVAL, 0);
+  });
+
+  test(`${build.name}: one section and three warp steps come before the first warning`, () => {
+    // BOSS_INTERVAL's closing sentence prices the interval in what the player
+    // has already been shown, and both halves of that figure are engine state
+    // nothing else pins. It read "two asteroid field sections" until a run was
+    // flown and counted: a section's own clock is an interval of flying too, so
+    // openings fall at 150 and 315 seconds while the encounter is due at 180.
+    //
+    // Flown rather than staged, because that is the whole claim - the counts are
+    // what three minutes of the cadence produces, not what a rig can be set to.
+    // The shield is held up so a collision cannot end the run before 180
+    // seconds, and nothing else is touched.
+    const game = quietRun(build);
+    const s = game.state;
+
+    let sections = 0;
+    let warps = 0;
+    let open = s.asteroidTime > 0;
+    let level = s.warpLevel;
+
+    for (let i = 0; i < 30 * 240 && s.bossWarning === 0; i++) {
+      s.shield = 100;
+      game.update(FRAME, {}, {});
+      if (!open && s.asteroidTime > 0) sections++;
+      if (s.warpLevel > level) warps++;
+      open = s.asteroidTime > 0;
+      level = s.warpLevel;
+    }
+
+    assert.ok(s.bossWarning > 0, 'the first warning was reached');
+    assert.equal(sections, 1, `asteroid field sections before the first warning: ${sections}`);
+    assert.equal(warps, 3, `warp steps before the first warning: ${warps}`);
+    // 180 plus the two seconds the warp gate holds the warning for, which is
+    // the first-collision case BOSS_INTERVAL describes doing its job.
+    assert.ok(s.gameTime > build.BOSS_INTERVAL, 'the warning waited for the row');
+    assert.ok(s.gameTime < build.BOSS_INTERVAL + build.WARP_FLASH_TIME + 1,
+      `the warning landed at ${s.gameTime.toFixed(2)}`);
+    assert.equal(s.warpLevel, 4);
   });
 
   test(`${build.name}: no boss in a debug scenario`, () => {
@@ -490,6 +530,70 @@ for (const build of BUILDS) {
     assert.ok(Math.abs(xs[2] - xs[1] - build.BOSS_DROP_SPREAD) < 1e-9);
   });
 
+  for (const [width, height] of [[60, 20], [80, 24], [128, 45]]) {
+    test(`${build.name}: the three drops hold three cells at every drawn depth, ${width}x${height}`, () => {
+      // Walked at the narrowest grid first, because that is where it failed and
+      // the rest of this file stages at 80x24. BOSS_DROP_SPREAD is a world
+      // distance and the drawn gap narrows with depth and with the grid's width
+      // together, so 1.5 units put two of the three in one cell at 60 columns
+      // from z=-189 out - the row rendered `+~` where it should have rendered
+      // `+ ! ~`, showing two pickups for a kill that paid three.
+      //
+      // A unit at a time rather than a coarser step: the crossing was a single
+      // unit wide. Killed through `killBoss` so the drops come from
+      // `dropBossPowerups` at exactly the depth under test, and the burst that
+      // call raises is cleared before the frame is read - it is drawn after the
+      // drops and over them, and it is not what this is about.
+      const glyphs = build.POWERUP_KINDS.map((k) => build.POWERUP_GLYPHS[k].char);
+      let drawnAt = 0;
+
+      for (let z = -5; z >= -build.BOSS_SPAWN_Z; z--) {
+        const game = stagedBoss(build, z, width, height);
+        const s = game.state;
+        game.killBoss(s.boss);
+        s.particles = [];
+
+        const screen = new build.ScreenBuffer(width, height);
+        build.renderGame(screen, s);
+
+        const cells = new Set();
+        const kinds = new Set();
+        for (let y = HUD_ROWS; y < height - FOOTER_ROWS; y++) {
+          const row = rowText(screen, y);
+          for (let x = 0; x < width; x++) {
+            if (glyphs.includes(row[x])) { cells.add(`${x},${y}`); kinds.add(row[x]); }
+          }
+        }
+        if (cells.size === 0) continue; // too far out to be drawn at all
+
+        drawnAt++;
+        assert.equal(cells.size, build.BOSS_DROPS,
+          `z=${z}: ${cells.size} cells for ${build.BOSS_DROPS} drops`);
+        assert.equal(kinds.size, build.BOSS_DROPS,
+          `z=${z}: ${[...kinds].join('')} drawn, not all ${build.BOSS_DROPS} kinds`);
+      }
+
+      assert.ok(drawnAt > 150, `only ${drawnAt} depths drew the drops at all`);
+    });
+  }
+
+  test(`${build.name}: the spread only widens where the projection is tight`, () => {
+    // `bossDropSpread`'s floor is BOSS_DROP_SPREAD, and the floor is what holds
+    // everywhere near the ship and on every grid from 80 columns up. Pinned
+    // because the near end is what widening the constant instead would have
+    // cost: a drop placed further out on a point-blank kill is past the ship
+    // before it can be collected.
+    assert.equal(build.bossDropSpread(1, 80, 8), build.BOSS_DROP_SPREAD);
+    assert.equal(build.bossDropSpread(1, 60, 8), build.BOSS_DROP_SPREAD);
+    assert.equal(build.bossDropSpread(0.15, 128, 8), build.BOSS_DROP_SPREAD);
+
+    // And it is above the floor exactly where a column is worth more than the
+    // floor is: at the 60-column grid's far end, and never by much.
+    const far = build.bossDropSpread(0.15, 60, 8);
+    assert.ok(far > build.BOSS_DROP_SPREAD, `${far} is not wider than the floor`);
+    assert.ok(far < 2, `${far} is wider than the placement band wants`);
+  });
+
   test(`${build.name}: a kill is worth BOSS_SCORE and chains like any other`, () => {
     const game = stagedBoss(build, -40);
     const s = game.state;
@@ -573,6 +677,151 @@ for (const build of BUILDS) {
     assert.equal(build.blockSize(0.15), 1);
   });
 
+  test(`${build.name}: the drawn block is 9 cells across and a mine's 3`, () => {
+    // The figures BOSS_SIZE_MULT's comment quotes, read off the painted canvas
+    // rather than off the function. The two are a cell apart and the comment
+    // used to quote the function's pair as the drawn one: `drawBlock` takes
+    // `half = floor(size / 2)` and loops `-half` to `+half` inclusive, so
+    // `blockSize`'s 8 paints 9 columns and its 2 paints 3.
+    //
+    // The ship is parked out of the way and off the axis, because at z=0 it is
+    // drawn over the middle of the block and would eat cells out of a count.
+    for (const [kind, chars, across] of [['boss', '◉◎', 9], ['mine', '◈■', 3]]) {
+      const game = quietRun(build, 80, 24);
+      const s = game.state;
+      s.shipX = 6;
+      s.shipY = 0.5;
+      if (kind === 'boss') {
+        s.boss = { x: 0, y: 2.5, z: 0, hp: build.BOSS_HP, fireTimer: 0 };
+        s.bossWarning = 0;
+        s.bossTimer = 0;
+      } else {
+        s.mines = [{ x: 0, y: 2.5, z: 0, rot: 0, rotSpeed: 0, scale: 1, hp: 5 }];
+      }
+
+      const screen = new build.ScreenBuffer(80, 24);
+      build.renderGame(screen, s);
+
+      const cols = new Set();
+      const rows = new Set();
+      for (let y = HUD_ROWS; y < 24 - FOOTER_ROWS; y++) {
+        const row = rowText(screen, y);
+        for (let x = 0; x < 80; x++) {
+          if (chars.includes(row[x])) { cols.add(x); rows.add(y); }
+        }
+      }
+      assert.equal(cols.size, across, `${kind} drawn ${cols.size} cells across`);
+      assert.equal(rows.size, across, `${kind} drawn ${rows.size} cells down`);
+    }
+  });
+
+  test(`${build.name}: a close boss is about half the play area, not two fifths`, () => {
+    // The other half of BOSS_SIZE_MULT's figures. Measured at both grids the
+    // comment names, and the narrow one is the point: 20 rows is the floor both
+    // builds enforce, not the 24 the comment used to call one, and the block is
+    // clipped to 8 of the 15 play rows there rather than filling 9 of 19.
+    for (const [height, playRows, blockRows] of [[24, 19, 9], [20, 15, 8]]) {
+      const game = quietRun(build, 80, height);
+      const s = game.state;
+      s.shipX = 6;
+      s.shipY = 0.5;
+      s.boss = { x: 0, y: 2.5, z: 0, hp: build.BOSS_HP, fireTimer: 0 };
+      s.bossWarning = 0;
+      s.bossTimer = 0;
+
+      const screen = new build.ScreenBuffer(80, height);
+      build.renderGame(screen, s);
+
+      const rows = new Set();
+      for (let y = HUD_ROWS; y < height - FOOTER_ROWS; y++) {
+        const row = rowText(screen, y);
+        for (const ch of row) if (ch === '◉' || ch === '◎') { rows.add(y); break; }
+      }
+      assert.equal(height - HUD_ROWS - FOOTER_ROWS, playRows);
+      assert.equal(rows.size, blockRows, `${height} rows: block over ${rows.size} of ${playRows}`);
+    }
+
+    // 8 of 15 is 53.3% and 9 of 19 is 47.4% - the two shares the comment quotes,
+    // and over half at the floor rather than the two fifths it used to claim.
+    assert.equal((8 / 15 * 100).toFixed(1), '53.3');
+    assert.equal((9 / 19 * 100).toFixed(1), '47.4');
+  });
+
+  test(`${build.name}: the floor those shares are quoted at is 20 rows in both builds`, () => {
+    // The correction above rests on it, and the 24 it replaces is still in
+    // `src/index.ts` a few lines up as the fallback for an undefined
+    // `stdout.rows` - which is how the comment came to call it the floor.
+    const entry = readFileSync(join(REPO_ROOT, 'src', 'index.ts'), 'utf8');
+    const page = readFileSync(join(REPO_ROOT, 'index.html'), 'utf8');
+    assert.match(entry, /const MIN_HEIGHT = 20;/);
+    assert.match(page, /const MIN_HEIGHT=20;/);
+  });
+
+  test(`${build.name}: the box the ship collides with is the block that was drawn`, () => {
+    // The fourth reader of `blockSize`. `drawEntitiesFar` and `contacts` are
+    // pinned above and below; the ship's own obstacle and mine boxes sized the
+    // same block longhand until this release, so the one thing nothing asserted
+    // was that the ship collides with what it can see.
+    //
+    // Written without naming the formula, because naming it would only restate
+    // it: the ship's sprite paints three columns and the block paints its own,
+    // and a contact has to register on exactly the frames those two sets share
+    // a column. The obstacle's columns are read from a frame with the ship
+    // parked clear of it, since the ship is drawn last and over the block.
+    const z = -2;
+    const stage = (shipX, withObstacle) => {
+      const game = quietRun(build, 80, 24);
+      const s = game.state;
+      s.shipX = shipX;
+      if (withObstacle) {
+        s.obstacles = [{ x: 0, y: s.shipY, z, rot: 0, rotSpeed: 0, scale: 1 }];
+      }
+      return game;
+    };
+    const paint = (game) => {
+      const screen = new build.ScreenBuffer(80, 24);
+      build.renderGame(screen, game.state);
+      const out = [];
+      for (let y = 0; y < 24; y++) out.push(rowText(screen, y));
+      return out;
+    };
+    const noseColumn = (rows) => {
+      for (const row of rows) {
+        const x = row.indexOf('▲');
+        if (x >= 0) return x;
+      }
+      return -1;
+    };
+
+    const withIt = paint(stage(6.5, true));
+    const without = paint(stage(6.5, false));
+    const blockCols = new Set();
+    for (let y = 0; y < 24; y++) {
+      for (let x = 0; x < 80; x++) {
+        if (withIt[y][x] !== without[y][x]) blockCols.add(x);
+      }
+    }
+    assert.equal(blockCols.size, 3, `the block paints ${blockCols.size} columns`);
+
+    let checked = 0;
+    for (let step = 60; step >= -60; step--) {
+      const shipX = step / 20;
+      const nose = noseColumn(paint(stage(shipX, true)));
+      assert.ok(nose >= 0, `the ship is drawn at shipX ${shipX}`);
+      const shares = [nose - 1, nose, nose + 1].some((c) => blockCols.has(c));
+
+      const game = stage(shipX, true);
+      const before = game.state.shield;
+      game.update(FRAME, {}, {});
+      const registered = game.state.shield < before;
+
+      assert.equal(registered, shares,
+        `shipX ${shipX}: contact ${registered}, shared column ${shares}`);
+      checked++;
+    }
+    assert.equal(checked, 121);
+  });
+
   test(`${build.name}: the drawn block is wider than a mine's at the same depth`, () => {
     const game = stagedBoss(build, -40);
     const s = game.state;
@@ -638,11 +887,14 @@ for (const build of BUILDS) {
 // ----- The HUD -----
 
 for (const build of BUILDS) {
-  const hudRow = (game) => {
-    const screen = new build.ScreenBuffer(80, 24);
+  const hudRow = (game, width = 80, height = 24) => {
+    const screen = new build.ScreenBuffer(width, height);
     build.renderGame(screen, game.state);
     return rowText(screen, HUD_ROWS);
   };
+
+  /** The grids the banner row is read at: the floor, the default, and a wide one. */
+  const BANNER_GRIDS = [[60, 20], [80, 24], [128, 45]];
 
   test(`${build.name}: the warning banner holds the row while it runs`, () => {
     const game = quietRun(build);
@@ -667,6 +919,90 @@ for (const build of BUILDS) {
     assert.doesNotMatch(row, /WARP LEVEL/);
     assert.doesNotMatch(row, /ASTEROID FIELD/);
   });
+
+  for (const [width, height] of BANNER_GRIDS) {
+    test(`${build.name}: a warning over another banner is the warning alone, ${width}x${height}`, () => {
+      // The row carries one banner, and it used to carry the union of two.
+      // `drawHUD` writes all four centred on HUD_ROWS in priority order with
+      // nothing clearing the row between two writes, so a shorter banner over a
+      // longer one covered the longer one's middle and left its ends standing:
+      // a warning inside a section rendered `>> >> WARNING <<D <<`, the stray
+      // `D` being the `D` of `FIELD`, and a warning across a warp step rendered
+      // `>>>> WARNING << <<`. Both at every width, which is why this is read at
+      // three of them - it was a draw-order defect, not a narrow-grid one.
+      for (const over of ['asteroidTime', 'warpFlash']) {
+        const game = quietRun(build, width, height);
+        const s = game.state;
+        s.bossWarning = build.BOSS_WARNING_TIME;
+        s.warpLevel = 2;
+        s[over] = over === 'asteroidTime' ? build.ASTEROID_TIME : build.WARP_FLASH_TIME;
+
+        assert.equal(hudRow(game, width, height).trim(), '>> WARNING <<',
+          `with ${over} live`);
+      }
+    });
+
+    test(`${build.name}: a new best over a section is the new best alone, ${width}x${height}`, () => {
+      // The fourth banner has the same defect from the other end: `[ NEW BEST ]`
+      // is 12 characters against the section's 20, so it rendered
+      // `>> A[ NEW BEST ]D <<`.
+      const game = quietRun(build, width, height);
+      const s = game.state;
+      s.newBestFlash = build.NEW_BEST_FLASH_TIME;
+      s.asteroidTime = build.ASTEROID_TIME;
+
+      assert.equal(hudRow(game, width, height).trim(), '[ NEW BEST ]');
+    });
+
+    test(`${build.name}: blanking the field leaves the row's two readouts, ${width}x${height}`, () => {
+      // What bounds the blanked span. The combo counter is left-aligned on this
+      // row and the boss readout right-aligned, and the field is centred and 20
+      // wide - the width of the widest banner it can carry. Read with the
+      // longest form of each up together, which is the tightest the row gets.
+      const game = quietRun(build, width, height);
+      const s = game.state;
+      s.combo = build.COMBO_MAX;
+      s.boss = { x: 0, y: 2.5, z: -40, hp: build.BOSS_HP, fireTimer: 0 };
+      s.bossWarning = build.BOSS_WARNING_TIME;
+      s.asteroidTime = build.ASTEROID_TIME;
+
+      const row = hudRow(game, width, height);
+      assert.match(row, new RegExp(`COMBO x${build.COMBO_MAX}`));
+      assert.match(row, new RegExp(`BOSS ${build.BOSS_HP}/${build.BOSS_HP}`));
+      assert.equal(row.trim().replace(/\s{2,}/g, ' '),
+        `COMBO x${build.COMBO_MAX} >> WARNING << BOSS ${build.BOSS_HP}/${build.BOSS_HP}`);
+    });
+  }
+
+  for (const [width, height] of [[60, 20], [80, 24]]) {
+    test(`${build.name}: the frame that garbled the row is flown to, ${width}x${height}`, () => {
+      // The reachability, rather than a staged pair of fields. The gate in
+      // `updateBossEncounter` holds a warning off while a banner is up, but it
+      // gates raising one and not the three seconds it then runs, and
+      // `updateAsteroidField` runs before it held off only by a warp flash - so
+      // a section coming due inside a live warning opens under it.
+      const game = quietRun(build, width, height);
+      const s = game.state;
+      s.bossTimer = build.BOSS_INTERVAL - FRAME / 2;
+      s.asteroidTimer = build.ASTEROID_INTERVAL - 1.5;
+      // Three minutes of flying scores enough to cross a cold best, and NEW
+      // BEST is the one banner that beats a warning. It wins the row by design
+      // and is pinned below; marking it shown keeps it off this frame.
+      s.newBestShown = true;
+
+      let reached = false;
+      for (let i = 0; i < 100 && !reached; i++) {
+        s.shield = 100;
+        game.update(FRAME, {}, {});
+        reached = s.bossWarning > 0 && s.asteroidTime > 0;
+      }
+
+      assert.ok(reached, 'a frame carries both the warning and an open section');
+      assert.equal(s.bossWarning.toFixed(2), '1.50');
+      assert.equal(s.asteroidTime.toFixed(2), '15.00');
+      assert.equal(hudRow(game, width, height).trim(), '>> WARNING <<');
+    });
+  }
 
   test(`${build.name}: NEW BEST still wins the row`, () => {
     const game = quietRun(build);

@@ -606,12 +606,18 @@ function shotSlackCols(screenWidth){
 // The side of the square block an entity is drawn as, at a given perspective
 // scale and size multiplier.
 //
-// Named because it is read twice from two different places: drawEntitiesFar
-// draws the block, and contacts decides what the pulse cannon met. Those two
-// disagreeing is this repository's most expensive class of defect - a target the
-// player can see and aim at that nothing registers against - and until the boss
-// arrived the formula was simply written out at both ends and happened to match.
-// A size multiplier is what makes "happened to match" stop being good enough.
+// Named because every reader of that block goes through it, and there are four
+// of them: drawEntitiesFar draws it, contacts decides what the pulse cannon met,
+// and updateObstacles and updateMines size the box the ship collides with. Any
+// two of those disagreeing is this repository's most expensive class of defect -
+// a target the player can see and aim at that nothing registers against - and
+// until the boss arrived the formula was simply written out at each end and
+// happened to match. A size multiplier is what makes "happened to match" stop
+// being good enough, so change the 2.5 and all four move together.
+//
+// What it returns is the side of the block, not the number of cells painted:
+// drawBlock loops -half to +half inclusive, so a size of 2 is drawn 3 cells
+// across and a size of 8 is drawn 9.
 //
 // The 2.5 is the obstacle and mine block the game was tuned on, and 1 is the
 // floor: past about 47 units out the block is a single character, which is what
@@ -770,8 +776,10 @@ const BOSS_HP=20;
 // whole point of naming it. A boss is the first entity in this game whose size
 // is not a function of depth alone, so it is the first one where a drawn block
 // and a hit test written separately could disagree about where the target is.
-// At 3.5 the block is 8 cells across when the boss reaches the ship and 1 at the
-// edge of sight, against a mine's 2 and 1.
+// At 3.5 blockSize returns 8 when the boss reaches the ship and 1 at the edge of
+// sight, against a mine's 2 and 1. What is drawn is a cell wider at the top of
+// that range - drawBlock loops -half to +half inclusive - so a boss at z=0
+// measures 9 by 9 on the painted canvas and a mine 3 by 3.
 const BOSS_SIZE_MULT=3.5;
 // Depth the boss is placed at, as a distance out from the ship: the far edge of
 // what is drawn, so an encounter opens with the boss appearing rather than
@@ -810,11 +818,39 @@ const BOSS_RAM_DAMAGE=50;
 // boss draws from the RNG only through the particle bursts its hits raise, which
 // is the route every kill in the game already takes.
 const BOSS_DROPS=3;
-// Units between two of the three pickups a destroyed boss leaves. Wide enough
-// that the three read as three things at the depth a boss usually dies at; they
-// converge on their own afterwards, since updatePowerups pulls every drop toward
-// the ship.
+// The narrowest gap between two of the three pickups a destroyed boss leaves, in
+// world units. A floor rather than the gap itself, because the gap has to be
+// read on the screen and this is a world distance: bossDropSpread widens it
+// where the projection would put two drops in one cell and uses this everywhere
+// else. They converge on their own afterwards, since updatePowerups pulls every
+// drop toward the ship.
 const BOSS_DROP_SPREAD=1.5;
+// The gap to place the three boss drops at, given the depth they are dropped at
+// and the width they will be drawn on.
+//
+// The drawn gap between two drops is the world gap through gameToScreen's column
+// term, (x / tunnelRadius) * ((w - 6) / 2) * scale, so it narrows with depth and
+// with the grid's width together. Walked a unit at a time on the painted canvas,
+// 1.5 units held at 80 and 128 columns at every depth a drop is drawn at and
+// collapsed at 60 from z=-189 out: the three were placed at columns 29, 30 and
+// 30 and the row rendered +~ where it should have rendered + ! ~, showing two
+// pickups for a kill that paid three. That window is the first 786 ms of a
+// 14.3-second approach and a hand can reach it.
+//
+// So the gap is derived rather than fixed: one column of drawn separation is
+// tunnelRadius / (colRange * scale) world units, and floor of two columns a full
+// column apart cannot land on one cell at any width. The floor keeps it from
+// being tighter than the constant where the projection is generous, which is
+// everywhere near the ship - at 80 columns and up the figure is the constant at
+// every depth, and only the 60-column floor ever widens it, to 1.730 at z=-195
+// and to 1.975 at the 0.15 the scale itself floors out at. Both are well inside
+// the 4.5 units placeObstacle uses and the 6.5 the ship can reach. Widening the
+// constant instead would have cost the near end: a spread of 2 loses a drop on a
+// kill inside z=-6, where 1.5 keeps all three to z=-3.
+function bossDropSpread(scale,screenWidth,tunnelRadius){
+  const colRange=(screenWidth-6)/2;
+  return max(BOSS_DROP_SPREAD,tunnelRadius/(colRange*scale));
+}
 // Score a destroyed boss is worth, before the combo multiplier. Ten times a
 // mine's 500, for twenty hits rather than five against something that is
 // shooting back. A rammed boss is worth nothing.
@@ -2018,7 +2054,13 @@ class Game{
   // One of each rather than three draws from POWERUP_KINDS, and at fixed offsets
   // rather than scattered, so the whole drop costs the RNG nothing - see
   // BOSS_DROPS. The offsets come off the kind's own index, so the three land in
-  // the order POWERUP_KINDS lists them and none is hidden behind another.
+  // the order POWERUP_KINDS lists them.
+  //
+  // The gap between two of them comes from bossDropSpread rather than from
+  // BOSS_DROP_SPREAD directly, and that is what keeps none of the three hidden
+  // behind another: the constant is a world distance while being readable as
+  // three glyphs is a screen property, and at 60 columns a kill from z=-189 out
+  // drew the Rapid Fire drop under the Slow Motion one.
   //
   // It goes through neither dropPowerup nor its chance roll. A boss drop is the
   // reward for twenty hits rather than a one-in-three on a kill, and the roll
@@ -2026,9 +2068,10 @@ class Game{
   dropBossPowerups(x,y,z){
     const s=this.state;
     const mid=(BOSS_DROPS-1)/2;
+    const spread=bossDropSpread(this.projScale(z),s.screenWidth,s.tunnelRadius);
     for(let i=0;i<BOSS_DROPS;i++){
       s.powerups.push({
-        x:x+(i-mid)*BOSS_DROP_SPREAD,y,z,
+        x:x+(i-mid)*spread,y,z,
         kind:POWERUP_KINDS[i%POWERUP_KINDS.length],
       });
     }
@@ -2189,7 +2232,7 @@ class Game{
       if(o.z>10){o.z-=RECYCLE_Z;this.placeObstacle(o);o.scale=rand(0.6,1.5)}
       if(o.z>-20&&o.z<5){
         const oScr=this.toScreen(o.x,o.y,o.z);
-        const size=max(1,floor(oScr.scale*2.5));
+        const size=blockSize(oScr.scale);
         const half=floor(size/2);
         const dy=shipScr.row-oScr.row;
         if(abs(shipScr.col-oScr.col)<=SHIP_HALF_W+half&&
@@ -2252,7 +2295,7 @@ class Game{
       }
       if(m.z>-20&&m.z<5){
         const mScr=this.toScreen(m.x,m.y,m.z);
-        const size=max(1,floor(mScr.scale*2.5));
+        const size=blockSize(mScr.scale);
         const half=floor(size/2);
         const dy=shipScr.row-mScr.row;
         if(abs(shipScr.col-mScr.col)<=SHIP_HALF_W+half&&
@@ -2935,6 +2978,38 @@ function drawShip(screen,state,gameTop,gameBottom){
   }
 }
 
+// The widest banner HUD_ROWS can carry: >> ASTEROID FIELD <<, at 20 characters.
+// It is the span drawBanner blanks rather than the length of any one banner, and
+// it is what keeps that blanking clear of the two readouts that share the row:
+// with COMBO x8 and BOSS 20/20 up together at the 60-column floor, which is the
+// tightest the row ever is, the centred 20 leaves 10 cells of gap on the left and
+// 8 on the right, and both only widen as the grid does.
+const BANNER_FIELD=20;
+// One banner, centred on HUD_ROWS, with the field blanked before it is written.
+//
+// Every banner this row carries goes through here, and the blanking is the whole
+// reason it exists. Four of them are written in order on one row - asteroid
+// field, warp, boss warning, NEW BEST - and ordering alone does not resolve two
+// that are live together: putStringCenter centres each one, so a shorter banner
+// written over a longer one covers the longer one's middle and leaves its ends
+// standing. The row then read as one banner's shoulders wrapped around another
+// banner's text - >> >> WARNING <<D << for a warning inside a section, where the
+// stray D is the D of FIELD, and >>>> WARNING << << for a warning across a warp
+// step, at every width rather than only on a narrow grid.
+//
+// Clearing first makes the row carry one banner instead of the union of two, and
+// makes the order below a priority rather than a hope. The span is BANNER_FIELD
+// wide rather than the text's own width, so a short banner cannot leave a long
+// one's ends behind however the two are ordered, and it widens to the text only
+// if a banner ever outgrows the field. It blanks with C.WHITE on C.BLACK, which
+// is what clear leaves a cell as, so a blanked cell is indistinguishable from an
+// untouched one.
+function drawBanner(screen,text,color){
+  const field=max(BANNER_FIELD,text.length);
+  const x=floor((screen.width-field)/2);
+  screen.hLine(x,HUD_ROWS,field,' ',C.WHITE,C.BLACK);
+  screen.putStringCenter(HUD_ROWS,text,color,C.BLACK);
+}
 function drawHUD(screen,state){
   const w=screen.width;
   screen.put(0,0,'\u2554',C.CYAN,C.BLACK);
@@ -2991,29 +3066,32 @@ function drawHUD(screen,state){
   // event they missed, and it is drawn in the rocks' own colours so the line and
   // what it is about read as one thing.
   //
-  // Drawn before the warp banner and held back from a debug run, which is the
-  // same arrangement the warp banner already has with NEW BEST: the two cannot
-  // normally coincide, since updateAsteroidField holds a section off while a
-  // flash is live, but a section opened just under fifteen seconds before an
-  // interval crossing is still running when the flash arrives.
+  // Written first of the four and held back from a debug run, so it is the banner
+  // every other one on this row replaces - a real ordering now rather than a
+  // hope about one, since drawBanner blanks the field before it writes. The two
+  // cannot normally coincide with a warp flash, since updateAsteroidField holds
+  // a section off while a flash is live, but a section opened just under fifteen
+  // seconds before an interval crossing is still running when the flash arrives.
   if(state.asteroidTime>0&&state.debugMode===null){
     const blink=sin(state.uiTime*6)>0;
-    screen.putStringCenter(HUD_ROWS,'>> ASTEROID FIELD <<',
-      blink?C.BRIGHT_RED:C.RED,C.BLACK);
+    drawBanner(screen,'>> ASTEROID FIELD <<',blink?C.BRIGHT_RED:C.RED);
   }
 
   // Warp banner. It shares the centre of this row with the debug label, the
   // asteroid field banner and the NEW BEST banner. It loses to the first and the
   // last and beats the middle one: a debug run has its label up for the whole
   // run, so the banner is held back rather than blinking over it for two seconds;
-  // NEW BEST is drawn after this and covers it on the rare frame the two
-  // coincide; and the asteroid banner is drawn before it and gives up the row for
-  // the two seconds this is live. The level counts from 1, so the first one a run
-  // ever shows reads WARP LEVEL 2.
+  // NEW BEST is written after this and takes the row on the rare frame the two
+  // coincide; and the asteroid banner is written before it and gives up the row
+  // for the two seconds this is live. The whole of it rather than the middle of
+  // it, because drawBanner blanks the field first - before that, a section plus
+  // a flash rendered >>> WARP LEVEL 2 <<<, the section's own shoulders around
+  // this banner's text. The level counts from 1, so the first one a run ever
+  // shows reads WARP LEVEL 2.
   if(state.warpFlash>0&&state.debugMode===null){
     const blink=sin(state.uiTime*8)>0;
-    screen.putStringCenter(HUD_ROWS,`>> WARP LEVEL ${state.warpLevel} <<`,
-      blink?C.BRIGHT_WHITE:C.BRIGHT_MAGENTA,C.BLACK);
+    drawBanner(screen,`>> WARP LEVEL ${state.warpLevel} <<`,
+      blink?C.BRIGHT_WHITE:C.BRIGHT_MAGENTA);
   }
 
   // Boss warning banner. It owns this row for the three seconds before the boss
@@ -3024,14 +3102,17 @@ function drawHUD(screen,state){
   // already drawn last for the same kind of reason.
   //
   // updateBossEncounter holds a warning off while either of the other two is
-  // live rather than relying on this order, so the overlap this would resolve is
-  // one the engine is trying not to produce. The order is here for the frame
-  // where a section opened just before a warning was due and the warning has
-  // been waiting since.
+  // live rather than relying on this order, so the overlap this resolves is one
+  // the engine is trying not to produce - and does not manage in every frame.
+  // The gate holds a warning back from being raised and not for the three
+  // seconds it then runs, and updateAsteroidField runs before it held off only
+  // by a warp flash, so a section coming due inside a live warning opens under
+  // one. That frame used to render >> >> WARNING <<D <<; with the field blanked
+  // it renders the warning alone, which is what being written last is supposed
+  // to mean.
   if(state.bossWarning>0&&state.debugMode===null){
     const blink=sin(state.uiTime*12)>0;
-    screen.putStringCenter(HUD_ROWS,'>> WARNING <<',
-      blink?C.BRIGHT_RED:C.BRIGHT_YELLOW,C.BLACK);
+    drawBanner(screen,'>> WARNING <<',blink?C.BRIGHT_RED:C.BRIGHT_YELLOW);
   }
   // The boss's remaining hit points, right-aligned on this row while a fight is
   // under way. Twenty hits is too many to count by eye, and without a readout
@@ -3045,10 +3126,12 @@ function drawHUD(screen,state){
       state.boss.hp<=BOSS_HP/4?C.BRIGHT_YELLOW:C.BRIGHT_MAGENTA,C.BLACK);
   }
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
-  // with the debug label above.
+  // with the debug label above. Written last, so it takes the row from every
+  // banner above it: before the field was blanked a new best inside a section
+  // rendered >> A[ NEW BEST ]D <<, which is the same defect the warning had.
   if(state.newBestFlash>0){
     const blink=sin(state.uiTime*10)>0;
-    screen.putStringCenter(HUD_ROWS,'[ NEW BEST ]',blink?C.BRIGHT_YELLOW:C.BRIGHT_WHITE,C.BLACK);
+    drawBanner(screen,'[ NEW BEST ]',blink?C.BRIGHT_YELLOW:C.BRIGHT_WHITE);
   }
 }
 

@@ -491,6 +491,51 @@ function drawShip(screen: ScreenBuffer, state: GameState, gameTop: number, gameB
   }
 }
 
+/**
+ * The widest banner HUD_ROWS can carry: `>> ASTEROID FIELD <<`, at 20
+ * characters.
+ *
+ * Named because it is the span `drawBanner` blanks rather than the length of
+ * any one banner, and because it is what keeps that blanking clear of the two
+ * readouts that share the row. Measured with `COMBO x8` and `BOSS 20/20` up
+ * together at the 60-column floor, which is the tightest the row ever is: the
+ * centred 20 leaves 10 cells of gap on the left and 8 on the right, and both
+ * gaps only widen as the grid does.
+ */
+const BANNER_FIELD = 20;
+
+/**
+ * One banner, centred on HUD_ROWS, with the field blanked before it is written.
+ *
+ * Every banner this row carries goes through here, and the blanking is the
+ * whole reason it exists. Four of them are written in order on one row -
+ * asteroid field, warp, boss warning, NEW BEST - and ordering alone does not
+ * resolve two that are live together: `putStringCenter` centres each one, so a
+ * shorter banner written over a longer one covers the longer one's middle and
+ * leaves its ends standing. The row then reads as one banner's shoulders
+ * wrapped around another banner's text - `>> >> WARNING <<D <<` for a warning
+ * inside a section, where the stray `D` is the `D` of `FIELD`, and
+ * `>>>> WARNING << <<` for a warning across a warp step. Both at every width,
+ * so it is a draw-order defect and not a narrow-grid one.
+ *
+ * Clearing first makes the row carry one banner instead of the union of two,
+ * and makes the order below a priority rather than a hope: whichever banner is
+ * written last is the only one on the row. The span is BANNER_FIELD wide rather
+ * than the text's own width, so a short banner cannot leave a long one's ends
+ * behind however the two are ordered, and it is widened to the text only if a
+ * banner ever outgrows the field - at which point the text is what has to fit,
+ * not the field.
+ *
+ * It blanks with C.WHITE on C.BLACK, which is what `clear` leaves a cell as, so
+ * a blanked cell is indistinguishable from an untouched one.
+ */
+function drawBanner(screen: ScreenBuffer, text: string, color: number): void {
+  const field = max(BANNER_FIELD, text.length);
+  const x = floor((screen.width - field) / 2);
+  screen.hLine(x, HUD_ROWS, field, ' ', C.WHITE, C.BLACK);
+  screen.putStringCenter(HUD_ROWS, text, color, C.BLACK);
+}
+
 function drawHUD(screen: ScreenBuffer, state: GameState): void {
   const w = screen.width;
 
@@ -565,30 +610,35 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
   // not an event they missed, and it is drawn in the rocks' own colours so the
   // line and what it is about read as one thing.
   //
-  // Drawn before the warp banner and held back from a debug run, which is the
-  // same arrangement the warp banner already has with NEW BEST: the two cannot
-  // normally coincide, since updateAsteroidField holds a section off while a
-  // flash is live, but a section opened just under fifteen seconds before an
-  // interval crossing is still running when the flash arrives. The flash is two
-  // seconds of the fifteen and is the newer news, so it wins the row for them.
+  // Written first of the four and held back from a debug run, so it is the
+  // banner every other one on this row replaces. That is a real ordering now
+  // rather than a hope about one: `drawBanner` blanks the field before it
+  // writes, so a later banner takes the row outright instead of covering this
+  // one's middle. The two cannot normally coincide with a warp flash, since
+  // updateAsteroidField holds a section off while a flash is live, but a
+  // section opened just under fifteen seconds before an interval crossing is
+  // still running when the flash arrives. The flash is two seconds of the
+  // fifteen and is the newer news, so it wins the row for them.
   if (state.asteroidTime > 0 && state.debugMode === null) {
     const blink = sin(state.uiTime * 6) > 0;
-    screen.putStringCenter(HUD_ROWS, '>> ASTEROID FIELD <<',
-      blink ? C.BRIGHT_RED : C.RED, C.BLACK);
+    drawBanner(screen, '>> ASTEROID FIELD <<', blink ? C.BRIGHT_RED : C.RED);
   }
 
   // Warp banner. It shares the centre of this row with the debug label, the
   // asteroid field banner and the NEW BEST banner. It loses to the first and
   // the last and beats the middle one: a debug run has its label up for the
   // whole run, so the banner is held back rather than blinking over it for two
-  // seconds; NEW BEST is drawn after this and covers it on the rare frame the
-  // two coincide; and the asteroid banner is drawn before it and gives up the
-  // row for the two seconds this is live. The level counts from 1, so the first
-  // one a run ever shows reads WARP LEVEL 2.
+  // seconds; NEW BEST is written after this and takes the row on the rare frame
+  // the two coincide; and the asteroid banner is written before it and gives up
+  // the row for the two seconds this is live. It gives up the whole of it rather
+  // than the middle of it, because `drawBanner` blanks the field first - before
+  // that, a section plus a flash rendered `>>> WARP LEVEL 2 <<<`, the section's
+  // own shoulders around this banner's text. The level counts from 1, so the
+  // first one a run ever shows reads WARP LEVEL 2.
   if (state.warpFlash > 0 && state.debugMode === null) {
     const blink = sin(state.uiTime * 8) > 0;
-    screen.putStringCenter(HUD_ROWS, `>> WARP LEVEL ${state.warpLevel} <<`,
-      blink ? C.BRIGHT_WHITE : C.BRIGHT_MAGENTA, C.BLACK);
+    drawBanner(screen, `>> WARP LEVEL ${state.warpLevel} <<`,
+      blink ? C.BRIGHT_WHITE : C.BRIGHT_MAGENTA);
   }
 
   // Boss warning banner. It owns this row for the three seconds before the
@@ -599,14 +649,20 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
   // is already drawn last for the same kind of reason.
   //
   // `updateBossEncounter` holds a warning off while either of the other two is
-  // live rather than relying on this order, so the overlap this would resolve
-  // is one the engine is trying not to produce. The order is here for the frame
-  // where a section opened just before a warning was due and the warning has
-  // been waiting since.
+  // live rather than relying on this order, so the overlap this resolves is one
+  // the engine is trying not to produce. It does not manage it in every frame:
+  // the gate holds a warning back from being raised and not for the three
+  // seconds it then runs, and updateAsteroidField runs before it held off only
+  // by a warp flash, so a section coming due inside a live warning opens under
+  // one. That frame is reachable from `bossTimer = BOSS_INTERVAL - FRAME / 2`
+  // and `asteroidTimer = ASTEROID_INTERVAL - 1.5`, which both builds step to a
+  // frame carrying a 1.50 s warning and a 15.00 s section together. It used to
+  // render `>> >> WARNING <<D <<`; with the field blanked it renders the
+  // warning alone, which is what being written after the other two is supposed
+  // to mean.
   if (state.bossWarning > 0 && state.debugMode === null) {
     const blink = sin(state.uiTime * 12) > 0;
-    screen.putStringCenter(HUD_ROWS, '>> WARNING <<',
-      blink ? C.BRIGHT_RED : C.BRIGHT_YELLOW, C.BLACK);
+    drawBanner(screen, '>> WARNING <<', blink ? C.BRIGHT_RED : C.BRIGHT_YELLOW);
   }
 
   // The boss's remaining hit points, right-aligned on this row while a fight is
@@ -624,10 +680,12 @@ function drawHUD(screen: ScreenBuffer, state: GameState): void {
   }
 
   // NEW BEST banner. It only fires on normal runs, so it never shares this row
-  // with the debug label above.
+  // with the debug label above. Written last, so it takes the row from every
+  // banner above it: before the field was blanked a new best inside a section
+  // rendered `>> A[ NEW BEST ]D <<`, which is the same defect the warning had.
   if (state.newBestFlash > 0) {
     const blink = sin(state.uiTime * 10) > 0;
-    screen.putStringCenter(HUD_ROWS, '[ NEW BEST ]', blink ? C.BRIGHT_YELLOW : C.BRIGHT_WHITE, C.BLACK);
+    drawBanner(screen, '[ NEW BEST ]', blink ? C.BRIGHT_YELLOW : C.BRIGHT_WHITE);
   }
 }
 

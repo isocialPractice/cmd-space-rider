@@ -503,6 +503,29 @@ for (const build of BUILDS) {
     assert.doesNotMatch(row, /WARP LEVEL/);
   });
 
+  for (const [width, height] of [[60, 20], [80, 24], [128, 45]]) {
+    test(`${build.name}: a flash inside a section is the warp banner alone, ${width}x${height}`, () => {
+      // The oldest of the three overlaps on this row, and the one a quarter of
+      // all sections contain: a section runs ASTEROID_TIME and a step comes
+      // every WARP_INTERVAL. The banner that wins here was already the right
+      // one - it is written after the section's - but writing it was not enough.
+      // `putStringCenter` centres both, so this banner's 18 characters covered
+      // the middle of the section's 20 and left its ends standing, and the row
+      // rendered `>>> WARP LEVEL 2 <<<`: the section's own shoulders around
+      // this banner's text. `drawBanner` blanks the field first, so the row
+      // carries one banner rather than the union of two.
+      const game = quietRun(build, width, height);
+      const s = game.state;
+      s.warpLevel = 2;
+      s.warpFlash = build.WARP_FLASH_TIME;
+      s.asteroidTime = build.ASTEROID_TIME;
+      const screen = new build.ScreenBuffer(width, height);
+
+      build.renderGame(screen, s);
+      assert.equal(rowText(screen, HUD_ROWS).trim(), '>> WARP LEVEL 2 <<');
+    });
+  }
+
   test(`${build.name}: the NEW BEST banner wins the row when the two coincide`, () => {
     const game = quietRun(build);
     const s = game.state;

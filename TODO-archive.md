@@ -2719,3 +2719,120 @@ still be found by name.
     build needs no edit - which also makes it the wording to settle on if one
     of the three is to be the canonical sentence.
   - From: Code Review Override - the section cadence figure and the drawn span premise
+
+## Archived 10-19-26
+
+- [x] **Drawn Span Premise**: Three new comments rest on a span premise the geometry does not support
+  - **Issue**: `SHIP_MARGIN`'s comment at `src/types.ts:157`, `placeObstacle`'s
+    at `src/game.ts:494` and the `the run's own field stays in the corridor`
+    case at `test/asteroid-field.test.mjs:324` each identify the run's own
+    world-space band with a claim about the drawn span, quoting `drawBullets`
+    as saying "every target sits inside the drawn span at every depth" and "a
+    shot that has left the corridor is in a column no target can occupy". The
+    section is then presented as the exception to it. The premise is false for
+    the run's own field, so the exception is not where the three say it is.
+    `drawEntitiesFar` projects an obstacle's column off the depth scale while
+    `tunnelSpan` narrows by row, and an obstacle high or low in the band at a
+    far depth lands outside its own row's span. Walked as a lattice over the
+    band with no RNG - x in -4.5..4.5 and y in 0.5..4.5 by tenths, z by whole
+    units to -200, on an 80x24 grid - 49702 of the 729638 points that draw
+    into the play area have their column outside `tunnelSpan`, which is 6.8%,
+    and the furthest are 3 columns out. The first in that walk is the corner
+    of the spawn band itself: an obstacle at x -4.5, y 0.5, z -151 draws as a
+    single cell at column 32 of row 6, where `tunnelSpan(6, 3, 22, 80)` is
+    `{left: 32, right: 48}`, so `tracerLit(32, 6, 3, 22, 80)` is false. The
+    block is drawn - `drawEntitiesFar` runs after `drawTunnel`, so it paints
+    over the left margin - and the pulse cannon registers nothing against it,
+    because `tracerDrawn` falls through to `tracerLit` with the tunnel up. A
+    rock the player can see and aim at cannot be shot. The behaviour is
+    pre-existing and deliberate in its mechanism; what this release added is
+    three fresh restatements of a premise that was already wrong, and a test
+    name that reads as though it pinned the drawn span when what it asserts is
+    the world-space band.
+  - **Goal**: Two separable pieces, and the comment half is the one this
+    override is for. Say in all three places what the band actually is - the
+    world-space span obstacles are placed in - and drop the claim that it puts
+    every target inside the drawn span, since the three inherited it from
+    `drawBullets` rather than measuring it. `drawBullets`' own paragraph in
+    `src/render.ts` and `index.html` is where the claim originates and wants
+    the same correction, with the 6.8% and the lattice above recorded as the
+    method. Whether the clip should admit a target drawn outside the span is a
+    gameplay change with the pulse cannon hit rates riding on it, and is not
+    part of this: queue it separately if it is wanted, with the hit-rate bands
+    re-measured.
+  - From: Code Review Override - the section cadence figure and the drawn span premise
+- [x] **Harness Exclusions 1**
+  - **Issue**: `HARNESS_EXCLUSIONS`' docstring at `test/probes.test.mjs:76` closes
+    by saying "`docs/development.html` states the same pair, and the assertion at
+    the foot of the harness test is what keeps the three of them from drifting
+    apart". The assertion keeps two of the three. It compares the probes
+    `callsHarness` actually left out against `HARNESS_EXCLUSIONS` and reads
+    nothing outside `test/`; nothing in the suite reads `docs/development.html`,
+    and `test/docs-site.test.mjs` names neither probe. Verified by editing the
+    published pair to "`overlay-anchor` and `frame-rate`" and running
+    `npm test`: 684 pass, 0 fail, which is exactly the drift the docstring says
+    cannot happen. The direction the item did buy works - undeclaring
+    `glyph-tuning` fails with both lists named in the message - so what is
+    missing is only the third party the sentence claims.
+  - **Goal**: Either pin the third or stop claiming it. Pinning is the better of
+    the two, since the docs sentence is what exposed the undeclared exclusion in
+    the first place: read the pair out of `docs/development.html` in the harness
+    test and `deepEqual` it against `HARNESS_EXCLUSIONS` beside the walked set,
+    so a doc naming a different pair fails. Otherwise narrow the docstring to the
+    two it does pin and say the published copy is unenforced.
+  - From: Code Review Override - the section cadence figure and the drawn span premise
+- [x] Drawn Span Premise 1
+  - **Issue**: Two pieces of prose the correction left behind, each saying
+    something the lattice does not. First, the renamed case `the run's own field
+    stays in the band it is placed in` still fails with the word the rename
+    removed: `test/asteroid-field.test.mjs:337` and `:340` print "an obstacle at
+    x ... left the corridor" and "an obstacle at y ... left the corridor" for a
+    break of `OWN_X`, `OWN_Y_LOW` or `OWN_Y_HIGH`, which are the world-space
+    placement band. The name and the comment above it were moved off "corridor"
+    precisely because it read as the drawn span, so the one sentence a failure
+    actually prints is now the only place in the case that still conflates the
+    two. Second, `6.8%` is attached to the wrong population in every summary of
+    it: `src/game.ts:498` and `src/types.ts:160` say "6.8% of the band's
+    points", `src/types.ts:208` and `index.html:639` say "6.8% of the run's own
+    band", `index.html:1376` says "6.8% of its points" and
+    `test/asteroid-field.test.mjs:327` says "6.8% of this band". The figure is
+    49702 of 729638 and 729638 is the subset of the walk that draws into the
+    play area, not the band. The band walked as stated - x in -4.5..4.5 and y in
+    0.5..4.5 by tenths, z by whole units to -200 - is 91 x 41 x 201 = 749931
+    points, so 6.8% of the band is 6.63%, and a reader rebuilding the figure off
+    any of the six summaries gets a number that does not match the one
+    `drawBullets` publishes. `drawBullets` in both builds, and the archived item
+    itself, state the denominator correctly.
+  - **Goal**: Name the band in the two assertion messages - "left the placement
+    band", or the `x` or `y` bound each one broke - so a failure says what
+    broke. Then give the six summaries the denominator `drawBullets` already
+    carries, "of the band's points that draw into the play area", or drop the
+    percentage from the summaries and leave it where the method is recorded. The
+    `index.html:639` copy is the terminal wording mirrored into the browser build
+    by the review that queued this, so the two move together.
+  - From: Code Review Override - the section cadence figure and the drawn span premise
+- [x] Harness Exclusions 2
+  - **Issue**: The sentence 0.10.2 added to close the harness-exclusions
+    paragraph at `docs/development.html:33` tells a future editor the wrong thing
+    to preserve. It says the pair "is matched by the words *are left out* closing
+    it, which is the one part of the paragraph a rewrite has to keep".
+    The regex at `test/probes.test.mjs:118` matches a run of
+    `<code>name</code>` spans followed by those words, so it needs two things
+    kept, not one: the closing words, and the probe names wrapped in
+    `<code>` immediately before them. A rewrite that keeps only what the page
+    asks for fails - dropping the markup to plain text, "overlay-anchor and
+    glyph-tuning are left out", returns no match, so the test stops at
+    `assert.ok(sentence, ...)` with "docs/development.html states no ... sentence"
+    rather than at the pair comparison. Checked by running that regex against the
+    page with the markup removed. The docstring at `test/probes.test.mjs:112` has
+    it right - "the probe names in `<code>` immediately before" - so the
+    published copy is the one that is wrong, and it is the copy whoever rewrites
+    that paragraph reads. The same sentence also opens "The pair named in this
+    sentence" while the pair is named in the sentence before it.
+  - **Goal**: Rewrite that closing clause to name both halves of the shape the
+    test matches - the probe names in `<code>`, and the words "are left out"
+    immediately after them - instead of "the one part". Point "this sentence" at
+    the preceding sentence in the same rewrite. Then `npm test`, and re-check the
+    guard still fails on a drifted pair by publishing a different name and
+    running `node --test test/probes.test.mjs`.
+  - From: Code Review Override - the section cadence figure and the drawn span premise

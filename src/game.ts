@@ -10,7 +10,7 @@ import {
   ASTEROID_INTERVAL, ASTEROID_TIME, ASTEROID_COUNT, SHIP_MARGIN,
   BOSS_INTERVAL, BOSS_WARNING_TIME, BOSS_HP, BOSS_SIZE_MULT, BOSS_SPAWN_Z,
   BOSS_CLOSE_SPEED, BOSS_FIRE_INTERVAL, BOSS_SHOT_SPEED, BOSS_SHOT_DAMAGE,
-  BOSS_RAM_DAMAGE, BOSS_DROPS, BOSS_DROP_SPREAD, BOSS_SCORE,
+  BOSS_RAM_DAMAGE, BOSS_DROPS, bossDropSpread, BOSS_SCORE,
   POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
   RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
   BULLET_SPEED, BULLET_LIFE_SLACK,
@@ -1206,7 +1206,16 @@ export class Game {
    * offsets rather than scattered, so the whole drop costs the RNG nothing -
    * see BOSS_DROPS for why that is worth holding on to. The offsets come off
    * the kind's own index, so the three land in the order POWERUP_KINDS lists
-   * them and none is hidden behind another.
+   * them.
+   *
+   * The gap between two of them comes from `bossDropSpread` rather than from
+   * BOSS_DROP_SPREAD directly, and that is what keeps none of the three hidden
+   * behind another. The constant is a world distance while being readable as
+   * three glyphs is a screen property, and the two part company at the far edge
+   * of sight on a narrow grid: at 60 columns a kill from z=-189 out drew the
+   * Rapid Fire drop under the Slow Motion one. See `bossDropSpread` for the
+   * walk that measured it and for why the figure is derived from the projection
+   * rather than widened in the constant.
    *
    * It goes through neither `dropPowerup` nor its chance roll. A boss drop is
    * the reward for twenty hits rather than a one-in-three on a kill, and the
@@ -1215,9 +1224,10 @@ export class Game {
   private dropBossPowerups(x: number, y: number, z: number): void {
     const s = this.state;
     const mid = (BOSS_DROPS - 1) / 2;
+    const spread = bossDropSpread(this.projScale(z), s.screenWidth, s.tunnelRadius);
     for (let i = 0; i < BOSS_DROPS; i++) {
       s.powerups.push({
-        x: x + (i - mid) * BOSS_DROP_SPREAD, y, z,
+        x: x + (i - mid) * spread, y, z,
         kind: POWERUP_KINDS[i % POWERUP_KINDS.length],
       });
     }
@@ -1423,11 +1433,14 @@ export class Game {
         this.placeObstacle(o);
         o.scale = rand(0.6, 1.5);
       }
-      // 2D bounding-box overlap on the character grid
+      // 2D bounding-box overlap on the character grid, sized through
+      // `blockSize` so the box the ship collides with is the block the renderer
+      // drew and the pulse cannon shoots at rather than a fourth reading of one
+      // formula.
       // Vertical check is asymmetric: trigger when ship top is within 1 char of obstacle bottom
       if (o.z > -20 && o.z < 5) {
         const oScr = this.toScreen(o.x, o.y, o.z);
-        const size = max(1, floor(oScr.scale * 2.5));
+        const size = blockSize(oScr.scale);
         const half = floor(size / 2);
         const dy = shipScr.row - oScr.row;
         if (abs(shipScr.col - oScr.col) <= SHIP_HALF_W + half &&
@@ -1512,11 +1525,14 @@ export class Game {
         s.mines.splice(i, 1);
         continue;
       }
-      // 2D bounding-box overlap on the character grid
+      // 2D bounding-box overlap on the character grid, sized through
+      // `blockSize` so the box the ship collides with is the block the renderer
+      // drew and the pulse cannon shoots at rather than a fourth reading of one
+      // formula.
       // Vertical check is asymmetric: trigger when ship top is within 1 char of mine bottom
       if (m.z > -20 && m.z < 5) {
         const mScr = this.toScreen(m.x, m.y, m.z);
-        const size = max(1, floor(mScr.scale * 2.5));
+        const size = blockSize(mScr.scale);
         const half = floor(size / 2);
         const dy = shipScr.row - mScr.row;
         if (abs(shipScr.col - mScr.col) <= SHIP_HALF_W + half &&
