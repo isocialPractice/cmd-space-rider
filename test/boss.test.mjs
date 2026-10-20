@@ -577,6 +577,134 @@ for (const build of BUILDS) {
     });
   }
 
+  for (const [width, height] of [[60, 20], [80, 24], [128, 45]]) {
+    test(`${build.name}: the three drops stay three cells while the burst clears, ${width}x${height}`, () => {
+      // The case above reads the frame of the drop and no frame after it, so
+      // the placement was pinned and the read window was not. `bossDropSpread`
+      // solves for one column at the depth of the kill, and `updatePowerups`
+      // used to spend that column in two frames when the ship was on the axis
+      // the boss was killed on - which is the seat the twentieth hit was landed
+      // from, since `spawnBoss` puts the boss at `x: 0` and a bolt holds the
+      // column it was fired down.
+      //
+      // The frame of the drop is not the frame it is read on: `killBoss`'s own
+      // burst covers at least one of the three cells for 19 to 24 frames at the
+      // 60-column far end. So the window has to outlast the burst, which is
+      // what BOSS_DROP_HOLD is for, and 30 frames is a second of it.
+      const game = quietRun(build, width, height);
+      const s = game.state;
+      s.shipX = 0;
+      s.shipY = 2.5;
+      game.dropBossPowerups(0, 2.5, -190);
+
+      for (let frame = 0; frame < 30; frame++) {
+        const cells = new Set(s.powerups.map((p) => {
+          const scr = game.toScreen(p.x, p.y, p.z);
+          return `${scr.col},${scr.row}`;
+        }));
+        assert.equal(cells.size, build.BOSS_DROPS,
+          `frame ${frame}: the three drops hold ${cells.size} cells`);
+        // Held on the axis every frame, because that is the failing seat: off
+        // it the three never converged on one cell in the first place.
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+    });
+  }
+
+  test(`${build.name}: a far kill is read as three glyphs once its burst clears`, () => {
+    // The cells above are engine state; this is what the player actually reads
+    // off the canvas. Flown through `killBoss` rather than `dropBossPowerups`
+    // so the burst is raised too, and the burst is the whole difficulty: it is
+    // drawn after the drops and over them.
+    const game = quietRun(build, 60, 20);
+    const s = game.state;
+    s.shipX = 0;
+    s.shipY = 2.5;
+    game.killBoss({ x: 0, y: 2.5, z: -190, hp: 0, fireTimer: 0 });
+
+    const screen = new build.ScreenBuffer(60, 20);
+    let readAt = -1;
+    for (let frame = 0; frame < 30 && readAt < 0; frame++) {
+      build.renderGame(screen, s);
+      const read = s.powerups.every((p) => {
+        const scr = game.toScreen(p.x, p.y, p.z);
+        const i = scr.row * screen.width + scr.col;
+        const spec = build.POWERUP_GLYPHS[p.kind];
+        // The character alone does not settle it, because the burst covering
+        // these cells draws one of the same glyphs: `drawParticles` fades
+        // through '*', '+', '·', '.', so a shield drop's '+' can be read
+        // off a cell holding nothing but debris. What tells the two apart is
+        // the ink - a particle is its burst colour or C.GRAY, never the
+        // pickup's own bright-or-dim pair - so the colour is what makes this a
+        // read of the pickup rather than of whatever is on top of it.
+        return screen.chars[i] === spec.char
+          && (screen.fg[i] === spec.bright || screen.fg[i] === spec.dim);
+      });
+      if (read) readAt = frame;
+      s.shipX = 0;
+      s.shipY = 2.5;
+      game.update(FRAME, {}, {});
+    }
+
+    assert.ok(readAt >= 0, 'no frame inside 30 showed all three of their own glyphs');
+  });
+
+  test(`${build.name}: only a boss's drops are held, and a mine's drifts at once`, () => {
+    // BOSS_DROP_HOLD exists because three drops land together and have to be
+    // told apart. A mine pays one pickup with no sibling to confuse it with,
+    // and its drift is the whole of what makes it worth chasing, so holding it
+    // would cost the thing and buy nothing.
+    const game = quietRun(build, 60, 20);
+    const s = game.state;
+
+    game.dropBossPowerups(0, 2.5, -190);
+    for (const p of s.powerups) assert.equal(p.hold, build.BOSS_DROP_HOLD);
+
+    s.powerups = [];
+    s.shipX = 3;
+    // `dropPowerup` rolls against POWERUP_DROP_CHANCE, so push the drop the way
+    // it does rather than flying a mine kill until the roll lands.
+    s.powerups.push({ x: -3, y: 2.5, z: -40, kind: build.POWERUP_KINDS[0], hold: 0 });
+    const before = s.powerups[0].x;
+    game.update(FRAME, {}, {});
+    assert.ok(s.powerups[0].x > before, 'a mine drop should close on the ship from the first frame');
+  });
+
+  test(`${build.name}: a point-blank kill still pays all three`, () => {
+    // The near end is what holding buys over widening the gap further: the
+    // placement is untouched, so a kill inside the depth BOSS_DROP_SPREAD's own
+    // comment says a spread of 2 loses a drop at still collects every one. Held
+    // drops do not converge, and at this range they do not have to - the ship is
+    // already inside the span the three were placed across.
+    for (const z of [-3, -6, -10]) {
+      const game = quietRun(build, 60, 20);
+      const s = game.state;
+      s.shield = 50;
+      s.shipX = 0;
+      s.shipY = 2.5;
+      game.killBoss({ x: 0, y: 2.5, z, hp: 0, fireTimer: 0 });
+      assert.equal(s.powerups.length, build.BOSS_DROPS);
+
+      const collected = new Set();
+      for (let frame = 0; frame < 600 && s.powerups.length > 0; frame++) {
+        const live = s.powerups.map((p) => ({ p, z: p.z, kind: p.kind }));
+        s.shipX = 0;
+        s.shipY = 2.5;
+        s.shield = 50;
+        game.update(FRAME, {}, {});
+        for (const rec of live) {
+          // Past the ship it is spliced at z > 10; anything else that left the
+          // list was picked up.
+          if (!s.powerups.includes(rec.p) && rec.z <= 10) collected.add(rec.kind);
+        }
+      }
+      assert.equal(collected.size, build.BOSS_DROPS,
+        `z=${z}: ${collected.size} of ${build.BOSS_DROPS} collected`);
+    }
+  });
+
   test(`${build.name}: the spread only widens where the projection is tight`, () => {
     // `bossDropSpread`'s floor is BOSS_DROP_SPREAD, and the floor is what holds
     // everywhere near the ship and on every grid from 80 columns up. Pinned
@@ -592,6 +720,41 @@ for (const build of BUILDS) {
     const far = build.bossDropSpread(0.15, 60, 8);
     assert.ok(far > build.BOSS_DROP_SPREAD, `${far} is not wider than the floor`);
     assert.ok(far < 2, `${far} is wider than the placement band wants`);
+  });
+
+  test(`${build.name}: the band that widens is a range of widths, not one grid`, () => {
+    // The docstring named the 60-column floor as the only grid the derived gap
+    // ever widens on, and it is eight grids wider than that: the derived figure
+    // beats the floor wherever a drawn column is worth more than 1.5 world
+    // units, which over the depths a drop is actually drawn at is every width
+    // from 60 to 68. A reader who believed the old sentence would have
+    // predicted 1.5 for a 64-column terminal - which `MIN_WIDTH` admits - and
+    // gone looking for a bug in `bossDropSpread` on getting 1.611.
+    //
+    // Measured at the scale of the deepest depth a drop is drawn at, which is
+    // z=-195 on every grid: `projScale` there is 0.15 + (5 / 200) * 0.85.
+    const DEEPEST_SCALE = 0.17125;
+
+    // 78 columns and up is the constant at every depth, including the 0.15 the
+    // scale itself floors out at. 77 is the last width that does not manage it.
+    assert.equal(build.bossDropSpread(DEEPEST_SCALE, 78, 8), build.BOSS_DROP_SPREAD);
+    assert.equal(build.bossDropSpread(0.15, 78, 8), build.BOSS_DROP_SPREAD);
+    assert.ok(build.bossDropSpread(0.15, 77, 8) > build.BOSS_DROP_SPREAD,
+      '77 columns should still widen at the scale floor');
+
+    // 60 to 68 widen over the drawn range, and 69 is the first width that does
+    // not - so the upper bound is pinned from both sides.
+    for (const width of [60, 64, 68]) {
+      const gap = build.bossDropSpread(DEEPEST_SCALE, width, 8);
+      assert.ok(gap > build.BOSS_DROP_SPREAD,
+        `${width} columns: ${gap} is not wider than the floor at the deepest drawn depth`);
+    }
+    assert.equal(build.bossDropSpread(DEEPEST_SCALE, 69, 8), build.BOSS_DROP_SPREAD);
+
+    // And 69 to 77 widen only past the drawn range, which is the third range
+    // the docstring names and the one with no reader on screen.
+    assert.ok(build.bossDropSpread(0.15, 69, 8) > build.BOSS_DROP_SPREAD,
+      '69 columns should widen at the scale floor even though it does not in the drawn range');
   });
 
   test(`${build.name}: a kill is worth BOSS_SCORE and chains like any other`, () => {
