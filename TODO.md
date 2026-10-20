@@ -9,157 +9,51 @@ its origin survives archiving into `## Complete`.
 - [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
   - From: Bigger Features
 
-### UI/UX Override - the drops are three cells for one frame
+### UI/UX Override - the middle drop is under the tracer
 
 #### Resolve Issues
 
-- [ ] Encounter Legibility 2 - the three drops are placed three cells apart and
-  are back to two by the next frame at the 60-column floor
-  - **Issue**: The banner half of the release verifies clean and the drop half
-    does not. `bossDropSpread` solves for exactly one column of separation at
-    the depth of the kill, and `updatePowerups` spends that column on the next
-    frame: it pulls every drop toward the ship at `POWERUP_DRIFT` 2.5 units per
-    second, 0.0833 per frame, and when the ship is on the boss's axis - where it
-    has to be to have landed the twentieth hit, since `spawnBoss` puts the boss
-    at `x: 0, y: 2.5` and a bolt holds the screen column it was fired down - the
-    middle drop is already at the ship's `x` and does not move while the outer
-    two close on it at the full rate. One column is 1.53 units at z=-190 on a
-    60-column grid, so two frames in, an outer drop and the middle one are
-    inside one column. `killBoss` then raises a 20-particle burst on those same
-    cells and `drawParticles` runs after `drawEntitiesFar`, so the one frame the
-    three really are three cells is a frame the explosion is covering. Measured
-    on the painted canvas, five far kills flown from a real ENTER with SPACE
-    tapped at 15 Hz from inside the WARNING, at 60x20: every one places three
-    and holds three for one frame, two of the five never read as three own
-    glyphs inside 90 frames, and the three that did read at frames 38, 63 and
-    79 - 1.27 s, 2.10 s and 2.63 s after the kill, long after the player has
-    stopped looking at it. Staged with the ship held on the axis, the three hold
-    three cells for 1, 2 and 1 frames at z=-194, -192 and -190 against the 15
-    the burst takes to clear, and for 9 at z=-150; the build before this release
-    held 0, 0 and 0 there, so the change improved the far end without reaching
-    the goal. At 80 and 128 columns the constant 1.5 is already more than one
-    column, the three hold 11 to 12 frames, and they read as three inside about
-    300 ms - this is a 60-column case. Off the axis the three hold for a whole
-    60-frame sweep at every grid, so the axis seat is the condition.
-    `dropBossPowerups`' own comment still says the derived gap "is what keeps
-    none of the three hidden behind another".
-  - **Goal**: Resolve to [boss-drop-read-window.prompt.md](.claude/prompts/boss-drop-read-window.prompt.md)
+- [ ] Encounter Legibility 3 - the hold keeps the three in three cells and the
+  middle one spends all of it under the ship's own tracer
+  - **Issue**: `BOSS_DROP_HOLD` does what its docstring claims and the far kill
+    still reads as two. Verified on the painted canvas of a real browser: the
+    three now hold three distinct cells for 43 to 48 frames against 1 to 15
+    before, and staged far kills - the same `killBoss`, the same burst, an
+    empty bullet list - read as three inside the first second at 27 of 27 grid
+    and depth combinations against 12 of 27 on the build before this one. The
+    drift is fixed. What is left is that `dropBossPowerups` centres the spread
+    on the boss's `x`, `spawnBoss` fixes that at `0`, and the middle drop is
+    therefore always `rapid` at exactly `x: 0` - the tunnel axis, which is the
+    screen column a bolt travels up and the only column the twentieth hit can
+    have been landed from. `drawBullets` paints `│` in `C.BRIGHT_CYAN` at the
+    bolt's cell and `C.CYAN` one row above, and it runs after
+    `drawEntitiesFar`, so the middle drop's cell carries a cyan `│` rather than
+    its own `!` for as long as any bolt projects into it. Ten flown far kills
+    at the 60-column floor - ENTER from the title screen, the pilot dodging on
+    the page's own key listeners, SPACE through the real `keydown` handler, the
+    kill landed by the engine's own collision, the trigger released on the kill
+    frame - across five tap rates from 15 Hz down to 3.8 Hz: every one landed
+    far, z between -151 and -188, and not one read as three glyphs inside the
+    1.2 s hold. A bolt sat on the middle drop's own cell for 31 to 47 of the 48
+    frames watched at every rate. The rate does not rescue it because one
+    screen row at the floor is about 12 units of depth and `BULLET_SPEED` 60
+    puts a bolt every 12 units along the column at 5 Hz. Naming one frame, 800
+    ms after a kill at z=-194.40 at 60x20: shield at cell 28,4 shows `+` in ink
+    10 READABLE, rapid at 30,4 shows `│` in ink 6 COVERED, slow at 31,4 shows
+    `~` in ink 13 READABLE. Releasing the trigger does not cure it, which is
+    what the request expected it to do: `fireVolley` pushes three bolts on
+    every `justPressed.SPACE` with no cadence gate and each lives about 103
+    frames, so the release stops new bolts and does nothing about the column
+    already strung the length of the tunnel - measured from the release frame,
+    the three first read as three at frame 69 with the pilot steering and never
+    inside 150 frames with the ship held on the axis, against a hold ending at
+    frame 36. It is worst at the floor and not only the floor: at 128 columns
+    the same on-axis seat covers the middle cell on 32 of 36 frames. The
+    release's own new case `a far kill is read as three glyphs once its burst
+    clears` passes because it stages the kill into a tunnel with no bolts in
+    it.
+  - **Goal**: Resolve to [boss-drop-tracer-column.prompt.md](.claude/prompts/boss-drop-tracer-column.prompt.md)
   - From: Bigger Features
-
-#### Found Issues
-
-- [ ] `bossDropSpread`'s docstring names the 60-column floor as the only grid
-  the derived gap ever widens on, and nine grids widen on it
-  - **Issue**: `src/types.ts:645` closes the derivation paragraph with "at 80
-    columns and up the figure is the constant at every depth, and only the
-    60-column floor ever widens it", and `index.html:845` carries the same
-    clause. The "80 columns and up" half is right; the "only" is wrong by eight
-    grids. The derived gap beats the 1.5 floor whenever
-    `tunnelRadius / (colRange * scale)` exceeds it, which at the 0.15 scale
-    floor is every width up to 77 - `(w - 6) / 2 < 8 / (1.5 * 0.15)` solves to
-    `w < 77.11` - and over the depths a drop is actually drawn at, where the
-    deepest is z=-195 and the scale there is 0.17125, it is every width from 60
-    to 68. Walked over 60..82 columns against z in -195..-1: 60 widens to
-    1.7302, 61 to 1.6987, and so on down to 68 at 1.5069, with 69 and up
-    constant across the drawn range and 78 and up constant at every depth.
-    Name the input: a 64-column terminal, which `MIN_WIDTH` 60 admits, places
-    the three drops 1.611 apart at z=-195, and a reader who believed this
-    sentence would have predicted 1.5 and looked for a bug in `bossDropSpread`
-    on finding otherwise. The two figures the sentence then quotes are both
-    correct and worth keeping - 1.730 is the 60-column floor at z=-195 and
-    1.975 is the same grid at the 0.15 the scale floors out at, which is past
-    every depth a drop is drawn at.
-  - **Goal**: Replace "only the 60-column floor ever widens it" in both builds
-    with the real band, and say which of the two ranges each figure belongs to:
-    78 columns and up is the constant at every depth, 60 to 68 widens over the
-    range a drop is drawn in, and 69 to 77 widens only past it. The
-    `CHANGELOG.md` copy of the same clause in the 1.0.0-alpha.0.11.1 entry has
-    already been corrected in place, so the two builds are what is left. Both
-    bounds are arithmetic off constants the suite already exports, so a case in
-    `test/boss.test.mjs` asserting `bossDropSpread` returns the floor at 78
-    columns and more than the floor at 68 and at 60, at the scale of the
-    deepest drawn depth, would stop the band drifting again.
-  - From: UI/UX Override - the drops are three cells for one frame
-- [ ] `test/hud-row.test.mjs`' header still measures the shared row against the
-  banner's own width, and the row is now blanked a fixed 20 columns wide
-  - **Issue**: That file is the one place the shared HUD row's margins are
-    reasoned about, and its header at `test/hud-row.test.mjs:13` to `:18` says
-    "the margin between them is arithmetic rather than a check: the counter
-    tops out at COMBO x8, ten columns wide ending at column 9, and
-    `>> WARP LEVEL 2 <<` is eighteen columns centred, which starts at column 21
-    on the 60-column floor. Widen the banner or raise COMBO_MAX and the two
-    meet". This release replaced every `putStringCenter` on that row with
-    `drawBanner`, which blanks `BANNER_FIELD` cells - a fixed 20, starting at
-    column 20 on the 60-column floor - before it writes. So the span that can
-    reach the combo counter is no longer any banner's text: it is one column
-    further left than the header's figure and two columns wider, and it is the
-    same 20 for `[ NEW BEST ]` at 12 characters as for
-    `>> ASTEROID FIELD <<` at 20, where under the old code the short banner
-    reached only column 24. "Widen the banner" is no longer the thing to watch
-    either. Name the input: an editor adding a banner that needs
-    `BANNER_FIELD` at 42 reads this header, checks the widest banner text
-    against column 10, concludes the counter is clear, and ships a row where
-    the blanked field starts at column 9 and eats the `8` of `COMBO x8` at the
-    60-column floor. Nothing in the file is wrong as a test - its own
-    assertions read drawn characters and would catch that - but the arithmetic
-    it tells the next editor to do is arithmetic on the wrong span.
-  - **Goal**: Rewrite that paragraph against `BANNER_FIELD` rather than against
-    a banner's text: the field is 20 wide and centred, so it opens at column 20
-    at the 60-column floor and leaves the counter 10 columns, and the figure to
-    watch when adding a banner is the field rather than the string. The file's
-    opening paragraph also lists the row's centred tenants as "the debug label,
-    the warp banner and the NEW BEST banner" while `drawHUD` now writes four
-    banners through one function, so the same rewrite wants the asteroid field
-    and boss warning banners named and `drawBanner` pointed at. The file is not
-    in this release's diff, which is why the release left it behind.
-  - From: UI/UX Override - the drops are three cells for one frame
-- [ ] Nothing compares `bossDropSpread` between the two builds, and the four
-  points that do read it cannot see the divergence that matters
-  - **Issue**: `test/parity.test.mjs` exists because the browser build is a
-    hand port - "easy to break by touching one file and not the other" - and it
-    pins `BOSS_DROP_SPREAD` as a constant at `:66` and `blockSize` across five
-    scales at `:70`. `bossDropSpread` is the function that now decides where
-    the drops actually land, it is written out by hand in both
-    `src/types.ts:661` and `index.html:850`, and no test compares the two
-    builds' answers. The only reader is
-    `test/boss.test.mjs`'s "the spread only widens where the projection is
-    tight", which is inside the per-build loop and so asserts the same four
-    numbers against each build separately. Those four cannot catch a port that
-    drifted: change `colRange` to `(screenWidth - 4) / 2` in one build only and
-    the three floor assertions still return 1.5, because the floor wins at all
-    three, while the fourth bound only requires `1.5 < far < 2` and the drifted
-    build returns 1.905. Both builds then place a boss's drops at different
-    world coordinates and the whole suite passes - which is the exact failure
-    the parity file was written to stop.
-  - **Goal**: Add a `bossDropSpread` case to `test/parity.test.mjs` beside the
-    `blockSize` one, comparing the two builds over a grid of widths and scales
-    rather than a single point - 60, 68, 78 and 128 columns against the scale
-    floor and the scale at the deepest drawn depth covers both sides of the
-    floor. Then re-check it fails on a drifted port by editing one build's
-    `colRange` and running `node --test test/parity.test.mjs`.
-  - From: UI/UX Override - the drops are three cells for one frame
-- [ ] `BANNER_FIELD`'s docstring measures its clearance from the two readouts
-  and not from the play area the row also belongs to
-  - **Issue**: `src/render.ts:499` says the 20 "is what keeps that blanking
-    clear of the two readouts that share the row", and names the gaps it leaves
-    `COMBO x8` and `BOSS 20/20` at the 60-column floor. Both figures check out.
-    What the paragraph does not say is that `HUD_ROWS` is also `gameTop`, so
-    `drawBanner` blanks 20 cells of the play area's top row, and `drawHUD` runs
-    after `drawTunnel` and `drawEntitiesFar`. Measured by rendering a flown run
-    at three grids with no banner live and collecting the non-space columns of
-    row 3: at 60 and 80 columns the far tunnel mouth sits inside the span
-    `>> WARNING <<` already covered, so nothing changes, but at 128 columns the
-    mouth reaches columns 55, 56, 70 and 71 while the warning covers 57 to 69 -
-    so a warning or a `[ NEW BEST ]` now blanks four cells of tunnel that the
-    old draw left standing. It is four cells for two or three seconds and the
-    trade is almost certainly the right one; what is missing is any record that
-    the trade was made, in the one docstring whose subject is how far the
-    blanking reaches.
-  - **Goal**: Add a sentence to `BANNER_FIELD` saying the field is blanked out
-    of the play area's own top row as well as clear of the readouts, with the
-    four cells at 128 columns as the cost and the reason it is accepted. No
-    code change is wanted unless the measurement says otherwise.
-  - From: UI/UX Override - the drops are three cells for one frame
 
 ### Create and Deploy GitHub Pages Override
 
@@ -207,135 +101,149 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 152 earlier items in `TODO-archive.md`, newest last.
+> 157 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Encounter Legibility**: **Boss encounters** — Every 3 minutes, spawn a large mine that takes 20 hits, fires projectiles back at the player, and drops 3 powerups on destruction. Flash "WARNING" in the HUD before it arrives.
+- [x] Encounter Legibility 2 - the three drops are placed three cells apart and
+  are back to two by the next frame at the 60-column floor
+  - **Issue**: The banner half of the release verifies clean and the drop half
+    does not. `bossDropSpread` solves for exactly one column of separation at
+    the depth of the kill, and `updatePowerups` spends that column on the next
+    frame: it pulls every drop toward the ship at `POWERUP_DRIFT` 2.5 units per
+    second, 0.0833 per frame, and when the ship is on the boss's axis - where it
+    has to be to have landed the twentieth hit, since `spawnBoss` puts the boss
+    at `x: 0, y: 2.5` and a bolt holds the screen column it was fired down - the
+    middle drop is already at the ship's `x` and does not move while the outer
+    two close on it at the full rate. One column is 1.53 units at z=-190 on a
+    60-column grid, so two frames in, an outer drop and the middle one are
+    inside one column. `killBoss` then raises a 20-particle burst on those same
+    cells and `drawParticles` runs after `drawEntitiesFar`, so the one frame the
+    three really are three cells is a frame the explosion is covering. Measured
+    on the painted canvas, five far kills flown from a real ENTER with SPACE
+    tapped at 15 Hz from inside the WARNING, at 60x20: every one places three
+    and holds three for one frame, two of the five never read as three own
+    glyphs inside 90 frames, and the three that did read at frames 38, 63 and
+    79 - 1.27 s, 2.10 s and 2.63 s after the kill, long after the player has
+    stopped looking at it. Staged with the ship held on the axis, the three hold
+    three cells for 1, 2 and 1 frames at z=-194, -192 and -190 against the 15
+    the burst takes to clear, and for 9 at z=-150; the build before this release
+    held 0, 0 and 0 there, so the change improved the far end without reaching
+    the goal. At 80 and 128 columns the constant 1.5 is already more than one
+    column, the three hold 11 to 12 frames, and they read as three inside about
+    300 ms - this is a 60-column case. Off the axis the three hold for a whole
+    60-frame sweep at every grid, so the axis seat is the condition.
+    `dropBossPowerups`' own comment still says the derived gap "is what keeps
+    none of the three hidden behind another".
+  - **Goal**: Resolve to [boss-drop-read-window.prompt.md](.claude/prompts/boss-drop-read-window.prompt.md)
   - From: Bigger Features
-- [x] Encounter Legibility 1 - two things the encounter draws cannot be read as
-  what they are, in both builds
-  - **Issue**: Two defects, each measured on the painted canvas and each
-    reproduced identically in the terminal build and the browser build.
-    **First**, the HUD banner row keeps the ends of the banner it drew over.
-    `drawHUD` centres each banner with `putStringCenter` and writes them in
-    order with nothing clearing the row between two writes, so a shorter string
-    centred over a longer one covers the longer one's middle and leaves its ends
-    standing. A warning inside an asteroid field section renders row 3 as
-    `>> >> WARNING <<D <<` - the stray `D` is the `D` of `FIELD` - and a warning
-    across a warp step renders `>>>> WARNING << <<`, at 60x20, 80x24 and 128x45
-    alike, so it is a draw-order defect rather than a narrow-grid one. The two
-    comments in `drawHUD` that describe this overlap resolve it by draw order
-    and name the exact frame it is for, so the case is anticipated and only the
-    mechanism is wrong. The frame is reachable from engine state: the gate in
-    `updateBossEncounter` holds a warning off while a banner is already up but
-    not for the three seconds it then runs, and `updateAsteroidField` runs before
-    it and is held off only by a warp flash, so a section coming due inside a
-    live warning opens under it - stepped from `bossTimer = BOSS_INTERVAL -
-    FRAME / 2` and `asteroidTimer = ASTEROID_INTERVAL - 1.5`, both builds reach
-    frame 45 with `bossWarning` 1.50 s and `asteroidTime` 15.00 s together and
-    render that row. The same defect predates this release on the warp and
-    section pair, which renders `>>> WARP LEVEL 2 <<<`. **Second**, two of the
-    three drops a destroyed boss leaves land in one cell at 60 columns.
-    `BOSS_DROP_SPREAD` is a world distance and the drawn gap narrows with depth
-    and with the grid's width together, so killing a boss a unit at a time gives
-    three distinct glyphs down to z=-188 and two from z=-189, where the three
-    are placed at columns 29, 30 and 30 and the row renders `+~` in place of
-    `+ ! ~`. At 80 and 128 columns they never collapse at any depth they are
-    drawn at. The window is the first 786 ms of a 14.3-second approach, and it
-    is reachable: holding the trigger from the start of the WARNING, the
-    twentieth hit lands at z=-189.7 tapped at 10 Hz with Rapid Fire and at
-    z=-192.5 tapped at 15 Hz. `dropBossPowerups`' own comment says "none is
-    hidden behind another".
-  - **Goal**: Resolve to [encounter-legibility.prompt.md](.claude/prompts/encounter-legibility.prompt.md)
-  - From: Bigger Features
-- [x] Three figures in BOSS_SIZE_MULT's docstring describe something other than
-  what is drawn
-  - **Issue**: `src/types.ts:509` to `:513` closes with "At 3.5 the block is 8
-    cells across when the boss reaches the ship and 1 at the edge of sight,
-    against a mine's 2 and 1. On the 24-row floor the play area is 19 rows, so a
-    close boss is about two fifths of the height of it". Three of those figures
-    are wrong about the screen. **8 and 2 are what `blockSize` returns, not what
-    `drawBlock` draws**: that function takes `half = floor(size / 2)` and loops
-    `-half` to `+half` inclusive, so a size of 8 is drawn 9 cells across and a
-    size of 2 is drawn 3. Rendered at z=0 in both builds, the boss block
-    measures 9x9 cells and the mine 3x3. **24 is not the floor**: both builds
-    declare `MIN_HEIGHT = 20` - `src/index.ts:55` and `index.html:3563` - and
-    the 24 at `src/index.ts:52` is the fallback for an undefined `stdout.rows`.
-    **Two fifths is neither grid's share**: 9 rows of the 19 a 24-row grid gives
-    is 47.4%, and at the real 20-row floor the play area is 15 rows and the
-    block is clipped to 8 of them, which is 53.3% - over half, which is the
-    opposite of the reassurance the sentence is making. The browser build's
-    mirror of this comment at `index.html:773` carries the 8-and-2 sentence and
-    not the floor sentence, so only the first correction crosses to it. Nothing
-    is broken on screen - a close boss at the 20-row floor is large but legible,
-    and every other reading of it passed - this is a committed comment quoting
-    figures a reader cannot rebuild.
-  - **Goal**: Say which number is which. Keep 8 and 2 if they are named as
-    `blockSize`'s return and give the drawn extent as 9 and 3 beside them, or
-    quote the drawn figures alone; name the floor as 20 rows and 15 play rows;
-    and replace "about two fifths" with the share at the floor, 53.3%, or at
-    both grids. Mirror the `blockSize` half into `index.html`. The suite pins
-    `blockSize` itself rather than the drawn extent, so the sentence and the test
-    are currently measuring different things - a case in
-    `test/boss.test.mjs`'s drawn-block section asserting the rendered 9x9 and
-    3x3 would tie the two together.
-  - From: UI/UX Override - the banner row and the far drops
-- [x] BOSS_INTERVAL's comment counts two asteroid field sections where a run
-  has flown one
-  - **Issue**: `src/types.ts:468` closes with "Three minutes puts the first
-    encounter after two asteroid field sections and three warp steps, so a
-    player meets it already knowing what the tunnel does on its own." The warp
-    figure is right and the section figure is double. `asteroidTimer` only
-    accumulates while `asteroidTime` is zero and `openAsteroidField` resets it
-    to 0, so sections open at 150 seconds of flying and then at 150 + 15 + 150
-    = 315 - one opening before three minutes, not two, and no reading of the
-    cadence gives two, since even off `gameTime` 180 / 150 is 1.2. Measured by
-    flying an unseeded run with the shield held up and counting the frames
-    `asteroidTime` rises off zero: the first warning lands at `gameTime`
-    182.03 - 180 plus the 2 seconds the warp gate holds it, which is the
-    comment's own first-collision case working - and exactly 1 section and 3
-    warp steps have gone by, with `warpLevel` at 4. The claim the figure is
-    offered for survives either way, since one section and three warp steps is
-    still a tunnel a player has been shown; only the count is wrong. The
-    browser build's mirror of this comment ends at `index.html:751` with "this
-    interval minus however long the last one ran" and states no such figure, so
-    the correction does not cross to it.
-  - **Goal**: Say one asteroid field section, or drop the section count and
-    name the three warp steps alone. If the sentence is worth a figure a reader
-    can rebuild, give the cadence beside it - sections at 150 and 315 seconds
-    of flying against an encounter at 180 - rather than a bare count. A case in
-    `test/asteroid-field.test.mjs` or `test/boss.test.mjs` walking a run to the
-    first warning and asserting the 1 and the 3 would stop the pair drifting
-    again, since both figures are engine state and neither is pinned now.
-  - From: UI/UX Override - the banner row and the far drops
-- [x] The ship's own collision box still sizes the drawn block longhand, so
-  `blockSize` is not the one place its docstring says it is
-  - **Issue**: `blockSize` was added to end two readers of one formula
-    disagreeing, and its docstring at `src/types.ts:215` states the scope as
-    "it is read twice from two different places: `drawEntitiesFar` draws the
-    block, and `contacts` decides what the pulse cannon met", closing "so there
-    is one function now and both ends call it". There are four readers of that
-    block, not two. The ship's own collision boxes still write
-    `max(1, floor(scale * 2.5))` out by hand against the same drawn block -
-    `src/game.ts:1430` for an obstacle and `:1519` for a mine, mirrored at
-    `index.html:2192` and `:2255` - and none of the four was converted. They
-    agree today, so nothing is broken on screen; what is wrong is that the
-    docstring tells a later reader the formula lives in one place. Name the
-    input: change the 2.5 in `blockSize` to any other figure and both builds
-    draw a block of the new size which the pulse cannon tests correctly and the
-    ship collides with on the old one - the player would clip an obstacle a
-    character short of touching it, or pass through the edge of one, which is
-    the same see-it-but-it-does-not-register defect in the other direction and
-    the one the function exists to rule out. The hazard is the docstring's
-    promise rather than the duplication: a reader who believes it will change
-    the 2.5 and not go looking.
-  - **Goal**: Either finish the consolidation or narrow the claim, and
-    finishing it is the better of the two since the formula is identical at all
-    four sites. Have the obstacle and mine ship-collision boxes call
-    `blockSize(oScr.scale)` and `blockSize(mScr.scale)` in both builds, then
-    say in the docstring that every reader of the block goes through it and
-    name them. `drawBlock`'s caller is the renderer and takes the same figure,
-    so no projection changes. The suite pins `blockSize` itself and the
-    cannon's agreement with it, but nothing asserts the ship's box reads the
-    same size, so a case staging an obstacle at a known depth and walking the
-    ship in until contact registers would hold the fourth reader too.
-  - From: UI/UX Override - the banner row and the far drops
+- [x] `bossDropSpread`'s docstring names the 60-column floor as the only grid
+  the derived gap ever widens on, and nine grids widen on it
+  - **Issue**: `src/types.ts:645` closes the derivation paragraph with "at 80
+    columns and up the figure is the constant at every depth, and only the
+    60-column floor ever widens it", and `index.html:845` carries the same
+    clause. The "80 columns and up" half is right; the "only" is wrong by eight
+    grids. The derived gap beats the 1.5 floor whenever
+    `tunnelRadius / (colRange * scale)` exceeds it, which at the 0.15 scale
+    floor is every width up to 77 - `(w - 6) / 2 < 8 / (1.5 * 0.15)` solves to
+    `w < 77.11` - and over the depths a drop is actually drawn at, where the
+    deepest is z=-195 and the scale there is 0.17125, it is every width from 60
+    to 68. Walked over 60..82 columns against z in -195..-1: 60 widens to
+    1.7302, 61 to 1.6987, and so on down to 68 at 1.5069, with 69 and up
+    constant across the drawn range and 78 and up constant at every depth.
+    Name the input: a 64-column terminal, which `MIN_WIDTH` 60 admits, places
+    the three drops 1.611 apart at z=-195, and a reader who believed this
+    sentence would have predicted 1.5 and looked for a bug in `bossDropSpread`
+    on finding otherwise. The two figures the sentence then quotes are both
+    correct and worth keeping - 1.730 is the 60-column floor at z=-195 and
+    1.975 is the same grid at the 0.15 the scale floors out at, which is past
+    every depth a drop is drawn at.
+  - **Goal**: Replace "only the 60-column floor ever widens it" in both builds
+    with the real band, and say which of the two ranges each figure belongs to:
+    78 columns and up is the constant at every depth, 60 to 68 widens over the
+    range a drop is drawn in, and 69 to 77 widens only past it. The
+    `CHANGELOG.md` copy of the same clause in the 1.0.0-alpha.0.11.1 entry has
+    already been corrected in place, so the two builds are what is left. Both
+    bounds are arithmetic off constants the suite already exports, so a case in
+    `test/boss.test.mjs` asserting `bossDropSpread` returns the floor at 78
+    columns and more than the floor at 68 and at 60, at the scale of the
+    deepest drawn depth, would stop the band drifting again.
+  - From: UI/UX Override - the drops are three cells for one frame
+- [x] `test/hud-row.test.mjs`' header still measures the shared row against the
+  banner's own width, and the row is now blanked a fixed 20 columns wide
+  - **Issue**: That file is the one place the shared HUD row's margins are
+    reasoned about, and its header at `test/hud-row.test.mjs:13` to `:18` says
+    "the margin between them is arithmetic rather than a check: the counter
+    tops out at COMBO x8, ten columns wide ending at column 9, and
+    `>> WARP LEVEL 2 <<` is eighteen columns centred, which starts at column 21
+    on the 60-column floor. Widen the banner or raise COMBO_MAX and the two
+    meet". This release replaced every `putStringCenter` on that row with
+    `drawBanner`, which blanks `BANNER_FIELD` cells - a fixed 20, starting at
+    column 20 on the 60-column floor - before it writes. So the span that can
+    reach the combo counter is no longer any banner's text: it is one column
+    further left than the header's figure and two columns wider, and it is the
+    same 20 for `[ NEW BEST ]` at 12 characters as for
+    `>> ASTEROID FIELD <<` at 20, where under the old code the short banner
+    reached only column 24. "Widen the banner" is no longer the thing to watch
+    either. Name the input: an editor adding a banner that needs
+    `BANNER_FIELD` at 42 reads this header, checks the widest banner text
+    against column 10, concludes the counter is clear, and ships a row where
+    the blanked field starts at column 9 and eats the `8` of `COMBO x8` at the
+    60-column floor. Nothing in the file is wrong as a test - its own
+    assertions read drawn characters and would catch that - but the arithmetic
+    it tells the next editor to do is arithmetic on the wrong span.
+  - **Goal**: Rewrite that paragraph against `BANNER_FIELD` rather than against
+    a banner's text: the field is 20 wide and centred, so it opens at column 20
+    at the 60-column floor and leaves the counter 10 columns, and the figure to
+    watch when adding a banner is the field rather than the string. The file's
+    opening paragraph also lists the row's centred tenants as "the debug label,
+    the warp banner and the NEW BEST banner" while `drawHUD` now writes four
+    banners through one function, so the same rewrite wants the asteroid field
+    and boss warning banners named and `drawBanner` pointed at. The file is not
+    in this release's diff, which is why the release left it behind.
+  - From: UI/UX Override - the drops are three cells for one frame
+- [x] Nothing compares `bossDropSpread` between the two builds, and the four
+  points that do read it cannot see the divergence that matters
+  - **Issue**: `test/parity.test.mjs` exists because the browser build is a
+    hand port - "easy to break by touching one file and not the other" - and it
+    pins `BOSS_DROP_SPREAD` as a constant at `:66` and `blockSize` across five
+    scales at `:70`. `bossDropSpread` is the function that now decides where
+    the drops actually land, it is written out by hand in both
+    `src/types.ts:661` and `index.html:850`, and no test compares the two
+    builds' answers. The only reader is
+    `test/boss.test.mjs`'s "the spread only widens where the projection is
+    tight", which is inside the per-build loop and so asserts the same four
+    numbers against each build separately. Those four cannot catch a port that
+    drifted: change `colRange` to `(screenWidth - 4) / 2` in one build only and
+    the three floor assertions still return 1.5, because the floor wins at all
+    three, while the fourth bound only requires `1.5 < far < 2` and the drifted
+    build returns 1.905. Both builds then place a boss's drops at different
+    world coordinates and the whole suite passes - which is the exact failure
+    the parity file was written to stop.
+  - **Goal**: Add a `bossDropSpread` case to `test/parity.test.mjs` beside the
+    `blockSize` one, comparing the two builds over a grid of widths and scales
+    rather than a single point - 60, 68, 78 and 128 columns against the scale
+    floor and the scale at the deepest drawn depth covers both sides of the
+    floor. Then re-check it fails on a drifted port by editing one build's
+    `colRange` and running `node --test test/parity.test.mjs`.
+  - From: UI/UX Override - the drops are three cells for one frame
+- [x] `BANNER_FIELD`'s docstring measures its clearance from the two readouts
+  and not from the play area the row also belongs to
+  - **Issue**: `src/render.ts:499` says the 20 "is what keeps that blanking
+    clear of the two readouts that share the row", and names the gaps it leaves
+    `COMBO x8` and `BOSS 20/20` at the 60-column floor. Both figures check out.
+    What the paragraph does not say is that `HUD_ROWS` is also `gameTop`, so
+    `drawBanner` blanks 20 cells of the play area's top row, and `drawHUD` runs
+    after `drawTunnel` and `drawEntitiesFar`. Measured by rendering a flown run
+    at three grids with no banner live and collecting the non-space columns of
+    row 3: at 60 and 80 columns the far tunnel mouth sits inside the span
+    `>> WARNING <<` already covered, so nothing changes, but at 128 columns the
+    mouth reaches columns 55, 56, 70 and 71 while the warning covers 57 to 69 -
+    so a warning or a `[ NEW BEST ]` now blanks four cells of tunnel that the
+    old draw left standing. It is four cells for two or three seconds and the
+    trade is almost certainly the right one; what is missing is any record that
+    the trade was made, in the one docstring whose subject is how far the
+    blanking reaches.
+  - **Goal**: Add a sentence to `BANNER_FIELD` saying the field is blanked out
+    of the play area's own top row as well as clear of the readouts, with the
+    four cells at 128 columns as the cost and the reason it is accepted. No
+    code change is wanted unless the measurement says otherwise.
+  - From: UI/UX Override - the drops are three cells for one frame
