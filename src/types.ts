@@ -129,6 +129,12 @@ export const POWERUP_KINDS: PowerupKind[] = ['shield', 'rapid', 'slow'];
 export interface Powerup {
   x: number; y: number; z: number;
   kind: PowerupKind;
+  /**
+   * Seconds left before `updatePowerups` starts pulling this one toward the
+   * ship. Zero for a mine's drop, BOSS_DROP_HOLD for a boss's - see that
+   * constant for why only one of the two needs holding still.
+   */
+  hold: number;
 }
 
 /** Speed a run starts at. The HUD speed readout is a multiple of this. */
@@ -641,10 +647,18 @@ export const BOSS_DROP_SPREAD = 1.5;
  * `tunnelRadius / (colRange * scale)` world units, and `floor` of two columns a
  * full column apart cannot land on one cell at any width. The floor is what
  * keeps it from being tighter than the constant where the projection is
- * generous, which is everywhere near the ship: at 80 columns and up the figure
- * is the constant at every depth, and only the 60-column floor ever widens it -
- * to 1.730 at z=-195, the deepest a drop is drawn at there, and to 1.975 at the
- * 0.15 the scale itself floors out at. Both are well inside the 4.5 units
+ * generous, which is everywhere near the ship - and on a wide enough grid that
+ * is every depth. The band is three ranges rather than one width, since the
+ * derived figure beats the floor wherever `tunnelRadius / (colRange * scale)`
+ * does: 78 columns and up is the constant at every depth, because even at the
+ * 0.15 the scale floors out at a column there is worth 1.500 or less; 60 to 68
+ * columns widen over the range a drop is actually drawn in, where the deepest
+ * is z=-195 and the scale is 0.17125; and 69 to 77 widen only past it, at
+ * scales no drawn drop reaches. So a 64-column terminal, which `MIN_WIDTH` 60
+ * admits, places the three 1.611 apart at z=-195 rather than at the constant.
+ * The widest it ever is on the 60-column floor is 1.730 at z=-195, which is the
+ * drawn range's own far end, and 1.975 at the 0.15 scale floor, which is past
+ * every depth a drop is drawn at. Both are well inside the 4.5 units
  * `placeObstacle` uses and the 6.5 the ship can reach, so a widened drop is
  * still one the player can go and get, and the near end is untouched: a kill
  * inside z=-8 places the three at the constant on every grid.
@@ -664,6 +678,42 @@ export function bossDropSpread(
   const colRange = (screenWidth - 6) / 2;
   return Math.max(BOSS_DROP_SPREAD, tunnelRadius / (colRange * scale));
 }
+
+/**
+ * Seconds a boss's three drops stay where they were placed before the drift
+ * starts closing them together.
+ *
+ * `bossDropSpread` places the three in three different cells and nothing kept
+ * them there. `updatePowerups` pulls every drop toward the ship at
+ * POWERUP_DRIFT, which is 0.0833 units a frame, and the ship is on the boss's
+ * axis whenever the twentieth hit lands there - `spawnBoss` puts the boss at
+ * `x: 0` and a bolt holds the screen column it was fired down. On that axis the
+ * middle drop is already at the ship's `x` and does not move while the outer
+ * two close on it at the full rate, so a derived gap of one column - 1.53 units
+ * at z=-190 on a 60-column grid - is spent in two frames. Measured on the
+ * painted canvas before this existed, five flown far kills at 60x20 each placed
+ * three cells and held three for exactly one frame.
+ *
+ * One frame is worse than it sounds, because it is not a frame anyone can see.
+ * `killBoss` raises its 20-particle burst at the boss's own position and
+ * `drawParticles` runs after `drawEntitiesFar`, so the drop cells are painted
+ * over while the burst lasts. Rendered twice a frame, once as drawn and once
+ * with the particles emptied, the burst covers at least one of the three cells
+ * for 19 to 24 frames at the 60-column far end, 14 at 80 columns and 11 at 128 -
+ * the spread is the particles' own `life`, which is `rand(0.3, 0.8)` against a
+ * `maxLife` of 0.8. So the one frame the three really were three cells was a
+ * frame the explosion was covering, and the first frame the player could read
+ * them on was a frame they had already converged in.
+ *
+ * 1.2 seconds is the 0.8 the burst can last plus 0.4 to read the result in,
+ * which is inside the 67 ms to 1400 ms the same three took to read as three
+ * when the ship was off the axis and nothing was closing them. Holding rather
+ * than widening the gap further is what keeps the near end alone: the placement
+ * is untouched at every depth, so a point-blank kill still pays all three.
+ * Nothing holds a mine's drop - that one is a single pickup with no sibling to
+ * be confused with, and its drift is the whole of what makes it worth chasing.
+ */
+export const BOSS_DROP_HOLD = 1.2;
 
 /**
  * Score a destroyed boss is worth, before the combo multiplier.

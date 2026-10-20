@@ -10,7 +10,7 @@ import {
   ASTEROID_INTERVAL, ASTEROID_TIME, ASTEROID_COUNT, SHIP_MARGIN,
   BOSS_INTERVAL, BOSS_WARNING_TIME, BOSS_HP, BOSS_SIZE_MULT, BOSS_SPAWN_Z,
   BOSS_CLOSE_SPEED, BOSS_FIRE_INTERVAL, BOSS_SHOT_SPEED, BOSS_SHOT_DAMAGE,
-  BOSS_RAM_DAMAGE, BOSS_DROPS, bossDropSpread, BOSS_SCORE,
+  BOSS_RAM_DAMAGE, BOSS_DROPS, bossDropSpread, BOSS_DROP_HOLD, BOSS_SCORE,
   POWERUP_DROP_CHANCE, POWERUP_DRIFT, POWERUP_SHIELD_GAIN, POWERUP_GLYPHS,
   RAPID_FIRE_TIME, RAPID_FIRE_INTERVAL, SLOW_MOTION_TIME, SLOW_MOTION_SCALE,
   BULLET_SPEED, BULLET_LIFE_SLACK,
@@ -583,7 +583,7 @@ export class Game {
     if (s.debugMode === 'obstacleCollision' || s.debugMode === 'mineCollision') return;
     if (random() >= POWERUP_DROP_CHANCE) return;
     const kind = POWERUP_KINDS[floor(random() * POWERUP_KINDS.length)];
-    s.powerups.push({ x, y, z, kind });
+    s.powerups.push({ x, y, z, kind, hold: 0 });
   }
 
   private spawnParticles(x: number, y: number, z: number, color: number, count: number): void {
@@ -1229,6 +1229,7 @@ export class Game {
       s.powerups.push({
         x: x + (i - mid) * spread, y, z,
         kind: POWERUP_KINDS[i % POWERUP_KINDS.length],
+        hold: BOSS_DROP_HOLD,
       });
     }
   }
@@ -1274,13 +1275,23 @@ export class Game {
       // it back at the far end would be a second reward for the same kill.
       if (p.z > 10) { s.powerups.splice(i, 1); continue; }
 
-      const dx = s.shipX - p.x;
-      const dy = s.shipY - p.y;
-      const dist = sqrt(dx * dx + dy * dy);
-      if (dist > 0.0001) {
-        const step = min(dist, POWERUP_DRIFT * dt);
-        p.x += (dx / dist) * step;
-        p.y += (dy / dist) * step;
+      // A boss's three drops are held where they were placed for
+      // BOSS_DROP_HOLD before the drift starts, so the gap `bossDropSpread`
+      // solved for is still the gap once the kill's own burst has cleared the
+      // cells. A mine's drop holds for nothing and drifts from the frame it
+      // lands. The depth still advances above either way: a held drop is one
+      // that is not converging, not one that is not coming.
+      if (p.hold > 0) {
+        p.hold = max(0, p.hold - dt);
+      } else {
+        const dx = s.shipX - p.x;
+        const dy = s.shipY - p.y;
+        const dist = sqrt(dx * dx + dy * dy);
+        if (dist > 0.0001) {
+          const step = min(dist, POWERUP_DRIFT * dt);
+          p.x += (dx / dist) * step;
+          p.y += (dy / dist) * step;
+        }
       }
 
       if (p.z > -20 && p.z < 5) {

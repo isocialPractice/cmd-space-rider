@@ -1,21 +1,36 @@
 // test/hud-row.test.mjs — The row under the shield bar is shared. The combo
-// counter is left-aligned on it, and the debug label, the warp banner and the
-// NEW BEST banner are centred on it, so none of the four may overwrite another.
+// counter is left-aligned on it, and the debug label and four banners are
+// centred on it — the asteroid field banner, the warp banner, the boss warning
+// and NEW BEST — so none of them may overwrite another.
+//
+// All four banners go through one `drawBanner` in both builds, which is worth
+// knowing before reading the margins below: it blanks a centred field and then
+// writes the text into it, so what can reach the counter is the field rather
+// than any banner's string.
 //
 // The counter against the debug label is covered where the chaining is tested,
-// and the two centred banners against each other and against the label are
-// covered in test/warp.test.mjs. This file covers the pairings only a normal
-// run can produce, which is why they are easy to miss: NEW BEST fires once, on
-// the first crossing of the stored best, and a chain has to already be running
-// at that moment for the two to meet. Driving a real run until they coincided
-// took over a minute of firing and never landed on its own.
+// and the centred banners against each other and against the label are covered
+// in test/warp.test.mjs. This file covers the pairings only a normal run can
+// produce, which is why they are easy to miss: NEW BEST fires once, on the
+// first crossing of the stored best, and a chain has to already be running at
+// that moment for the two to meet. Driving a real run until they coincided took
+// over a minute of firing and never landed on its own.
 //
-// The counter against the warp banner is the same kind of pairing and the
-// margin between them is arithmetic rather than a check: the counter tops out
-// at COMBO x8, ten columns wide ending at column 9, and >> WARP LEVEL 2 << is
-// eighteen columns centred, which starts at column 21 on the 60-column floor.
-// Widen the banner or raise COMBO_MAX and the two meet, so both ends are walked
-// here rather than left to hold by coincidence.
+// The counter against a banner is the same kind of pairing and the margin
+// between them is arithmetic rather than a check. Do that arithmetic against
+// BANNER_FIELD, not against a banner's text: the field is a fixed 20 cells
+// centred, so it opens at column 20 on the 60-column floor, and the counter
+// tops out at COMBO x8, ten columns wide ending at column 9 — which leaves the
+// counter 10 columns of gap. The field is the same 20 for `[ NEW BEST ]` at
+// twelve characters as for `>> ASTEROID FIELD <<` at twenty, so every banner
+// this row carries reaches the same column however short its own string is.
+//
+// So "widen the banner" is no longer the figure to watch; raising BANNER_FIELD
+// is. A field of 42 opens at column 9 on the 60-column floor and eats the `8`
+// of `COMBO x8`, and checking the widest banner's text against column 10 would
+// not have predicted that. Raising COMBO_MAX still closes the gap from the
+// other side. Both ends are walked here rather than left to hold by
+// coincidence.
 //
 // Runs against the compiled output in out/, so `npm run build` comes first.
 

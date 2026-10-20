@@ -501,6 +501,28 @@ function drawShip(screen: ScreenBuffer, state: GameState, gameTop: number, gameB
  * together at the 60-column floor, which is the tightest the row ever is: the
  * centred 20 leaves 10 cells of gap on the left and 8 on the right, and both
  * gaps only widen as the grid does.
+ *
+ * The readouts are not the only thing it reaches, and the other end is a cost
+ * rather than a clearance. HUD_ROWS is `gameTop` as well, and `drawHUD` runs
+ * after `drawTunnel` and `drawEntitiesFar`, so the field is blanked out of the
+ * play area's own top row: whatever the tunnel drew there goes with it for as
+ * long as the banner is up. What it costs is the cells of the field a banner's
+ * own text does not cover, which is 0 for `>> ASTEROID FIELD <<` - that string
+ * is the field, which is why it is the one the figure comes off - 2 for
+ * `>> WARP LEVEL 2 <<`, 7 for `>> WARNING <<` and 8 for `[ NEW BEST ]`. Flown
+ * for two minutes at three grids with the starfield at its 40 stars and the
+ * extra span read every frame, the worst single frame loses 3 cells at the
+ * 60-column floor and 2 at 80 and at 128, and the mean is under a third of a
+ * cell. The floor is the worst case rather than the widest grid, because the
+ * top row is more crowded relative to a fixed 20 there.
+ *
+ * Accepted at that price: it is background - a far wall cell or a star, never
+ * the ship, and a far entity only at 128 columns - it lasts the seconds a
+ * banner is up, and the alternative is the defect the blanking exists to fix,
+ * which is two banners' text interleaved on the row the player reads warnings
+ * off. Note that the far tunnel mouth is not what is lost. `tunnelSpan` at
+ * `gameTop` has `t = 0`, so the mouth is `center ± 3` with a thickness of 1 at
+ * every width, which is inside even `>> WARNING <<`'s own 13 characters.
  */
 const BANNER_FIELD = 20;
 

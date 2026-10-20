@@ -64,6 +64,7 @@ test('both builds agree on the shared tuning constants', () => {
   assert.equal(browser.BOSS_RAM_DAMAGE, terminalTypes.BOSS_RAM_DAMAGE);
   assert.equal(browser.BOSS_DROPS, terminalTypes.BOSS_DROPS);
   assert.equal(browser.BOSS_DROP_SPREAD, terminalTypes.BOSS_DROP_SPREAD);
+  assert.equal(browser.BOSS_DROP_HOLD, terminalTypes.BOSS_DROP_HOLD);
   assert.equal(browser.BOSS_SCORE, terminalTypes.BOSS_SCORE);
 });
 
@@ -78,6 +79,36 @@ test('both builds size a drawn block the same way', () => {
       browser.blockSize(scale, browser.BOSS_SIZE_MULT),
       terminalTypes.blockSize(scale, terminalTypes.BOSS_SIZE_MULT),
     );
+  }
+});
+
+test('both builds place the three boss drops at the same gap', () => {
+  // `bossDropSpread` is the function that decides where a destroyed boss's
+  // three pickups land, and it is written out by hand in both builds -
+  // `src/types.ts` and the inline script in index.html. Nothing compared the
+  // two until this case, and the four points `test/boss.test.mjs` reads are
+  // inside its per-build loop, so they assert the same numbers against each
+  // build separately and cannot see a port that drifted.
+  //
+  // A grid rather than a point, because three of those four sit on the floor
+  // and the floor hides a difference: change `colRange` to `(w - 4) / 2` in one
+  // build only and all three still return 1.5, while the fourth bound only
+  // asks for `1.5 < far < 2` and the drifted build returns 1.905. Both builds
+  // would then drop a boss's pickups at different world coordinates with the
+  // whole suite passing, which is the failure this file exists to stop.
+  //
+  // The widths straddle the floor on both sides - 60 and 68 widen over the
+  // range a drop is drawn in, 78 and 128 are the constant at every depth - and
+  // the scales are the 0.15 the projection floors out at and the 0.17125 of
+  // z=-195, the deepest depth a drop is drawn at.
+  for (const width of [60, 68, 78, 128]) {
+    for (const scale of [0.15, 0.17125, 0.4, 1]) {
+      assert.equal(
+        browser.bossDropSpread(scale, width, 8),
+        terminalTypes.bossDropSpread(scale, width, 8),
+        `${width} columns at scale ${scale}`,
+      );
+    }
   }
 });
 

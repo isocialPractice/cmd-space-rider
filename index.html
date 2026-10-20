@@ -841,16 +841,55 @@ const BOSS_DROP_SPREAD=1.5;
 // tunnelRadius / (colRange * scale) world units, and floor of two columns a full
 // column apart cannot land on one cell at any width. The floor keeps it from
 // being tighter than the constant where the projection is generous, which is
-// everywhere near the ship - at 80 columns and up the figure is the constant at
-// every depth, and only the 60-column floor ever widens it, to 1.730 at z=-195
-// and to 1.975 at the 0.15 the scale itself floors out at. Both are well inside
-// the 4.5 units placeObstacle uses and the 6.5 the ship can reach. Widening the
+// everywhere near the ship - and on a wide enough grid that is every depth. The
+// band is three ranges rather than one width: 78 columns and up is the constant
+// at every depth, since even at the 0.15 the scale floors out at a column there
+// is worth 1.500 or less; 60 to 68 columns widen over the range a drop is
+// actually drawn in, where the deepest is z=-195 and the scale is 0.17125; and
+// 69 to 77 widen only past it, at scales no drawn drop reaches. A 64-column
+// terminal, which MIN_WIDTH 60 admits, places the three 1.611 apart at z=-195
+// rather than at the constant. The widest it ever is on the 60-column floor is
+// 1.730 at z=-195, the drawn range's own far end, and 1.975 at the 0.15 scale
+// floor, which is past every depth a drop is drawn at. Both are well inside the
+// 4.5 units placeObstacle uses and the 6.5 the ship can reach. Widening the
 // constant instead would have cost the near end: a spread of 2 loses a drop on a
 // kill inside z=-6, where 1.5 keeps all three to z=-3.
 function bossDropSpread(scale,screenWidth,tunnelRadius){
   const colRange=(screenWidth-6)/2;
   return max(BOSS_DROP_SPREAD,tunnelRadius/(colRange*scale));
 }
+// Seconds a boss's three drops stay where they were placed before the drift
+// starts closing them together.
+//
+// bossDropSpread places the three in three different cells and nothing kept them
+// there. updatePowerups pulls every drop toward the ship at POWERUP_DRIFT, which
+// is 0.0833 units a frame, and the ship is on the boss's axis whenever the
+// twentieth hit lands there - spawnBoss puts the boss at x: 0 and a bolt holds
+// the screen column it was fired down. On that axis the middle drop is already at
+// the ship's x and does not move while the outer two close on it at the full
+// rate, so a derived gap of one column - 1.53 units at z=-190 on a 60-column
+// grid - is spent in two frames. Measured on the painted canvas before this
+// existed, five flown far kills at 60x20 each placed three cells and held three
+// for exactly one frame.
+//
+// One frame is worse than it sounds, because it is not a frame anyone can see.
+// killBoss raises its 20-particle burst at the boss's own position and
+// drawParticles runs after drawEntitiesFar, so the drop cells are painted over
+// while the burst lasts. Rendered twice a frame, once as drawn and once with the
+// particles emptied, the burst covers at least one of the three cells for 19 to
+// 24 frames at the 60-column far end, 14 at 80 columns and 11 at 128 - the spread
+// is the particles' own life, which is rand(0.3, 0.8) against a maxLife of 0.8.
+// So the one frame the three really were three cells was a frame the explosion
+// was covering.
+//
+// 1.2 seconds is the 0.8 the burst can last plus 0.4 to read the result in, which
+// is inside the 67 ms to 1400 ms the same three took to read as three when the
+// ship was off the axis and nothing was closing them. Holding rather than
+// widening the gap further is what keeps the near end alone: the placement is
+// untouched at every depth, so a point-blank kill still pays all three. Nothing
+// holds a mine's drop - that one is a single pickup with no sibling to be
+// confused with, and its drift is the whole of what makes it worth chasing.
+const BOSS_DROP_HOLD=1.2;
 // Score a destroyed boss is worth, before the combo multiplier. Ten times a
 // mine's 500, for twenty hits rather than five against something that is
 // shooting back. A rammed boss is worth nothing.
@@ -1579,7 +1618,7 @@ class Game{
     if(s.debugMode==='obstacleCollision'||s.debugMode==='mineCollision')return;
     if(random()>=POWERUP_DROP_CHANCE)return;
     const kind=POWERUP_KINDS[floor(random()*POWERUP_KINDS.length)];
-    s.powerups.push({x,y,z,kind});
+    s.powerups.push({x,y,z,kind,hold:0});
   }
   spawnParticles(x,y,z,color,count){
     // What the caller asks for is the full-detail burst. A device that has
@@ -2073,6 +2112,7 @@ class Game{
       s.powerups.push({
         x:x+(i-mid)*spread,y,z,
         kind:POWERUP_KINDS[i%POWERUP_KINDS.length],
+        hold:BOSS_DROP_HOLD,
       });
     }
   }
@@ -2109,13 +2149,23 @@ class Game{
       // nothing to recycle: a drop is the record of one mine, and putting it back
       // at the far end would be a second reward for the same kill.
       if(p.z>10){s.powerups.splice(i,1);continue}
-      const dx=s.shipX-p.x;
-      const dy=s.shipY-p.y;
-      const dist=sqrt(dx*dx+dy*dy);
-      if(dist>0.0001){
-        const step=min(dist,POWERUP_DRIFT*dt);
-        p.x+=(dx/dist)*step;
-        p.y+=(dy/dist)*step;
+      // A boss's three drops are held where they were placed for BOSS_DROP_HOLD
+      // before the drift starts, so the gap bossDropSpread solved for is still
+      // the gap once the kill's own burst has cleared the cells. A mine's drop
+      // holds for nothing and drifts from the frame it lands. The depth still
+      // advances above either way: a held drop is one that is not converging,
+      // not one that is not coming.
+      if(p.hold>0){
+        p.hold=max(0,p.hold-dt);
+      }else{
+        const dx=s.shipX-p.x;
+        const dy=s.shipY-p.y;
+        const dist=sqrt(dx*dx+dy*dy);
+        if(dist>0.0001){
+          const step=min(dist,POWERUP_DRIFT*dt);
+          p.x+=(dx/dist)*step;
+          p.y+=(dy/dist)*step;
+        }
       }
       if(p.z>-20&&p.z<5){
         const pScr=this.toScreen(p.x,p.y,p.z);
@@ -2984,6 +3034,26 @@ function drawShip(screen,state,gameTop,gameBottom){
 // with COMBO x8 and BOSS 20/20 up together at the 60-column floor, which is the
 // tightest the row ever is, the centred 20 leaves 10 cells of gap on the left and
 // 8 on the right, and both only widen as the grid does.
+//
+// The readouts are not the only thing it reaches, and the other end is a cost
+// rather than a clearance. HUD_ROWS is gameTop as well, and drawHUD runs after
+// drawTunnel and drawEntitiesFar, so the field is blanked out of the play area's
+// own top row: whatever the tunnel drew there goes with it for as long as the
+// banner is up. What it costs is the cells of the field a banner's own text does
+// not cover - 0 for >> ASTEROID FIELD <<, which is the field and is why the
+// figure comes off it, 2 for >> WARP LEVEL 2 <<, 7 for >> WARNING << and 8 for
+// [ NEW BEST ]. Flown for two minutes at three grids with the starfield at its
+// 40 stars, the worst single frame loses 3 cells at the 60-column floor and 2 at
+// 80 and at 128, and the mean is under a third of a cell. The floor is the worst
+// case rather than the widest grid, because the top row is more crowded relative
+// to a fixed 20 there.
+//
+// Accepted at that price: it is background - a far wall cell or a star, never
+// the ship, and a far entity only at 128 columns - it lasts the seconds a banner
+// is up, and the alternative is the defect the blanking exists to fix. The far
+// tunnel mouth is not what is lost: tunnelSpan at gameTop has t = 0, so the
+// mouth is center +/- 3 with a thickness of 1 at every width, which is inside
+// even >> WARNING <<'s own 13 characters.
 const BANNER_FIELD=20;
 // One banner, centred on HUD_ROWS, with the field blanked before it is written.
 //
