@@ -55,6 +55,55 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [boss-drop-tracer-column.prompt.md](.claude/prompts/boss-drop-tracer-column.prompt.md)
   - From: Bigger Features
 
+#### Found Issues
+
+- [ ] `COMBO x8` is eight columns wide, not the ten its own header claims
+  - **Issue**: `test/hud-row.test.mjs:23` says the counter "tops out at COMBO
+    x8, ten columns wide ending at column 9". `drawHUD` writes it with
+    `screen.putString(2, HUD_ROWS, combo, ...)` at `src/render.ts:612` and
+    `COMBO x8` is eight characters, so it occupies columns 2 through 9 - eight
+    columns wide, not ten. Both figures the paragraph derives from it are
+    right: it does end at column 9, and `BANNER_FIELD`'s 20 does open at
+    column 20 on the 60-column floor, which is the 10 columns of gap the
+    header claims. Only the width is wrong. This is the one file the
+    repository points the next editor at to do that arithmetic, so it is the
+    figure a reader would carry into the next change, and the `COMBO_MAX` end
+    of the margin is the one it would be carried into. The phrase predates
+    this turn; the turn rewrote the paragraph around it without correcting it.
+  - **Goal**: Say eight columns wide, or drop the width figure and keep
+    "ending at column 9", which is what the gap is actually derived from.
+  - From: UI/UX Override - the middle drop is under the tracer
+
+- [ ] Three em dashes entered `test/hud-row.test.mjs` against the house style
+  - **Issue**: The rewritten header uses em dashes mid-sentence at
+    `test/hud-row.test.mjs:3`, `:4` and `:23`. Twenty of the repository's
+    twenty-one `test/*.test.mjs` files carry exactly one em dash - the
+    one on their title line, after the file's own path - and spaced hyphens
+    everywhere else. Every
+    other file this turn edited added none: `src/types.ts`, `src/game.ts`,
+    `src/render.ts`, `index.html`, `test/parity.test.mjs` and `CHANGELOG.md`
+    are all hyphens. This file now carries four.
+  - **Goal**: Replace the three mid-sentence em dashes with spaced hyphens and
+    leave the title line on line 1 as it is, since that one is the convention.
+  - From: UI/UX Override - the middle drop is under the tracer
+
+- [ ] `test/powerups.test.mjs` builds drops without the `hold` the type now requires
+  - **Issue**: Eight fixtures - lines 188, 201, 218, 234, 243, 255, 270 and
+    419 - build `{ x, y, z, kind }`, but `Powerup` now requires `hold`
+    (`src/types.ts:137`) and both of the engine's two creation sites set it.
+    The tests still pass and still exercise what they mean to, because
+    `undefined > 0` is false and so the drift branch runs - but they pass on
+    that coercion rather than on a declared value, and this file is the
+    repository's whole coverage of the drift. The hazard is not hypothetical:
+    an assertion of the form `assert.equal(p.hold, build.BOSS_DROP_HOLD)`
+    passes vacuously while both sides are `undefined`, which is what
+    `test/boss.test.mjs:663` would have done until `test/helpers.mjs` exported
+    the constant this turn.
+  - **Goal**: Add `hold: 0` to the eight fixtures so they match the shape
+    `dropPowerup` produces. Nothing should change behaviourally and the suite
+    should stay green.
+  - From: UI/UX Override - the middle drop is under the tracer
+
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
