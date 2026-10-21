@@ -185,7 +185,7 @@ for (const build of BUILDS) {
     const s = game.state;
     s.shipX = 0;
     s.shipY = 1;
-    s.powerups = [{ x: 4, y: 4, z: -80, kind: 'shield' }];
+    s.powerups = [{ x: 4, y: 4, z: -80, kind: 'shield', hold: 0 }];
 
     const gap = () => Math.hypot(s.powerups[0].x - s.shipX, s.powerups[0].y - s.shipY);
     const opening = gap();
@@ -198,7 +198,7 @@ for (const build of BUILDS) {
   test(`${build.name}: the drift never overshoots the ship`, () => {
     const game = quietRun(build);
     const s = game.state;
-    s.powerups = [{ x: 0.01, y: s.shipY + 0.01, z: -150, kind: 'shield' }];
+    s.powerups = [{ x: 0.01, y: s.shipY + 0.01, z: -150, kind: 'shield', hold: 0 }];
 
     // A step that ran past the ship would sit the drop on the far side and
     // walk it away again, which reads as a pickup fleeing the player.
@@ -215,7 +215,7 @@ for (const build of BUILDS) {
     const s = game.state;
     // Behind the ship in height by more than the sprite covers, so it sails by
     // rather than being collected.
-    s.powerups = [{ x: 0, y: 0, z: 9, kind: 'shield' }];
+    s.powerups = [{ x: 0, y: 0, z: 9, kind: 'shield', hold: 0 }];
     s.shipY = 6;
     s.shield = 50;
 
@@ -231,7 +231,7 @@ for (const build of BUILDS) {
     const game = quietRun(build);
     const s = game.state;
     s.shield = 40;
-    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield' }];
+    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield', hold: 0 }];
 
     game.update(FRAME, {}, {});
 
@@ -240,7 +240,7 @@ for (const build of BUILDS) {
     assert.ok(s.sounds.includes('powerup'), 'the pickup names its own sound');
 
     s.shield = 90;
-    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield' }];
+    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield', hold: 0 }];
     game.update(FRAME, {}, {});
     assert.equal(s.shield, 100, 'the cap holds');
   });
@@ -252,7 +252,7 @@ for (const build of BUILDS) {
     ]) {
       const game = quietRun(build);
       const s = game.state;
-      s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind }];
+      s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind, hold: 0 }];
 
       game.update(FRAME, {}, {});
 
@@ -267,7 +267,7 @@ for (const build of BUILDS) {
     const game = quietRun(build);
     const s = game.state;
     s.shield = 40;
-    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield' }];
+    s.powerups = [{ x: s.shipX, y: s.shipY, z: 0, kind: 'shield', hold: 0 }];
 
     game.update(FRAME, {}, { E: true });
 
@@ -416,7 +416,7 @@ for (const build of BUILDS) {
     for (const kind of build.POWERUP_KINDS) {
       const game = quietRun(build);
       const s = game.state;
-      s.powerups = [{ x: 0, y: s.shipY, z: -60, kind }];
+      s.powerups = [{ x: 0, y: s.shipY, z: -60, kind, hold: 0 }];
       const screen = new build.ScreenBuffer(80, 24);
 
       build.renderGame(screen, s);

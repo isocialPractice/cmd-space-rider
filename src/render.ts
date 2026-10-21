@@ -47,8 +47,8 @@ export function renderGame(screen: ScreenBuffer, state: GameState): void {
   screen.clear(C.BLACK);
   drawStarfield(screen, state, gameTop, gameBottom);
   drawTunnel(screen, state, gameTop, gameBottom);
-  drawEntitiesFar(screen, state, gameTop, gameBottom);
-  drawBullets(screen, state, gameTop, gameBottom);
+  const dropCells = drawEntitiesFar(screen, state, gameTop, gameBottom);
+  drawBullets(screen, state, gameTop, gameBottom, dropCells);
   drawParticles(screen, state, gameTop, gameBottom);
   drawGhost(screen, state, gameTop, gameBottom);
   drawShip(screen, state, gameTop, gameBottom);
@@ -212,7 +212,9 @@ function drawTunnel(screen: ScreenBuffer, state: GameState, gameTop: number, gam
   }
 }
 
-function drawEntitiesFar(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
+function drawEntitiesFar(
+  screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number
+): Set<number> | null {
   const w = screen.width;
   const h = screen.height;
 
@@ -292,6 +294,7 @@ function drawEntitiesFar(screen: ScreenBuffer, state: GameState, gameTop: number
   // at a glance and there are three of them to tell apart: + restores shield,
   // ! is rapid fire, ~ is slow motion. The pulse is offset by depth, so a pair
   // of drops in the air together does not blink in unison.
+  let dropCells: Set<number> | null = null;
   for (const p of state.powerups) {
     if (p.z < -state.maxViewZ || p.z > 5) continue;
     const pos = gameToScreen(p.x, p.y, p.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
@@ -300,13 +303,16 @@ function drawEntitiesFar(screen: ScreenBuffer, state: GameState, gameTop: number
     const spec = POWERUP_GLYPHS[p.kind];
     const pulse = sin(state.time * 6 + p.z) * 0.3 + 0.7;
     const color = pulse > 0.6 ? spec.bright : spec.dim;
-    drawBlock(screen, pos.col, pos.row, size, spec.char, color, gameTop, gameBottom);
+    if (dropCells === null) dropCells = new Set<number>();
+    drawBlock(screen, pos.col, pos.row, size, spec.char, color, gameTop, gameBottom, dropCells);
   }
+  return dropCells;
 }
 
 function drawBlock(
   screen: ScreenBuffer, cx: number, cy: number, size: number,
-  ch: string, color: number, gameTop: number, gameBottom: number
+  ch: string, color: number, gameTop: number, gameBottom: number,
+  record: Set<number> | null = null
 ): void {
   const half = floor(size / 2);
   for (let dy = -half; dy <= half; dy++) {
@@ -314,6 +320,17 @@ function drawBlock(
       const y = cy + dy;
       if (y >= gameTop && y < gameBottom) {
         screen.put(cx + dx, y, ch, color, C.BLACK);
+        // Keyed the way the buffer indexes itself, and recorded inside the same
+        // bounds test `put` applies, so what is recorded is the set of cells
+        // this call actually wrote rather than the set it was asked to write.
+        // A second copy of the footprint arithmetic is the thing being avoided
+        // here: the caller that reads these cells back is deciding what may
+        // paint over them, and a footprint that drifted from the one drawn
+        // would protect cells that are empty and leave covered ones open.
+        const x = floor(cx + dx);
+        if (record !== null && x >= 0 && x < screen.width) {
+          record.add(y * screen.width + x);
+        }
       }
     }
   }
@@ -390,19 +407,81 @@ function drawBlock(
  *
  * Each half is tested on its own row, because the span narrows going up and the
  * dim upper half leaves the corridor first.
+ *
+ * There is a second clip, and it is a pickup rather than a wall. `dropCells`
+ * holds the cells `drawEntitiesFar` just drew a dropped powerup into, and a
+ * tracer skips them. The corridor clip above is about where a shot can still
+ * hit something; this one is about what the player is being asked to read.
+ *
+ * It is here because of what the tunnel axis is. `spawnBoss` fixes the boss at
+ * `x: 0`, `dropBossPowerups` centres the three drops on the boss's own x, and
+ * POWERUP_KINDS puts `rapid` in the middle - so the middle drop lands at
+ * exactly `x: 0`. That is the axis, and the axis is the screen column a bolt
+ * travels up: `updateBullets` carries a bolt's x forward by the ratio of two
+ * scales to hold the column it was fired down, and the twentieth hit can only
+ * have been landed from the boss's own column. So the cell the middle drop
+ * wants is the cell the player's own tracer is in, and this pass runs after
+ * `drawEntitiesFar`. Measured on the painted canvas at the 60-column floor, a
+ * bolt sat on that cell for 31 to 47 of the 48 frames of the read window at
+ * every tap rate from 15 Hz down to 3.8 Hz, and a kill that paid three drops
+ * read as two glyphs.
+ *
+ * Moving the drops instead was measured and does not work. One cell is the
+ * whole of the derived gap at that depth - see `bossDropSpread` - so the three
+ * sit in three adjacent cells and the bolt column is inside that run however
+ * the group is shifted by a column or less. `x: 0` projects to exactly `w / 2`,
+ * which is a cell's left edge, so half a column does not even leave the cell,
+ * and which direction clears it turns on the parity of the grid's width.
+ * Shifting the group clear of the run entirely would cost the near end a
+ * pickup, which is the thing BOSS_DROP_HOLD was chosen over widening to
+ * protect.
+ *
+ * The tracer is the right one of the two to give up. It is a repeating
+ * decoration with about 103 frames of life and three more pushed on every
+ * press, while a drop is on screen for seconds and is the reward for twenty
+ * hits. Releasing the trigger is not a substitute: `fireVolley` has no cadence
+ * gate, so a trigger tapped enough to land twenty hits leaves a column of bolts
+ * strung the length of the tunnel, and letting go stops new ones without
+ * clearing those - measured from the release frame, the three first read as
+ * three at frame 69 with the pilot steering and never inside 150 frames with
+ * the ship held on the axis, against a hold that ends at frame 36.
+ *
+ * The lookup is in the bullet loop, which is the one pass whose length a
+ * player sets - a trigger tapped hard enough to kill a boss leaves about
+ * seventy bolts in the air - so it was measured before it was taken, by
+ * `npm run probe -- drop-clip`. At the FULL detail tier, 40 stars and the axis
+ * column full, a whole frame renders in 6.5 to 22.4 us against the 33333 a 30
+ * fps frame allows, and three held drops move that by a median of +0.08 to
+ * +1.97 us across the six build and grid pairs - 0.006% of a frame at the
+ * worst, with the spread across passes crossing zero on three of the six. It is
+ * below what the rig can measure.
+ *
+ * It costs nothing at all on a frame with no drop in the air, which is almost
+ * every frame: `drawEntitiesFar` allocates the set only once it has a powerup
+ * to put in it and hands back null otherwise, so the common case is one null
+ * check per tracer cell and no allocation.
  */
-function drawBullets(screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number): void {
+function drawBullets(
+  screen: ScreenBuffer, state: GameState, gameTop: number, gameBottom: number,
+  dropCells: Set<number> | null = null
+): void {
   const w = screen.width;
   const h = screen.height;
   const inCorridor = (col: number, row: number): boolean =>
     tracerDrawn(state, col, row, gameTop, gameBottom, w);
+  // Keyed the way the buffer indexes itself, which is how `drawBlock` recorded
+  // them. A drop's own cell is the one place a tracer gives way.
+  const onDrop = (col: number, row: number): boolean =>
+    dropCells !== null && dropCells.has(row * w + col);
+  const paints = (col: number, row: number): boolean =>
+    inCorridor(col, row) && !onDrop(col, row);
   for (const b of state.bullets) {
     const pos = gameToScreen(b.x, b.y, b.z, w, h, gameTop, gameBottom, state.tunnelRadius, state.maxViewZ);
     if (pos.row < gameTop || pos.row >= gameBottom) continue;
-    if (inCorridor(pos.col, pos.row)) {
+    if (paints(pos.col, pos.row)) {
       screen.put(pos.col, pos.row, '\u2502', C.BRIGHT_CYAN, C.BLACK); // │
     }
-    if (pos.row - 1 >= gameTop && inCorridor(pos.col, pos.row - 1)) {
+    if (pos.row - 1 >= gameTop && paints(pos.col, pos.row - 1)) {
       screen.put(pos.col, pos.row - 1, '\u2502', C.CYAN, C.BLACK);
     }
   }

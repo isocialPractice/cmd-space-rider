@@ -24,6 +24,7 @@ export const PROBES = {
   'frame-rate': { load: () => import('./frame-rate.mjs'), flags: ['grid', 'build', 'count'] },
   'column': { load: () => import('./column.mjs'), flags: ['grid', 'build', 'count'] },
   'free-flight': { load: () => import('./free-flight.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
+  'drop-clip': { load: () => import('./drop-clip.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
   'overlay-anchor': { load: () => import('./overlay-anchor.mjs'), flags: [] },
   'glyph-tuning': { load: () => import('./glyph-tuning.mjs'), flags: [] },
 };

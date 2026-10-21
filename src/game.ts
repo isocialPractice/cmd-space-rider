@@ -1209,13 +1209,23 @@ export class Game {
    * them.
    *
    * The gap between two of them comes from `bossDropSpread` rather than from
-   * BOSS_DROP_SPREAD directly, and that is what keeps none of the three hidden
-   * behind another. The constant is a world distance while being readable as
-   * three glyphs is a screen property, and the two part company at the far edge
-   * of sight on a narrow grid: at 60 columns a kill from z=-189 out drew the
-   * Rapid Fire drop under the Slow Motion one. See `bossDropSpread` for the
-   * walk that measured it and for why the figure is derived from the projection
-   * rather than widened in the constant.
+   * BOSS_DROP_SPREAD directly, which is what puts the three in three different
+   * cells. The constant is a world distance while being readable as three
+   * glyphs is a screen property, and the two part company at the far edge of
+   * sight on a narrow grid: at 60 columns a kill from z=-189 out drew the Rapid
+   * Fire drop under the Slow Motion one. See `bossDropSpread` for the walk that
+   * measured it and for why the figure is derived from the projection rather
+   * than widened in the constant.
+   *
+   * Three cells is not the same as three glyphs, and the gap is only the first
+   * of three things that had to be true for the second. BOSS_DROP_HOLD keeps
+   * them in those cells, because the drift spends a one-column gap in two
+   * frames whenever the ship is on the boss's axis - where it has to be to have
+   * landed the twentieth hit. And `drawBullets` gives up a cell a drop is drawn
+   * in, because the middle drop lands at exactly `x: 0` and that is the column
+   * the player's own tracer travels up. Each of the three was measured
+   * separately and each was the whole of what was left; this placement on its
+   * own read as two glyphs for the entire window.
    *
    * It goes through neither `dropPowerup` nor its chance roll. A boss drop is
    * the reward for twenty hits rather than a one-in-three on a kill, and the

@@ -1,7 +1,7 @@
 // test/hud-row.test.mjs — The row under the shield bar is shared. The combo
 // counter is left-aligned on it, and the debug label and four banners are
-// centred on it — the asteroid field banner, the warp banner, the boss warning
-// and NEW BEST — so none of them may overwrite another.
+// centred on it - the asteroid field banner, the warp banner, the boss warning
+// and NEW BEST - so none of them may overwrite another.
 //
 // All four banners go through one `drawBanner` in both builds, which is worth
 // knowing before reading the margins below: it blanks a centred field and then
@@ -20,8 +20,8 @@
 // between them is arithmetic rather than a check. Do that arithmetic against
 // BANNER_FIELD, not against a banner's text: the field is a fixed 20 cells
 // centred, so it opens at column 20 on the 60-column floor, and the counter
-// tops out at COMBO x8, ten columns wide ending at column 9 — which leaves the
-// counter 10 columns of gap. The field is the same 20 for `[ NEW BEST ]` at
+// tops out at COMBO x8, eight columns wide ending at column 9 - which leaves
+// the counter 10 columns of gap. The field is the same 20 for `[ NEW BEST ]` at
 // twelve characters as for `>> ASTEROID FIELD <<` at twenty, so every banner
 // this row carries reaches the same column however short its own string is.
 //
