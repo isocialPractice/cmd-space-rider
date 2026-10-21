@@ -1,5 +1,139 @@
 # Changelog
 
+## [1.0.0-alpha.0.11.3] - 2026-10-21
+
+### Fixed
+
+- A boss's middle drop sitting under the ship's own tracer for the whole of the
+  read window `BOSS_DROP_HOLD` buys. The hold shipped in 0.11.2 and does what its
+  docstring claims - the three now hold three distinct cells for 43 to 48 frames
+  against 1 to 15 before it - and what that uncovered is that the drift was not
+  the only thing between a far kill and three readable glyphs. `dropBossPowerups`
+  centres the spread on the boss's `x`, `spawnBoss` fixes that at `0`, and
+  `POWERUP_KINDS` puts `rapid` in the middle, so the middle drop is always at
+  exactly `x: 0`. That is the tunnel axis, and the tunnel axis is the screen
+  column a bolt travels up: `updateBullets` carries a bolt's `x` forward by the
+  ratio of two scales to hold the column it was fired down, and the twentieth hit
+  can only have been landed from the boss's own column. `drawBullets` paints its
+  bar in `C.BRIGHT_CYAN` at the bolt's cell and `C.CYAN` one row above, and it
+  runs after `drawEntitiesFar`, so the middle drop's cell carried a cyan bar
+  rather than its own `!` for as long as any bolt projected into it.
+
+  Measured on the painted canvas: ten flown far kills at the 60-column floor
+  across five tap rates from 15 Hz down to 3.8 Hz, every one landing far with z
+  between -151 and -188, and not one reading as three glyphs inside the 1.2 s
+  hold. A bolt sat on the middle drop's own cell for 31 to 47 of the 48 frames
+  watched at every rate. The rate does not rescue it, for an arithmetic reason
+  rather than a lucky one: one screen row at the floor is about 12 units of depth
+  and `BULLET_SPEED` 60 puts a bolt every 12 units along the column at 5 Hz. Nor
+  does releasing the trigger - `fireVolley` pushes three bolts on every
+  `justPressed.SPACE` with no cadence gate and each lives about 103 frames, so
+  letting go stops new bolts and does nothing about the column already strung the
+  length of the tunnel. From the release frame the three first read as three at
+  frame 69 with the pilot steering, and never inside 150 frames with the ship held
+  on the axis, against a hold that ends at frame 36.
+
+  Fixed in the renderer rather than in the placement, because the placement
+  cannot be fixed. One cell is the whole of the derived gap at that depth, so the
+  three sit in three adjacent cells and the bolt column is inside that run however
+  the group is shifted by a column or less; `x: 0` projects to exactly `w / 2`,
+  which is a cell's left edge, so half a column does not even leave the cell; and
+  which direction clears it turns on the parity of the grid's width. Walked over
+  60, 61, 80 and 128 columns against five depths, a half-column offset in either
+  direction and a full-column offset each leave one of the three on the bolt
+  column at the 60-column far end, which is the exact case the fault was reported
+  at. Shifting the group clear of the run entirely would cost a point-blank kill a
+  pickup, which is the thing the hold was chosen over widening to protect.
+
+  So a drop wins its cell against a tracer. `drawEntitiesFar` now returns the
+  cells it drew a dropped powerup into and `drawBullets` skips them, in both
+  builds. The cells are recorded by `drawBlock` as it writes them, inside the
+  same bounds test `put` applies and keyed the way the buffer indexes itself, so
+  what a tracer gives way to is the set of cells actually drawn rather than a
+  second copy of the footprint arithmetic. Staged with the column as full as
+  twenty hits leave it - a volley every four frames for the ~103 frames a bolt
+  lives - and the ship held on the axis, all three now read as their own glyph in
+  their own ink inside the hold at 60x20, 80x24 and 128x45 in both builds, at
+  frames 21, 14 and 1, and no tracer lands on a drop's cell on any frame of the
+  window. The tracer is the right one of the two to give up: it is a repeating
+  decoration with three more pushed on every press, while a drop is on screen for
+  seconds and is the reward for twenty hits.
+
+  It costs nothing worth measuring. At the FULL detail tier with 40 stars and
+  about seventy bolts in the air, a whole frame renders in 6.5 to 22.4 us against
+  the 33333 a 30 fps frame allows, and three held drops move that by a median of
+  +0.08 to +1.97 us across the six build and grid pairs - 0.006% of a frame at
+  the worst, with the spread across passes crossing zero on three of the six. A
+  frame with no drop in the air costs nothing at all: the set is allocated only
+  once there is a powerup to put in it, so the common case is one null check per
+  tracer cell and no allocation.
+
+- `dropBossPowerups`' own comment claiming the derived gap "is what keeps none of
+  the three hidden behind another", in both builds. It was the whole story when it
+  was written and is now the first of three things that had to be true: the gap
+  puts the three in three different cells, `BOSS_DROP_HOLD` keeps them there, and
+  the tracer clip above keeps the middle one visible. Each was measured separately
+  and each was the whole of what was left, so a reader taking the sentence at face
+  value would have looked for the next legibility fault in `bossDropSpread`.
+
+- The `COMBO x8` width figure in `test/hud-row.test.mjs`' header, which called the
+  counter "ten columns wide ending at column 9". `drawHUD` writes it with
+  `screen.putString(2, HUD_ROWS, combo, ...)` and `COMBO x8` is eight characters,
+  so it occupies columns 2 through 9 - eight columns wide, not ten. Both figures
+  the paragraph derives from it are right: it does end at column 9, and
+  `BANNER_FIELD`'s 20 does open at column 20 on the 60-column floor, which is the
+  10 columns of gap the header claims. That file is the one place the repository
+  points the next editor at to do the shared row's arithmetic, so it was the
+  figure a reader would have carried into the next change to `COMBO_MAX`.
+
+- Three mid-sentence em dashes in `test/hud-row.test.mjs`, now spaced hyphens.
+  Every other `test/*.test.mjs` file carries its em dash on the title line and
+  nowhere else, which is the convention, and the title line is left as it is.
+
+### Changed
+
+- The eight `Powerup` fixtures in `test/powerups.test.mjs` now carry `hold: 0`,
+  matching the shape `dropPowerup` produces. `hold` became required in 0.11.2 and
+  both of the engine's creation sites set it, but these built `{ x, y, z, kind }`
+  and passed on a coercion rather than a declared value: `undefined > 0` is false,
+  so the drift branch ran, and this file is the repository's whole coverage of the
+  drift. The hazard is not hypothetical - an assertion of the form
+  `assert.equal(p.hold, build.BOSS_DROP_HOLD)` passes vacuously while both sides
+  are `undefined`. Nothing changed behaviourally and the suite stayed green.
+
+### Added
+
+- Three cases in `test/boss.test.mjs`, in both builds. "A far kill with the bolt
+  column full still reads as three" is the one the release above needed: the
+  existing "a far kill is read as three glyphs once its burst clears" passes
+  because it stages the kill into a tunnel with no bolts in it, which is the one
+  condition a real far kill never arrives in. The new case fills the axis column
+  first, at three grids, and reads glyph and ink together - a tracer is a bar so
+  the character alone would catch that one, but the kill's own burst draws `+` in
+  `C.BRIGHT_RED` over the shield drop's `+`. "A tracer gives up a cell a drop is
+  drawn in" pins the invariant the fix rests on directly, and asserts out loud
+  that the middle drop is still on the axis and still in the column a bolt holds,
+  so a later change that moves the placement has to come through it. "The clip
+  gives up the drops' own cells and nothing else" is the half neither of those
+  two can see: both of them only say what must not be in a drop's cell, so a
+  `drawBullets` that skipped the whole column - or stopped drawing tracers at
+  all - satisfies the pair completely. It renders the same state twice, once as
+  it stands and once with `state.powerups` emptied, and requires the cells the
+  two frames disagree on to be the cells the drops were drawn into and no
+  others, with the footprint recomputed from `blockSize`'s own arithmetic rather
+  than read back out of the renderer. Checked by disabling the clip in both
+  builds: all six fail, and only those six.
+
+- `test/probes/drop-clip.mjs`, the probe behind the frame-cost figure above. It
+  stages the frame a boss kill arrives in and times the whole render with and
+  without the three drops, rather than instrumenting the pass - an instrumented
+  pass is a copy of the thing being measured, which is the rule the rig opens
+  with. It is the first probe in the rig whose figure is a timing, so it is the
+  first whose two builds are reported side by side and never compared: a timing
+  is a property of the machine it ran on. It reports the spread across repeated
+  passes because the two figures land inside each other's noise, and a negative
+  delta in that spread is the honest answer rather than a fault.
+
 ## [1.0.0-alpha.0.11.2] - 2026-10-20
 
 ### Fixed
