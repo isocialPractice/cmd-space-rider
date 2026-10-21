@@ -651,6 +651,221 @@ for (const build of BUILDS) {
     assert.ok(readAt >= 0, 'no frame inside 30 showed all three of their own glyphs');
   });
 
+  test(`${build.name}: a far kill with the bolt column full still reads as three`, () => {
+    // The case above stages the kill into an empty tunnel, which is the one
+    // condition a real far kill never arrives in. The twentieth hit was landed
+    // from the boss's own column - `spawnBoss` puts the boss at x: 0 and
+    // `updateBullets` holds the column a bolt was fired down - and `fireVolley`
+    // has no cadence gate, so the trigger that landed it has left that column
+    // strung with bolts the length of the tunnel. A bolt draws as a bar in
+    // C.BRIGHT_CYAN and `drawBullets` runs after `drawEntitiesFar`, so before
+    // the drop clip existed the middle drop spent the whole hold under one: it
+    // is always `rapid` and always at exactly x: 0, which is that column.
+    // Measured on the painted canvas at 31 to 47 of the 48 frames watched, at
+    // every tap rate from 15 Hz down to 3.8 Hz.
+    //
+    // Three grids, because the condition is a bolt in the cell rather than the
+    // grid's width: it was worst at the 60-column floor and present at 128.
+    for (const [w, h] of [[60, 20], [80, 24], [128, 45]]) {
+      const game = quietRun(build, w, h);
+      const s = game.state;
+      s.shipX = 0;
+      s.shipY = 2.5;
+
+      // Fill the column the way twenty hits leave it: a volley every four
+      // frames for about the 103 frames a bolt lives.
+      for (let f = 0; f < 104; f++) {
+        if (f % 4 === 0) game.fireVolley();
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+      assert.ok(s.bullets.length > 0, `${w}x${h}: the staged column holds no bolts`);
+
+      game.killBoss({ x: 0, y: 2.5, z: -190, hp: 0, fireTimer: 0 });
+
+      const screen = new build.ScreenBuffer(w, h);
+      const holdFrames = Math.round(build.BOSS_DROP_HOLD * 30);
+      let readAt = -1;
+      for (let frame = 0; frame < holdFrames && readAt < 0; frame++) {
+        build.renderGame(screen, s);
+        // Colour as well as character, for the reason the case above gives: a
+        // tracer is a bar so the character alone would catch that one, but the
+        // kill's own burst draws '+' in C.BRIGHT_RED over the shield drop's
+        // '+' and a character-only read calls that readable.
+        const read = s.powerups.every((p) => {
+          const scr = game.toScreen(p.x, p.y, p.z);
+          const i = scr.row * screen.width + scr.col;
+          const spec = build.POWERUP_GLYPHS[p.kind];
+          return screen.chars[i] === spec.char
+            && (screen.fg[i] === spec.bright || screen.fg[i] === spec.dim);
+        });
+        if (read) readAt = frame;
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+
+      assert.ok(readAt >= 0,
+        `${w}x${h}: no frame inside the hold showed all three of their own glyphs`);
+    }
+  });
+
+  test(`${build.name}: a tracer gives up a cell a drop is drawn in`, () => {
+    // The invariant the fix actually rests on, pinned directly so it cannot
+    // regress into the placement fix that was measured and does not work. The
+    // drops are left exactly where `dropBossPowerups` puts them - the middle
+    // one is still at x: 0, still in the bolt column - and what changed is that
+    // `drawBullets` skips a cell `drawEntitiesFar` drew a pickup into. So the
+    // thing to assert is the renderer's and not the placement's.
+    //
+    // Why not the placement: one cell is the whole of the derived gap at this
+    // depth, so the three sit in three adjacent cells and the bolt column is
+    // inside that run however the group is shifted by a column or less. x: 0
+    // projects to exactly w / 2, a cell's left edge, so half a column does not
+    // leave the cell at all, and which direction clears it turns on the parity
+    // of the grid's width.
+    //
+    // This is the narrow check - a tracer is never the thing in a drop's cell.
+    // That the drop is drawn there at all is the case above, which reads the
+    // glyph and its ink; the two together are what cover the symptom.
+    //
+    // The shake is zeroed rather than compensated for. It is a whole-play-area
+    // column shift applied after every draw pass, so it moves a drop and a
+    // tracer together and can neither cause nor cure a collision between them,
+    // and `shakeColumns` is not reachable from the browser build - so
+    // compensating would put a figure in here that only one of the two builds
+    // could check.
+    for (const [w, h] of [[60, 20], [80, 24], [128, 45]]) {
+      const game = quietRun(build, w, h);
+      const s = game.state;
+      s.shipX = 0;
+      s.shipY = 2.5;
+      for (let f = 0; f < 104; f++) {
+        if (f % 4 === 0) game.fireVolley();
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+      game.killBoss({ x: 0, y: 2.5, z: -190, hp: 0, fireTimer: 0 });
+
+      // Say out loud that the middle drop is still on the axis and still in the
+      // column a bolt fired from the ship's own x projects into. Nothing about
+      // this fix is meant to have moved it, and a later change that moves it
+      // should have to come through here.
+      const mid = s.powerups.find((p) => p.kind === 'rapid');
+      assert.equal(mid.x, 0, `${w}x${h}: the middle drop left the tunnel axis`);
+      assert.equal(
+        game.toScreen(mid.x, mid.y, mid.z).col,
+        game.toScreen(0, s.shipY, mid.z).col,
+        `${w}x${h}: the middle drop left the column a bolt holds`
+      );
+
+      const screen = new build.ScreenBuffer(w, h);
+      const holdFrames = Math.round(build.BOSS_DROP_HOLD * 30);
+      for (let frame = 0; frame < holdFrames; frame++) {
+        s.shake = 0;
+        build.renderGame(screen, s);
+        for (const p of s.powerups) {
+          const scr = game.toScreen(p.x, p.y, p.z);
+          const i = scr.row * screen.width + scr.col;
+          assert.notEqual(screen.chars[i], '│',
+            `${w}x${h} frame ${frame}: a tracer painted over the ${p.kind} drop`);
+        }
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+    }
+  });
+
+  test(`${build.name}: the clip gives up the drops' own cells and nothing else`, () => {
+    // The other half of the case above, and the half a regression would slip
+    // through. That one says no tracer is in a drop's cell; this one says every
+    // other cell of the frame is exactly what it was. A `drawBullets` that
+    // skipped the whole column, or stopped drawing tracers at all, satisfies
+    // "no tracer in a drop's cell" completely - and the request this release
+    // answers names that outcome as the one thing worse than the defect: a
+    // whole tracer that vanished, or one broken over several rows.
+    //
+    // Checked by rendering the same state twice. Once as it stands, and once
+    // with `state.powerups` emptied, which is the frame with nothing for the
+    // clip to act on: `drawEntitiesFar` hands back null, `drawBullets` takes
+    // its default, and every bolt is drawn. Nothing else about the two renders
+    // differs, because nothing advances between them. So the cells where they
+    // disagree are the cells the drops cost the tracer, and they have to be the
+    // cells the drops were drawn into and no others.
+    //
+    // The footprint is recomputed here from `blockSize`'s own arithmetic rather
+    // than read back out of the renderer, so the two derivations have to agree
+    // for the test to pass.
+    for (const [w, h] of [[60, 20], [80, 24], [128, 45]]) {
+      const game = quietRun(build, w, h);
+      const s = game.state;
+      s.shipX = 0;
+      s.shipY = 2.5;
+      for (let f = 0; f < 104; f++) {
+        if (f % 4 === 0) game.fireVolley();
+        s.shipX = 0;
+        s.shipY = 2.5;
+        game.update(FRAME, {}, {});
+      }
+      game.killBoss({ x: 0, y: 2.5, z: -190, hp: 0, fireTimer: 0 });
+
+      const gameTop = HUD_ROWS;
+      const gameBottom = h - FOOTER_ROWS;
+      const withDrops = new build.ScreenBuffer(w, h);
+      const withoutDrops = new build.ScreenBuffer(w, h);
+      const holdFrames = Math.round(build.BOSS_DROP_HOLD * 30);
+      let differed = 0;
+
+      for (let frame = 0; frame < holdFrames; frame++) {
+        s.shake = 0;
+        // Every cell `drawEntitiesFar` will draw a drop into, by the same
+        // arithmetic `drawBlock` loops over: a block of `size` centred on the
+        // projected cell, clipped to the play area.
+        const footprint = new Set();
+        for (const p of s.powerups) {
+          const scr = game.toScreen(p.x, p.y, p.z);
+          const size = Math.max(1, Math.floor(scr.scale * 2));
+          const half = Math.floor(size / 2);
+          for (let dy = -half; dy <= half; dy++) {
+            for (let dx = -half; dx <= half; dx++) {
+              const y = scr.row + dy;
+              const x = scr.col + dx;
+              if (y >= gameTop && y < gameBottom && x >= 0 && x < w) footprint.add(y * w + x);
+            }
+          }
+        }
+
+        build.renderGame(withDrops, s);
+        const held = s.powerups;
+        s.powerups = [];
+        build.renderGame(withoutDrops, s);
+        s.powerups = held;
+
+        for (let i = 0; i < w * h; i++) {
+          const same = withDrops.chars[i] === withoutDrops.chars[i]
+            && withDrops.fg[i] === withoutDrops.fg[i]
+            && withDrops.bg[i] === withoutDrops.bg[i];
+          if (same) continue;
+          differed++;
+          assert.ok(footprint.has(i),
+            `${w}x${h} frame ${frame}: the drops changed cell `
+            + `${i % w},${Math.floor(i / w)}, which none of them is drawn in - `
+            + `'${withoutDrops.chars[i]}' became '${withDrops.chars[i]}'`);
+        }
+      }
+
+      // The comparison has to have had something to compare. Three drops on
+      // screen for the whole hold cannot leave the frame untouched, and a
+      // staging mistake that left them off it would pass every assertion above
+      // without testing anything.
+      assert.ok(differed > 0,
+        `${w}x${h}: the drops changed no cell at all, so nothing was compared`);
+    }
+  });
+
   test(`${build.name}: only a boss's drops are held, and a mine's drifts at once`, () => {
     // BOSS_DROP_HOLD exists because three drops land together and have to be
     // told apart. A mine pays one pickup with no sibling to confuse it with,
