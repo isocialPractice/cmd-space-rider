@@ -9,87 +9,52 @@ its origin survives archiving into `## Complete`.
 - [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
   - From: Bigger Features
 
-### Code Review Override - the second clip, and the probe nothing published
+### Code Review Override - the bound in brief, and the pass that borrowed a name
 
-#### Found Issues
+#### Resolve Issues
 
-- [ ] Four docstrings still say `drawBullets` has one clip and the hit test
-  reads it, and this release gave it a second one the hit test does not read
-  - **Issue**: `drawBullets` now draws by `inCorridor(col, row) && !onDrop(col,
-    row)` (`src/render.ts:476`, `index.html:3022`) while `contacts` still reads
-    `tracerDrawn` alone (`src/game.ts:1702`). Four passages state the single
-    clip as an invariant, and none was touched: `drawBullets`' own docstring,
-    eleven lines above the paragraph that introduces the second clip - "The hit
-    test reads the same clip, and that is the whole of what it shares with this:
-    a frame that draws no tracer registers nothing on that frame"
-    (`src/render.ts:399`, `index.html:2953`); `tracerDrawn`'s - "Read by
-    `drawBullets` and by the pulse cannon's hit test, which is the whole reason
-    it is one function" (`src/types.ts:303`); and `contacts`' in both builds -
-    "neither a target that is not being drawn nor a tracer that is not being
-    drawn can be half of a contact" and "the two cannot come to state different
-    corridors" (`src/game.ts:1596` and `:1601`, `index.html:2391` and `:2394`).
-    Name the state: the release's own staged scene, the ship held at `x: 0`, a
-    boss killed at z=-190, the axis column strung with bolts. A bolt projects
-    into the middle drop's cell, `drawBullets` paints no bar there - which is
-    what the three new `test/boss.test.mjs` cases assert, and disabling the clip
-    in both builds fails exactly those six and nothing else - and `tracerDrawn`
-    still returns true for that cell, so `contacts` counts a tracer the player
-    was not shown. The behaviour is the right one, since a pickup absorbing a
-    shot would be worse than the defect being fixed; what is wrong is that one
-    docstring now contradicts itself inside a single comment block and three
-    others state a property the code stopped having.
-  - **Goal**: Leave the behaviour alone and reconcile the four passages. Say
-    that the corridor clip is the one the hit test shares and the drop clip is
-    deliberately not, with the reason: the drop clip is about what the player is
-    being asked to read in a cell, not a statement that the shot is not in it.
-    Worth saying in the same breath how far the exposure reaches, because it
-    bounds the "saw no bolt, the block died anyway" case the corridor clip was
-    added for: a drop's block is `size = max(1, floor(scale * 2))`, which is 1
-    at every scale under 1 and so one cell at every depth in front of the ship,
-    so the clip can take at most one of a bolt's two cells and the other is
-    still painted - except where `bScr.row - 1 < gameTop` left the bolt one cell
-    to begin with. Both builds, and `src/types.ts` as well as the two renderers.
-  - From: Code Review Override - the second clip, and the probe nothing published
-- [ ] `drawBullets` calls 48 frames "the read window" and `BOSS_DROP_HOLD` makes
-  that window 36
-  - **Issue**: `src/render.ts:425` and `index.html:2977` say a bolt "sat on that
-    cell for 31 to 47 of the 48 frames of the read window". `BOSS_DROP_HOLD` is
-    1.2 (`src/types.ts:716`), which is 36 frames at 30 fps, and that is how the
-    suite derives the window - `Math.round(build.BOSS_DROP_HOLD * 30)` in all
-    three of the new `test/boss.test.mjs` cases. The same release's changelog
-    entry keeps the two figures apart on purpose, writing "inside the 1.2 s
-    hold" for the window and "the 48 frames watched" for the measurement, so the
-    docstring is the one copy that merges them. Name the reader: anyone deriving
-    the read window from the constant gets 36 and finds a docstring in both
-    builds claiming it is 48.
-  - **Goal**: Call the 48 what the changelog calls it - the frames watched - in
-    both builds, and leave "read window" for the 36 that `BOSS_DROP_HOLD` buys.
-  - From: Code Review Override - the second clip, and the probe nothing published
-- [ ] `test/probes/drop-clip.mjs` reached the rig and none of the published
-  probe listings
-  - **Issue**: the probe is wired correctly - `test/probes/probes.mjs` declares
-    it and `test/probes.test.mjs` discovers it off its own source, so the suite
-    runs it without a line being added. The published pages are the half that
-    did not move. `docs/project-structure.html:33` to `:41` lists all nine other
-    files in `test/probes/` by name with a one-line description each and omits
-    this one, so the tree publishes a directory the repository no longer has.
-    `docs/development.html:33` explains the flag as "the placement walk in
-    `column`, `frame-rate` and `seen-versus-kill`, and the frame count in
-    `free-flight`", and `CHEATSHEET.md:136` with its published copy
-    `docs/cheatsheet.html:59` says the same; `drop-clip` reads `--count` as
-    frames per figure and `--passes` as measurements of the pair, which its own
-    header says at `test/probes/drop-clip.mjs:28`, so both enumerations are a
-    probe short. Name the reader: someone working out what
-    `npm run probe -- drop-clip --count 1` narrows finds the probe in neither
-    list and the file in neither tree.
-  - **Goal**: Add `drop-clip.mjs` to the tree in `docs/project-structure.html`
-    in the shape the other nine use, and name it in the `--count` sentences in
-    `docs/development.html` and `CHEATSHEET.md`. The cheatsheet's published copy
-    has to move with the markdown, since `test/docs-site.test.mjs` reads every
-    published page against the repository file it is published from. While in
-    `docs/development.html`, close the blank line this release left at `:50`
-    between the new `drop-clip` paragraph and the one after it - no other pair
-    of paragraphs in that file carries one.
+- [ ] Unshared Drop Clip 1 - two of the four reconciled passages state a bound
+  the code does not support, and a symbol the pass they sit in does not have
+  - **Issue**: Both are in the passages 0.11.4 rewrote, and both are the same
+    paragraph read in two builds.
+
+    First, `contacts`' new paragraph closes on "a bolt still painted a row away
+    from it except on the play area's top row, where `bScr.row - 1 < gameTop`
+    left the bolt one cell to begin with" (`src/game.ts:1607` and
+    `index.html:2405`) - one exception, where `drawBullets`' paragraph in the
+    same release lists three and the changelog entry lists the same three. The
+    two it drops are both reachable. A bolt whose upper half has already left
+    the corridor is one cell before any drop is involved: `tunnelSpan`'s
+    `halfSpan` is `floor(3 + t * (center - 4))` with `t` climbing with the row
+    (`src/types.ts:268`), so the span is narrower a row up and
+    `inCorridor(col, row - 1)` can fail while `inCorridor(col, row)` holds -
+    which is exactly the narrowing `drawBullets` says the two halves are tested
+    separately for. And two drops a row apart in one column take both cells, a
+    boss kill not producing that only because `dropBossPowerups` gives its
+    three one `y` and one `z` (`src/game.ts:1239`). Name the reader: anyone
+    bounding the exposure off the hit test's own docstring - which is where a
+    reader asking what the hit test counts goes - concludes a drop can never
+    leave the player nothing to see off the top row, which is the one thing
+    this paragraph was rewritten to bound.
+
+    Second, `drawBullets`' own paragraph names `bScr.row - 1 < gameTop` as what
+    "left it one cell to begin with" (`src/render.ts:433` and
+    `index.html:3001`). `bScr` is `contacts`' local (`src/game.ts:1699`,
+    `index.html:2485`); `drawBullets` projects into `pos` and guards with
+    `pos.row - 1 >= gameTop` (`src/render.ts:511`, `index.html:3070`), and
+    `bScr` appears nowhere else in `src/render.ts`. The sentence is about what
+    is painted, which is this pass, so the symbol a reader is sent to look for
+    is not in the function or the file the docstring sits in. 0.11.4 corrected
+    this same class of drift in `contacts`' comment - `tracerLit` where both
+    builds read `tracerDrawn` - and introduced it in the renderer on the same
+    turn.
+  - **Goal**: Give `contacts`' paragraph the three cases `drawBullets` carries,
+    or drop its `except` clause and point at `drawBullets` for the bound rather
+    than naming a partial one - the second is the smaller edit and keeps one
+    copy of the list. Name the draw pass's own guard in `drawBullets`'
+    paragraph, `pos.row - 1 < gameTop`, in both builds. No behaviour change,
+    and nothing in the suite reads either comment, so `npm test` staying at 843
+    is the whole of the check.
   - From: Code Review Override - the second clip, and the probe nothing published
 
 ### Create and Deploy GitHub Pages Override
@@ -138,87 +103,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 161 earlier items in `TODO-archive.md`, newest last.
+> 164 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `BANNER_FIELD`'s docstring measures its clearance from the two readouts
-  and not from the play area the row also belongs to
-  - **Issue**: `src/render.ts:499` says the 20 "is what keeps that blanking
-    clear of the two readouts that share the row", and names the gaps it leaves
-    `COMBO x8` and `BOSS 20/20` at the 60-column floor. Both figures check out.
-    What the paragraph does not say is that `HUD_ROWS` is also `gameTop`, so
-    `drawBanner` blanks 20 cells of the play area's top row, and `drawHUD` runs
-    after `drawTunnel` and `drawEntitiesFar`. Measured by rendering a flown run
-    at three grids with no banner live and collecting the non-space columns of
-    row 3: at 60 and 80 columns the far tunnel mouth sits inside the span
-    `>> WARNING <<` already covered, so nothing changes, but at 128 columns the
-    mouth reaches columns 55, 56, 70 and 71 while the warning covers 57 to 69 -
-    so a warning or a `[ NEW BEST ]` now blanks four cells of tunnel that the
-    old draw left standing. It is four cells for two or three seconds and the
-    trade is almost certainly the right one; what is missing is any record that
-    the trade was made, in the one docstring whose subject is how far the
-    blanking reaches.
-  - **Goal**: Add a sentence to `BANNER_FIELD` saying the field is blanked out
-    of the play area's own top row as well as clear of the readouts, with the
-    four cells at 128 columns as the cost and the reason it is accepted. No
-    code change is wanted unless the measurement says otherwise.
-  - From: UI/UX Override - the drops are three cells for one frame
-- [x] Encounter Legibility 3 - the hold keeps the three in three cells and the
-  middle one spends all of it under the ship's own tracer
-  - **Issue**: `BOSS_DROP_HOLD` does what its docstring claims and the far kill
-    still reads as two. Verified on the painted canvas of a real browser: the
-    three now hold three distinct cells for 43 to 48 frames against 1 to 15
-    before, and staged far kills - the same `killBoss`, the same burst, an
-    empty bullet list - read as three inside the first second at 27 of 27 grid
-    and depth combinations against 12 of 27 on the build before this one. The
-    drift is fixed. What is left is that `dropBossPowerups` centres the spread
-    on the boss's `x`, `spawnBoss` fixes that at `0`, and the middle drop is
-    therefore always `rapid` at exactly `x: 0` - the tunnel axis, which is the
-    screen column a bolt travels up and the only column the twentieth hit can
-    have been landed from. `drawBullets` paints `│` in `C.BRIGHT_CYAN` at the
-    bolt's cell and `C.CYAN` one row above, and it runs after
-    `drawEntitiesFar`, so the middle drop's cell carries a cyan `│` rather than
-    its own `!` for as long as any bolt projects into it. Ten flown far kills
-    at the 60-column floor - ENTER from the title screen, the pilot dodging on
-    the page's own key listeners, SPACE through the real `keydown` handler, the
-    kill landed by the engine's own collision, the trigger released on the kill
-    frame - across five tap rates from 15 Hz down to 3.8 Hz: every one landed
-    far, z between -151 and -188, and not one read as three glyphs inside the
-    1.2 s hold. A bolt sat on the middle drop's own cell for 31 to 47 of the 48
-    frames watched at every rate. The rate does not rescue it because one
-    screen row at the floor is about 12 units of depth and `BULLET_SPEED` 60
-    puts a bolt every 12 units along the column at 5 Hz. Naming one frame, 800
-    ms after a kill at z=-194.40 at 60x20: shield at cell 28,4 shows `+` in ink
-    10 READABLE, rapid at 30,4 shows `│` in ink 6 COVERED, slow at 31,4 shows
-    `~` in ink 13 READABLE. Releasing the trigger does not cure it, which is
-    what the request expected it to do: `fireVolley` pushes three bolts on
-    every `justPressed.SPACE` with no cadence gate and each lives about 103
-    frames, so the release stops new bolts and does nothing about the column
-    already strung the length of the tunnel - measured from the release frame,
-    the three first read as three at frame 69 with the pilot steering and never
-    inside 150 frames with the ship held on the axis, against a hold ending at
-    frame 36. It is worst at the floor and not only the floor: at 128 columns
-    the same on-axis seat covers the middle cell on 32 of 36 frames. The
-    release's own new case `a far kill is read as three glyphs once its burst
-    clears` passes because it stages the kill into a tunnel with no bolts in
-    it.
-  - **Goal**: Resolve to [boss-drop-tracer-column.prompt.md](.claude/prompts/boss-drop-tracer-column.prompt.md)
-  - From: Bigger Features
-- [x] `COMBO x8` is eight columns wide, not the ten its own header claims
-  - **Issue**: `test/hud-row.test.mjs:23` says the counter "tops out at COMBO
-    x8, ten columns wide ending at column 9". `drawHUD` writes it with
-    `screen.putString(2, HUD_ROWS, combo, ...)` at `src/render.ts:612` and
-    `COMBO x8` is eight characters, so it occupies columns 2 through 9 - eight
-    columns wide, not ten. Both figures the paragraph derives from it are
-    right: it does end at column 9, and `BANNER_FIELD`'s 20 does open at
-    column 20 on the 60-column floor, which is the 10 columns of gap the
-    header claims. Only the width is wrong. This is the one file the
-    repository points the next editor at to do that arithmetic, so it is the
-    figure a reader would carry into the next change, and the `COMBO_MAX` end
-    of the margin is the one it would be carried into. The phrase predates
-    this turn; the turn rewrote the paragraph around it without correcting it.
-  - **Goal**: Say eight columns wide, or drop the width figure and keep
-    "ending at column 9", which is what the gap is actually derived from.
-  - From: UI/UX Override - the middle drop is under the tracer
 - [x] Three em dashes entered `test/hud-row.test.mjs` against the house style
   - **Issue**: The rewritten header uses em dashes mid-sentence at
     `test/hud-row.test.mjs:3`, `:4` and `:23`. Twenty of the repository's
@@ -247,3 +133,81 @@ the roadmap section each one came from.
     `dropPowerup` produces. Nothing should change behaviourally and the suite
     should stay green.
   - From: UI/UX Override - the middle drop is under the tracer
+- [x] **Unshared Drop Clip**: Four docstrings still say `drawBullets` has one clip and the hit test
+  reads it, and this release gave it a second one the hit test does not read
+  - **Issue**: `drawBullets` now draws by `inCorridor(col, row) && !onDrop(col,
+    row)` (`src/render.ts:476`, `index.html:3022`) while `contacts` still reads
+    `tracerDrawn` alone (`src/game.ts:1702`). Four passages state the single
+    clip as an invariant, and none was touched: `drawBullets`' own docstring,
+    eleven lines above the paragraph that introduces the second clip - "The hit
+    test reads the same clip, and that is the whole of what it shares with this:
+    a frame that draws no tracer registers nothing on that frame"
+    (`src/render.ts:399`, `index.html:2953`); `tracerDrawn`'s - "Read by
+    `drawBullets` and by the pulse cannon's hit test, which is the whole reason
+    it is one function" (`src/types.ts:303`); and `contacts`' in both builds -
+    "neither a target that is not being drawn nor a tracer that is not being
+    drawn can be half of a contact" and "the two cannot come to state different
+    corridors" (`src/game.ts:1596` and `:1601`, `index.html:2391` and `:2394`).
+    Name the state: the release's own staged scene, the ship held at `x: 0`, a
+    boss killed at z=-190, the axis column strung with bolts. A bolt projects
+    into the middle drop's cell, `drawBullets` paints no bar there - which is
+    what the three new `test/boss.test.mjs` cases assert, and disabling the clip
+    in both builds fails exactly those six and nothing else - and `tracerDrawn`
+    still returns true for that cell, so `contacts` counts a tracer the player
+    was not shown. The behaviour is the right one, since a pickup absorbing a
+    shot would be worse than the defect being fixed; what is wrong is that one
+    docstring now contradicts itself inside a single comment block and three
+    others state a property the code stopped having.
+  - **Goal**: Leave the behaviour alone and reconcile the four passages. Say
+    that the corridor clip is the one the hit test shares and the drop clip is
+    deliberately not, with the reason: the drop clip is about what the player is
+    being asked to read in a cell, not a statement that the shot is not in it.
+    Worth saying in the same breath how far the exposure reaches, because it
+    bounds the "saw no bolt, the block died anyway" case the corridor clip was
+    added for: a drop's block is `size = max(1, floor(scale * 2))`, which is 1
+    at every scale under 1 and so one cell at every depth in front of the ship,
+    so the clip can take at most one of a bolt's two cells and the other is
+    still painted - except where `bScr.row - 1 < gameTop` left the bolt one cell
+    to begin with. Both builds, and `src/types.ts` as well as the two renderers.
+  - From: Code Review Override - the second clip, and the probe nothing published
+- [x] `drawBullets` calls 48 frames "the read window" and `BOSS_DROP_HOLD` makes
+  that window 36
+  - **Issue**: `src/render.ts:425` and `index.html:2977` say a bolt "sat on that
+    cell for 31 to 47 of the 48 frames of the read window". `BOSS_DROP_HOLD` is
+    1.2 (`src/types.ts:716`), which is 36 frames at 30 fps, and that is how the
+    suite derives the window - `Math.round(build.BOSS_DROP_HOLD * 30)` in all
+    three of the new `test/boss.test.mjs` cases. The same release's changelog
+    entry keeps the two figures apart on purpose, writing "inside the 1.2 s
+    hold" for the window and "the 48 frames watched" for the measurement, so the
+    docstring is the one copy that merges them. Name the reader: anyone deriving
+    the read window from the constant gets 36 and finds a docstring in both
+    builds claiming it is 48.
+  - **Goal**: Call the 48 what the changelog calls it - the frames watched - in
+    both builds, and leave "read window" for the 36 that `BOSS_DROP_HOLD` buys.
+  - From: Code Review Override - the second clip, and the probe nothing published
+- [x] `test/probes/drop-clip.mjs` reached the rig and none of the published
+  probe listings
+  - **Issue**: the probe is wired correctly - `test/probes/probes.mjs` declares
+    it and `test/probes.test.mjs` discovers it off its own source, so the suite
+    runs it without a line being added. The published pages are the half that
+    did not move. `docs/project-structure.html:33` to `:41` lists all nine other
+    files in `test/probes/` by name with a one-line description each and omits
+    this one, so the tree publishes a directory the repository no longer has.
+    `docs/development.html:33` explains the flag as "the placement walk in
+    `column`, `frame-rate` and `seen-versus-kill`, and the frame count in
+    `free-flight`", and `CHEATSHEET.md:136` with its published copy
+    `docs/cheatsheet.html:59` says the same; `drop-clip` reads `--count` as
+    frames per figure and `--passes` as measurements of the pair, which its own
+    header says at `test/probes/drop-clip.mjs:28`, so both enumerations are a
+    probe short. Name the reader: someone working out what
+    `npm run probe -- drop-clip --count 1` narrows finds the probe in neither
+    list and the file in neither tree.
+  - **Goal**: Add `drop-clip.mjs` to the tree in `docs/project-structure.html`
+    in the shape the other nine use, and name it in the `--count` sentences in
+    `docs/development.html` and `CHEATSHEET.md`. The cheatsheet's published copy
+    has to move with the markdown, since `test/docs-site.test.mjs` reads every
+    published page against the repository file it is published from. While in
+    `docs/development.html`, close the blank line this release left at `:50`
+    between the new `drop-clip` paragraph and the one after it - no other pair
+    of paragraphs in that file carries one.
+  - From: Code Review Override - the second clip, and the probe nothing published
