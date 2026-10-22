@@ -302,9 +302,16 @@ export function tracerLit(
  * renderer had clipped to the edge.
  *
  * Read by `drawBullets` and by the pulse cannon's hit test, which is the whole
- * reason it is one function: a frame that draws no tracer registers nothing on
- * that frame, and the two deciding that separately is how they come to state
+ * reason it is one function: a frame whose tracer this clips registers nothing
+ * on that frame, and the two deciding that separately is how they come to state
  * different corridors.
+ *
+ * It is the corridor and nothing else. `drawBullets` carries a second clip of
+ * its own, for the cells a dropped powerup was just drawn into, and the hit
+ * test does not read that one - so a tracer this function admits can still go
+ * unpainted, and `drawBullets` says why that split is the one wanted. Nothing
+ * about it belongs in here: a drop's cell is a fact about the frame being
+ * drawn, while this is a fact about the tunnel.
  */
 export function tracerDrawn(
   state: GameState,

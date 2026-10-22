@@ -1594,8 +1594,19 @@ export class Game {
    * is projected to and the row above, and on neither of them where that column
    * has left the corridor; `drawEntitiesFar` gives a target a block of `size`
    * cells about its own projected centre. The two either share a cell or they
-   * do not, and neither a target that is not being drawn nor a tracer that is
-   * not being drawn can be half of a contact.
+   * do not, and a target that is not being drawn cannot be half of a contact.
+   *
+   * A tracer the corridor is not drawing cannot be half of one either, and that
+   * is as far as the symmetry goes. `drawBullets` has a second clip this does
+   * not read - it gives up a cell a dropped powerup was just drawn into - so a
+   * tracer can go unpainted on a frame this still counts it on. That is the
+   * intended split and `drawBullets` argues it at length: the corridor clip says
+   * the shot has left the columns a target can be hit in, while the drop clip
+   * says only that the cell is being spent on the pickup, and reading it here
+   * would cost a player hits for shooting through their own drops. The gap it
+   * leaves is one cell of a two-cell tracer, with a bolt still painted a row
+   * away from it except on the play area's top row, where
+   * `bScr.row - 1 < gameTop` left the bolt one cell to begin with.
    *
    * The corridor clip is read from `tracerDrawn`, which is what `drawBullets`
    * draws by, so the two cannot come to state different corridors. Leaving it

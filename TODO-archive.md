@@ -3094,3 +3094,85 @@ still be found by name.
     floor. Then re-check it fails on a drifted port by editing one build's
     `colRange` and running `node --test test/parity.test.mjs`.
   - From: UI/UX Override - the drops are three cells for one frame
+
+## Archived 10-22-26
+
+- [x] `BANNER_FIELD`'s docstring measures its clearance from the two readouts
+  and not from the play area the row also belongs to
+  - **Issue**: `src/render.ts:499` says the 20 "is what keeps that blanking
+    clear of the two readouts that share the row", and names the gaps it leaves
+    `COMBO x8` and `BOSS 20/20` at the 60-column floor. Both figures check out.
+    What the paragraph does not say is that `HUD_ROWS` is also `gameTop`, so
+    `drawBanner` blanks 20 cells of the play area's top row, and `drawHUD` runs
+    after `drawTunnel` and `drawEntitiesFar`. Measured by rendering a flown run
+    at three grids with no banner live and collecting the non-space columns of
+    row 3: at 60 and 80 columns the far tunnel mouth sits inside the span
+    `>> WARNING <<` already covered, so nothing changes, but at 128 columns the
+    mouth reaches columns 55, 56, 70 and 71 while the warning covers 57 to 69 -
+    so a warning or a `[ NEW BEST ]` now blanks four cells of tunnel that the
+    old draw left standing. It is four cells for two or three seconds and the
+    trade is almost certainly the right one; what is missing is any record that
+    the trade was made, in the one docstring whose subject is how far the
+    blanking reaches.
+  - **Goal**: Add a sentence to `BANNER_FIELD` saying the field is blanked out
+    of the play area's own top row as well as clear of the readouts, with the
+    four cells at 128 columns as the cost and the reason it is accepted. No
+    code change is wanted unless the measurement says otherwise.
+  - From: UI/UX Override - the drops are three cells for one frame
+- [x] Encounter Legibility 3 - the hold keeps the three in three cells and the
+  middle one spends all of it under the ship's own tracer
+  - **Issue**: `BOSS_DROP_HOLD` does what its docstring claims and the far kill
+    still reads as two. Verified on the painted canvas of a real browser: the
+    three now hold three distinct cells for 43 to 48 frames against 1 to 15
+    before, and staged far kills - the same `killBoss`, the same burst, an
+    empty bullet list - read as three inside the first second at 27 of 27 grid
+    and depth combinations against 12 of 27 on the build before this one. The
+    drift is fixed. What is left is that `dropBossPowerups` centres the spread
+    on the boss's `x`, `spawnBoss` fixes that at `0`, and the middle drop is
+    therefore always `rapid` at exactly `x: 0` - the tunnel axis, which is the
+    screen column a bolt travels up and the only column the twentieth hit can
+    have been landed from. `drawBullets` paints `│` in `C.BRIGHT_CYAN` at the
+    bolt's cell and `C.CYAN` one row above, and it runs after
+    `drawEntitiesFar`, so the middle drop's cell carries a cyan `│` rather than
+    its own `!` for as long as any bolt projects into it. Ten flown far kills
+    at the 60-column floor - ENTER from the title screen, the pilot dodging on
+    the page's own key listeners, SPACE through the real `keydown` handler, the
+    kill landed by the engine's own collision, the trigger released on the kill
+    frame - across five tap rates from 15 Hz down to 3.8 Hz: every one landed
+    far, z between -151 and -188, and not one read as three glyphs inside the
+    1.2 s hold. A bolt sat on the middle drop's own cell for 31 to 47 of the 48
+    frames watched at every rate. The rate does not rescue it because one
+    screen row at the floor is about 12 units of depth and `BULLET_SPEED` 60
+    puts a bolt every 12 units along the column at 5 Hz. Naming one frame, 800
+    ms after a kill at z=-194.40 at 60x20: shield at cell 28,4 shows `+` in ink
+    10 READABLE, rapid at 30,4 shows `│` in ink 6 COVERED, slow at 31,4 shows
+    `~` in ink 13 READABLE. Releasing the trigger does not cure it, which is
+    what the request expected it to do: `fireVolley` pushes three bolts on
+    every `justPressed.SPACE` with no cadence gate and each lives about 103
+    frames, so the release stops new bolts and does nothing about the column
+    already strung the length of the tunnel - measured from the release frame,
+    the three first read as three at frame 69 with the pilot steering and never
+    inside 150 frames with the ship held on the axis, against a hold ending at
+    frame 36. It is worst at the floor and not only the floor: at 128 columns
+    the same on-axis seat covers the middle cell on 32 of 36 frames. The
+    release's own new case `a far kill is read as three glyphs once its burst
+    clears` passes because it stages the kill into a tunnel with no bolts in
+    it.
+  - **Goal**: Resolve to [boss-drop-tracer-column.prompt.md](.claude/prompts/boss-drop-tracer-column.prompt.md)
+  - From: Bigger Features
+- [x] `COMBO x8` is eight columns wide, not the ten its own header claims
+  - **Issue**: `test/hud-row.test.mjs:23` says the counter "tops out at COMBO
+    x8, ten columns wide ending at column 9". `drawHUD` writes it with
+    `screen.putString(2, HUD_ROWS, combo, ...)` at `src/render.ts:612` and
+    `COMBO x8` is eight characters, so it occupies columns 2 through 9 - eight
+    columns wide, not ten. Both figures the paragraph derives from it are
+    right: it does end at column 9, and `BANNER_FIELD`'s 20 does open at
+    column 20 on the 60-column floor, which is the 10 columns of gap the
+    header claims. Only the width is wrong. This is the one file the
+    repository points the next editor at to do that arithmetic, so it is the
+    figure a reader would carry into the next change, and the `COMBO_MAX` end
+    of the margin is the one it would be carried into. The phrase predates
+    this turn; the turn rewrote the paragraph around it without correcting it.
+  - **Goal**: Say eight columns wide, or drop the width figure and keep
+    "ending at column 9", which is what the gap is actually derived from.
+  - From: UI/UX Override - the middle drop is under the tracer

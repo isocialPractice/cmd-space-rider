@@ -558,6 +558,64 @@ test('docs: a page published from a repository file carries all of that file', (
   }
 });
 
+/**
+ * The `test/probes/` listing out of the tree in `docs/project-structure.html`,
+ * as the file names it publishes.
+ *
+ * Read off the indent rather than off a line count, so the tree can gain a
+ * sibling above or below the folder without this going looking in the wrong
+ * place: the folder's own line ends in `probes/`, every file under it is
+ * indented past that, and the first line back at the folder's own depth closes
+ * it.
+ */
+function publishedProbeTree() {
+  const lines = pageText('project-structure.html').split(/\r?\n/);
+  const at = lines.findIndex((line) => /^\s*probes\/\s+#/.test(line));
+  assert.ok(at >= 0, 'project-structure.html publishes no test/probes/ folder');
+
+  const depth = lines[at].search(/\S/);
+  const named = [];
+  for (const line of lines.slice(at + 1)) {
+    if (!line.trim()) break;
+    if (line.search(/\S/) <= depth) break;
+    const file = line.trim().match(/^([\w.-]+\.mjs)\b/);
+    if (file) named.push(file[1]);
+  }
+  return named;
+}
+
+test('docs: the published probe tree names every probe the repository has', () => {
+  // The tree lists every file in test/probes/ with a line of its own, and until
+  // now nothing compared that list against the folder - so a probe added to the
+  // rig and left out of the tree published a directory the repository no longer
+  // had, in silence. That is how `drop-clip` shipped: test/probes/probes.mjs
+  // declared it and test/probes.test.mjs discovered it off its own source, so
+  // the suite ran it with no line added anywhere, and the one place a reader
+  // goes to find out what is in the folder was the half that did not move.
+  //
+  // Both directions, for the same reason HARNESS_EXCLUSIONS is compared both
+  // ways: a name published for a file that has been deleted sends a reader to a
+  // probe that is not there, which is the same fault read from the other end.
+  const onDisk = readdirSync(join(REPO_ROOT, 'test', 'probes'))
+    .filter((name) => name.endsWith('.mjs'))
+    .sort();
+  const published = publishedProbeTree();
+  assert.ok(published.length, 'project-structure.html names no probe files');
+
+  const missing = onDisk.filter((name) => !published.includes(name));
+  const stale = published.filter((name) => !onDisk.includes(name));
+  assert.deepEqual(
+    missing, [],
+    `test/probes/ holds ${missing.length} file(s) project-structure.html does not`
+    + ` name: ${missing.join(', ')}`
+  );
+  assert.deepEqual(
+    stale, [],
+    `project-structure.html names ${stale.length} probe file(s) test/probes/ does`
+    + ` not hold: ${stale.join(', ')}`
+  );
+});
+
 /* ===== The nav's own geometry =====
    Everything below is decided by the stylesheet as text, so it runs without a
    browser - which is the point. A browser was the only thing that had ever

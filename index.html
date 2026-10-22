@@ -667,7 +667,12 @@ function tracerLit(col,row,gameTop,gameBottom,w){
 // screen would go on registering.
 //
 // Read by drawBullets and by the pulse cannon's hit test, which is the whole
-// reason it is one function.
+// reason it is one function - and it is the corridor and nothing else.
+// drawBullets carries a second clip of its own, for the cells a dropped powerup
+// was just drawn into, and the hit test does not read that one, so a tracer
+// this function admits can still go unpainted. drawBullets says why that split
+// is the one wanted. Nothing about it belongs in here: a drop's cell is a fact
+// about the frame being drawn, while this is a fact about the tunnel.
 function tracerDrawn(state,col,row,gameTop,gameBottom,w){
   if(state.asteroidTime>0)return col>=0&&col<w;
   return tracerLit(col,row,gameTop,gameBottom,w);
@@ -2387,10 +2392,21 @@ class Game{
   // projected to and the row above, and on neither of them where that column has
   // left the corridor; drawEntitiesFar gives a target a block of `size` cells
   // about its own projected centre. The two either share a cell or they do not,
-  // and neither a target that is not being drawn nor a tracer that is not being
-  // drawn can be half of a contact.
+  // and a target that is not being drawn cannot be half of a contact.
   //
-  // The corridor clip is read from tracerLit, which is what drawBullets draws
+  // A tracer the corridor is not drawing cannot be half of one either, and that
+  // is as far as the symmetry goes. drawBullets has a second clip this does not
+  // read - it gives up a cell a dropped powerup was just drawn into - so a
+  // tracer can go unpainted on a frame this still counts it on. That is the
+  // intended split and drawBullets argues it at length: the corridor clip says
+  // the shot has left the columns a target can be hit in, while the drop clip
+  // says only that the cell is being spent on the pickup, and reading it here
+  // would cost a player hits for shooting through their own drops. The gap it
+  // leaves is one cell of a two-cell tracer, with a bolt still painted a row
+  // away from it except on the play area's top row, where bScr.row - 1 < gameTop
+  // left the bolt one cell to begin with.
+  //
+  // The corridor clip is read from tracerDrawn, which is what drawBullets draws
   // by, so the two cannot come to state different corridors. Leaving it out -
   // which is how this stood until the clip was measured - let a shot register
   // from a column the tunnel no longer reaches: drawEntitiesFar draws a target's
@@ -2950,9 +2966,11 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom,record=null){
  * rounded while registering floored is worse again - the glyph the player aims
  * by would sit a column off what the hit test reads, on half of all positions.
  *
- * The hit test reads the same clip, and that is the whole of what it shares
- * with this: a frame that draws no tracer registers nothing on that frame. The
- * flight itself is not cut short. The span the walls are drawn on runs a little
+ * The hit test reads this corridor clip, and that is the whole of what it
+ * shares with this pass: a frame whose tracer the corridor clips registers
+ * nothing on that frame. There is a second clip further down that the hit test
+ * does not read, deliberately, and that paragraph says why. The flight itself
+ * is not cut short. The span the walls are drawn on runs a little
  * narrower than the tunnel radius projects to, so culling the bullet outright
  * where it crosses would cost real hits at the far end - instead the shot goes
  * dark, and lights again if the corridor widens back around its column.
@@ -2965,6 +2983,29 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom,record=null){
  * tracer skips them. The corridor clip above is about where a shot can still
  * hit something; this one is about what the player is being asked to read.
  *
+ * The hit test does not read this one. `contacts` goes on deciding off
+ * `tracerDrawn` alone, and that is the intended split rather than an oversight:
+ * the corridor clip says the shot has left the columns a target can be hit in,
+ * while this one says nothing about where the shot is - the bolt is in the
+ * cell, and the cell is being spent on the drop instead. Clipping the register
+ * here too would take hits off a player for having shot through their own
+ * pickups, which is the opposite of what this clip is for.
+ *
+ * How far that reaches is bounded by how much of a tracer one drop can take. A
+ * drop's block is `max(1, floor(scale * 2))`, which is 1 at every scale under 1
+ * and so one cell at every depth in front of the ship, while a tracer is two -
+ * its own row and the row above. So a drop takes one of the two, the register
+ * can land on the cell it took, and a bolt is still painted a row away from it
+ * on the same frame. For the player to be shown nothing at all, every cell the
+ * corridor still admits has to be a cell a drop took: a bolt on the play area's
+ * own top row, where `bScr.row - 1 < gameTop` left it one cell to begin with; a
+ * bolt whose upper half has already left the corridor, which is the narrowing
+ * the two halves are tested separately for; or two drops a row apart in one
+ * column, which a boss kill does not produce, since its three land side by side
+ * across the block it died in. That is the "saw no bolt, the block died anyway"
+ * case the corridor clip was added for, and here it is one cell for as long as
+ * a drop stands on it rather than a column for the rest of a shot's life.
+ *
  * It is here because of what the tunnel axis is. `spawnBoss` fixes the boss at
  * `x: 0`, `dropBossPowerups` centres the three drops on the boss's own x, and
  * POWERUP_KINDS puts `rapid` in the middle - so the middle drop lands at
@@ -2974,9 +3015,11 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom,record=null){
  * have been landed from the boss's own column. So the cell the middle drop
  * wants is the cell the player's own tracer is in, and this pass runs after
  * `drawEntitiesFar`. Measured on the painted canvas at the 60-column floor, a
- * bolt sat on that cell for 31 to 47 of the 48 frames of the read window at
- * every tap rate from 15 Hz down to 3.8 Hz, and a kill that paid three drops
- * read as two glyphs.
+ * bolt sat on that cell for 31 to 47 of the 48 frames watched at every tap
+ * rate from 15 Hz down to 3.8 Hz, and a kill that paid three drops read as two
+ * glyphs. The 48 is how long the measurement ran, not the window it was taken
+ * over: BOSS_DROP_HOLD is 1.2 s, which is the 36 frames at 30 fps that the
+ * suite derives it as.
  *
  * Moving the drops instead was measured and does not work. One cell is the
  * whole of the derived gap at that depth - see `bossDropSpread` - so the three

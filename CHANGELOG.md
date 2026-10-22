@@ -1,5 +1,90 @@
 # Changelog
 
+## [1.0.0-alpha.0.11.4] - 2026-10-22
+
+### Fixed
+
+- Four passages stating a single tracer clip as an invariant, eleven lines above
+  the paragraph that introduces a second one. 0.11.3 gave `drawBullets` a drop
+  clip - it paints by `inCorridor(col, row) && !onDrop(col, row)` - while
+  `contacts` goes on deciding off `tracerDrawn` alone, and none of the four was
+  touched: `drawBullets`' own docstring ("the hit test reads the same clip, and
+  that is the whole of what it shares with this"), `tracerDrawn`'s, and
+  `contacts`' in both builds ("neither a target that is not being drawn nor a
+  tracer that is not being drawn can be half of a contact"). One of them
+  contradicted itself inside a single comment block and three stated a property
+  the code had stopped having.
+
+  The behaviour is left alone, because it is the right one: a pickup absorbing a
+  shot would be worse than the fault the drop clip was added for. What the four
+  now say is which clip is shared and why the other is not. The corridor clip is
+  a statement about where the shot can still be, so the hit test reads it; the
+  drop clip is a statement about what the player is being asked to read in a
+  cell, and says nothing about whether the bolt is in it, so reading it in the
+  hit test would cost a player hits for shooting through their own drops.
+
+  `drawBullets`' own docstring also carries how far the exposure reaches, in
+  both builds, which is what bounds the "saw no bolt, the block died anyway"
+  case the corridor clip was added for. `contacts` carries it in brief and
+  `tracerDrawn` defers to it, since a drop's cell is a fact about the frame
+  being drawn rather than about the tunnel.
+  A drop's block is `max(1, floor(scale * 2))`, which is 1 at every scale under
+  1 and so one cell at every depth in front of the ship, while a tracer is two -
+  its own row and the row above. So a drop takes one of the two, the register can
+  land on the cell it took, and a bolt is still painted a row away from it on the
+  same frame. Nothing is shown at all only where every cell the corridor still
+  admits is one a drop took: a bolt on the play area's top row, where
+  `bScr.row - 1 < gameTop` left it one cell to begin with; a bolt whose upper
+  half has already left the corridor, which is the narrowing the two halves are
+  tested separately for; or two drops a row apart in one column, which a boss
+  kill does not produce, since its three land side by side across the block it
+  died in. One cell for as long as a drop stands on it, rather than a column for
+  the rest of a shot's life.
+
+  `index.html`'s copy of `contacts` also named `tracerLit` as what the corridor
+  clip is read from, where both builds read `tracerDrawn`. Corrected in passing,
+  inside the passage being reconciled.
+
+- `drawBullets` calling 48 frames "the read window" in both builds, where
+  `BOSS_DROP_HOLD` is 1.2 s and so 36 frames at 30 fps - which is how the suite
+  derives it, as `Math.round(build.BOSS_DROP_HOLD * 30)` in all three of
+  0.11.3's new `test/boss.test.mjs` cases. The 48 is how long the measurement
+  ran, which is what 0.11.3's changelog entry already called it; the docstring
+  was the one copy that merged the two figures, so anyone deriving the window
+  from the constant got 36 and found a comment claiming 48.
+
+- `test/probes/drop-clip.mjs` reaching the rig and none of the published probe
+  listings. The wiring was right - `test/probes/probes.mjs` declares it and
+  `test/probes.test.mjs` discovers it off its own source, so the suite ran it
+  with no line added anywhere - and that is exactly why the listings were missed.
+  `docs/project-structure.html` named the other nine files in `test/probes/` and
+  omitted this one, publishing a directory the repository no longer had, and the
+  `--count` sentences in `docs/development.html`, `CHEATSHEET.md` and its
+  published page enumerated the probes that read the flag a probe short. The
+  probe reads `--count` as frames per figure and `--passes` as measurements of
+  the pair it times, which all three now say. The rig's own
+  `test/probes.test.mjs` called `count` "not one unit across the four probes that
+  read it", which has been five since 0.11.3.
+
+  Also closed the blank line `docs/development.html` carried between the new
+  `drop-clip` paragraph and the one after it - no other pair of paragraphs in
+  that file had one.
+
+### Added
+
+- `docs: the published probe tree names every probe the repository has`, which
+  reads the `test/probes/` listing out of the tree in
+  `docs/project-structure.html` and compares it against the folder in both
+  directions. The listing is the one place a reader goes to find out what is in
+  that folder, and nothing had ever compared the two, so a probe added to the rig
+  and left out of the tree drifted in silence - which is how the item above came
+  to exist. Both directions for the same reason `HARNESS_EXCLUSIONS` is compared
+  both ways: a name published for a file that has been deleted sends a reader to
+  a probe that is not there, which is the same fault read from the other end. The
+  listing is found by indent rather than by line count, so the tree can gain a
+  sibling either side of the folder without the check going looking in the wrong
+  place.
+
 ## [1.0.0-alpha.0.11.3] - 2026-10-21
 
 ### Fixed
