@@ -430,7 +430,7 @@ function drawBlock(
  * can land on the cell it took, and a bolt is still painted a row away from it
  * on the same frame. For the player to be shown nothing at all, every cell the
  * corridor still admits has to be a cell a drop took: a bolt on the play area's
- * own top row, where `bScr.row - 1 < gameTop` left it one cell to begin with; a
+ * own top row, where `pos.row - 1 < gameTop` left it one cell to begin with; a
  * bolt whose upper half has already left the corridor, which is the narrowing
  * the two halves are tested separately for; or two drops a row apart in one
  * column, which a boss kill does not produce, since its three land side by side

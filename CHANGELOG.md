@@ -1,5 +1,44 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Two of the four passages 0.11.4 reconciled stating a bound the code does not
+  support, and a symbol the pass they sit in does not have. Both are comments,
+  so nothing about what the game does changes and no version moves for them.
+
+  `contacts`' paragraph closed on the drop clip leaving "a bolt still painted a
+  row away from it except on the play area's top row" - one exception, where
+  `drawBullets`' paragraph in the same release lists three and that release's
+  changelog entry lists the same three. The two it dropped are both reachable. A
+  bolt whose upper half has already left the corridor is one cell before any
+  drop is involved: `tunnelSpan`'s `halfSpan` is `floor(3 + t * (center - 4))`
+  with `t` climbing with the row, so the span is narrower a row up and
+  `inCorridor(col, row - 1)` can fail while `inCorridor(col, row)` holds, which
+  is the narrowing the two halves are tested separately for. And two drops a row
+  apart in one column take both cells, a boss kill not producing that only
+  because `dropBossPowerups` gives its three one `y` and one `z`. So anyone
+  bounding the exposure off the hit test's own docstring - which is where a
+  reader asking what the hit test counts goes - concluded a drop can never leave
+  the player nothing to see off the top row, which is the one thing that
+  paragraph was rewritten to bound.
+
+  It now states the condition in full, that a bolt is still painted a row away
+  unless every cell the corridor admits is one a drop took, and defers the three
+  states that reach to `drawBullets`. One copy of the list, kept beside the clip
+  it describes.
+
+- `drawBullets`' paragraph naming `bScr.row - 1 < gameTop` as what "left it one
+  cell to begin with", in both builds. `bScr` is `contacts`' local; the draw
+  pass projects into `pos` and guards with `pos.row - 1 >= gameTop`, and `bScr`
+  appeared nowhere else in `src/render.ts`. The sentence is about what is
+  painted, which is that pass, so the symbol a reader was sent to look for was
+  in neither the function nor the file the docstring sits in. Both builds now
+  name the draw pass's own guard, `pos.row - 1 < gameTop`. 0.11.4 corrected this
+  same class of drift in `contacts`' comment, `tracerLit` where both builds read
+  `tracerDrawn`, and introduced it in the renderer on the same turn.
+
 ## [1.0.0-alpha.0.11.4] - 2026-10-22
 
 ### Fixed

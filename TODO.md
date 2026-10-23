@@ -9,54 +9,6 @@ its origin survives archiving into `## Complete`.
 - [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
   - From: Bigger Features
 
-### Code Review Override - the bound in brief, and the pass that borrowed a name
-
-#### Resolve Issues
-
-- [ ] Unshared Drop Clip 1 - two of the four reconciled passages state a bound
-  the code does not support, and a symbol the pass they sit in does not have
-  - **Issue**: Both are in the passages 0.11.4 rewrote, and both are the same
-    paragraph read in two builds.
-
-    First, `contacts`' new paragraph closes on "a bolt still painted a row away
-    from it except on the play area's top row, where `bScr.row - 1 < gameTop`
-    left the bolt one cell to begin with" (`src/game.ts:1607` and
-    `index.html:2405`) - one exception, where `drawBullets`' paragraph in the
-    same release lists three and the changelog entry lists the same three. The
-    two it drops are both reachable. A bolt whose upper half has already left
-    the corridor is one cell before any drop is involved: `tunnelSpan`'s
-    `halfSpan` is `floor(3 + t * (center - 4))` with `t` climbing with the row
-    (`src/types.ts:268`), so the span is narrower a row up and
-    `inCorridor(col, row - 1)` can fail while `inCorridor(col, row)` holds -
-    which is exactly the narrowing `drawBullets` says the two halves are tested
-    separately for. And two drops a row apart in one column take both cells, a
-    boss kill not producing that only because `dropBossPowerups` gives its
-    three one `y` and one `z` (`src/game.ts:1239`). Name the reader: anyone
-    bounding the exposure off the hit test's own docstring - which is where a
-    reader asking what the hit test counts goes - concludes a drop can never
-    leave the player nothing to see off the top row, which is the one thing
-    this paragraph was rewritten to bound.
-
-    Second, `drawBullets`' own paragraph names `bScr.row - 1 < gameTop` as what
-    "left it one cell to begin with" (`src/render.ts:433` and
-    `index.html:3001`). `bScr` is `contacts`' local (`src/game.ts:1699`,
-    `index.html:2485`); `drawBullets` projects into `pos` and guards with
-    `pos.row - 1 >= gameTop` (`src/render.ts:511`, `index.html:3070`), and
-    `bScr` appears nowhere else in `src/render.ts`. The sentence is about what
-    is painted, which is this pass, so the symbol a reader is sent to look for
-    is not in the function or the file the docstring sits in. 0.11.4 corrected
-    this same class of drift in `contacts`' comment - `tracerLit` where both
-    builds read `tracerDrawn` - and introduced it in the renderer on the same
-    turn.
-  - **Goal**: Give `contacts`' paragraph the three cases `drawBullets` carries,
-    or drop its `except` clause and point at `drawBullets` for the bound rather
-    than naming a partial one - the second is the smaller edit and keeps one
-    copy of the list. Name the draw pass's own guard in `drawBullets`'
-    paragraph, `pos.row - 1 < gameTop`, in both builds. No behaviour change,
-    and nothing in the suite reads either comment, so `npm test` staying at 843
-    is the whole of the check.
-  - From: Code Review Override - the second clip, and the probe nothing published
-
 ### Create and Deploy GitHub Pages Override
 
 ## Quick Wins
@@ -103,20 +55,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 164 earlier items in `TODO-archive.md`, newest last.
+> 165 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Three em dashes entered `test/hud-row.test.mjs` against the house style
-  - **Issue**: The rewritten header uses em dashes mid-sentence at
-    `test/hud-row.test.mjs:3`, `:4` and `:23`. Twenty of the repository's
-    twenty-one `test/*.test.mjs` files carry exactly one em dash - the
-    one on their title line, after the file's own path - and spaced hyphens
-    everywhere else. Every
-    other file this turn edited added none: `src/types.ts`, `src/game.ts`,
-    `src/render.ts`, `index.html`, `test/parity.test.mjs` and `CHANGELOG.md`
-    are all hyphens. This file now carries four.
-  - **Goal**: Replace the three mid-sentence em dashes with spaced hyphens and
-    leave the title line on line 1 as it is, since that one is the convention.
-  - From: UI/UX Override - the middle drop is under the tracer
 - [x] `test/powerups.test.mjs` builds drops without the `hold` the type now requires
   - **Issue**: Eight fixtures - lines 188, 201, 218, 234, 243, 255, 270 and
     419 - build `{ x, y, z, kind }`, but `Powerup` now requires `hold`
@@ -210,4 +150,47 @@ the roadmap section each one came from.
     `docs/development.html`, close the blank line this release left at `:50`
     between the new `drop-clip` paragraph and the one after it - no other pair
     of paragraphs in that file carries one.
+  - From: Code Review Override - the second clip, and the probe nothing published
+- [x] Unshared Drop Clip 1 - two of the four reconciled passages state a bound
+  the code does not support, and a symbol the pass they sit in does not have
+  - **Issue**: Both are in the passages 0.11.4 rewrote, and both are the same
+    paragraph read in two builds.
+
+    First, `contacts`' new paragraph closes on "a bolt still painted a row away
+    from it except on the play area's top row, where `bScr.row - 1 < gameTop`
+    left the bolt one cell to begin with" (`src/game.ts:1607` and
+    `index.html:2405`) - one exception, where `drawBullets`' paragraph in the
+    same release lists three and the changelog entry lists the same three. The
+    two it drops are both reachable. A bolt whose upper half has already left
+    the corridor is one cell before any drop is involved: `tunnelSpan`'s
+    `halfSpan` is `floor(3 + t * (center - 4))` with `t` climbing with the row
+    (`src/types.ts:268`), so the span is narrower a row up and
+    `inCorridor(col, row - 1)` can fail while `inCorridor(col, row)` holds -
+    which is exactly the narrowing `drawBullets` says the two halves are tested
+    separately for. And two drops a row apart in one column take both cells, a
+    boss kill not producing that only because `dropBossPowerups` gives its
+    three one `y` and one `z` (`src/game.ts:1239`). Name the reader: anyone
+    bounding the exposure off the hit test's own docstring - which is where a
+    reader asking what the hit test counts goes - concludes a drop can never
+    leave the player nothing to see off the top row, which is the one thing
+    this paragraph was rewritten to bound.
+
+    Second, `drawBullets`' own paragraph names `bScr.row - 1 < gameTop` as what
+    "left it one cell to begin with" (`src/render.ts:433` and
+    `index.html:3001`). `bScr` is `contacts`' local (`src/game.ts:1699`,
+    `index.html:2485`); `drawBullets` projects into `pos` and guards with
+    `pos.row - 1 >= gameTop` (`src/render.ts:511`, `index.html:3070`), and
+    `bScr` appears nowhere else in `src/render.ts`. The sentence is about what
+    is painted, which is this pass, so the symbol a reader is sent to look for
+    is not in the function or the file the docstring sits in. 0.11.4 corrected
+    this same class of drift in `contacts`' comment - `tracerLit` where both
+    builds read `tracerDrawn` - and introduced it in the renderer on the same
+    turn.
+  - **Goal**: Give `contacts`' paragraph the three cases `drawBullets` carries,
+    or drop its `except` clause and point at `drawBullets` for the bound rather
+    than naming a partial one - the second is the smaller edit and keeps one
+    copy of the list. Name the draw pass's own guard in `drawBullets`'
+    paragraph, `pos.row - 1 < gameTop`, in both builds. No behaviour change,
+    and nothing in the suite reads either comment, so `npm test` staying at 843
+    is the whole of the check.
   - From: Code Review Override - the second clip, and the probe nothing published

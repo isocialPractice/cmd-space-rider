@@ -1604,9 +1604,10 @@ export class Game {
    * the shot has left the columns a target can be hit in, while the drop clip
    * says only that the cell is being spent on the pickup, and reading it here
    * would cost a player hits for shooting through their own drops. The gap it
-   * leaves is one cell of a two-cell tracer, with a bolt still painted a row
-   * away from it except on the play area's top row, where
-   * `bScr.row - 1 < gameTop` left the bolt one cell to begin with.
+   * leaves is one cell of a two-cell tracer, so a bolt is still painted a row
+   * away from it unless every cell the corridor admits is one a drop took.
+   * `drawBullets` names the states where that happens; the list is kept there,
+   * beside the clip itself.
    *
    * The corridor clip is read from `tracerDrawn`, which is what `drawBullets`
    * draws by, so the two cannot come to state different corridors. Leaving it

@@ -2402,9 +2402,10 @@ class Game{
   // the shot has left the columns a target can be hit in, while the drop clip
   // says only that the cell is being spent on the pickup, and reading it here
   // would cost a player hits for shooting through their own drops. The gap it
-  // leaves is one cell of a two-cell tracer, with a bolt still painted a row
-  // away from it except on the play area's top row, where bScr.row - 1 < gameTop
-  // left the bolt one cell to begin with.
+  // leaves is one cell of a two-cell tracer, so a bolt is still painted a row
+  // away from it unless every cell the corridor admits is one a drop took.
+  // drawBullets names the states where that happens; the list is kept there,
+  // beside the clip itself.
   //
   // The corridor clip is read from tracerDrawn, which is what drawBullets draws
   // by, so the two cannot come to state different corridors. Leaving it out -
@@ -2998,7 +2999,7 @@ function drawBlock(screen,cx,cy,size,ch,color,gameTop,gameBottom,record=null){
  * can land on the cell it took, and a bolt is still painted a row away from it
  * on the same frame. For the player to be shown nothing at all, every cell the
  * corridor still admits has to be a cell a drop took: a bolt on the play area's
- * own top row, where `bScr.row - 1 < gameTop` left it one cell to begin with; a
+ * own top row, where `pos.row - 1 < gameTop` left it one cell to begin with; a
  * bolt whose upper half has already left the corridor, which is the narrowing
  * the two halves are tested separately for; or two drops a row apart in one
  * column, which a boss kill does not produce, since its three land side by side

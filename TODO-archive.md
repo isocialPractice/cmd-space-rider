@@ -3176,3 +3176,18 @@ still be found by name.
   - **Goal**: Say eight columns wide, or drop the width figure and keep
     "ending at column 9", which is what the gap is actually derived from.
   - From: UI/UX Override - the middle drop is under the tracer
+
+## Archived 10-23-26
+
+- [x] Three em dashes entered `test/hud-row.test.mjs` against the house style
+  - **Issue**: The rewritten header uses em dashes mid-sentence at
+    `test/hud-row.test.mjs:3`, `:4` and `:23`. Twenty of the repository's
+    twenty-one `test/*.test.mjs` files carry exactly one em dash - the
+    one on their title line, after the file's own path - and spaced hyphens
+    everywhere else. Every
+    other file this turn edited added none: `src/types.ts`, `src/game.ts`,
+    `src/render.ts`, `index.html`, `test/parity.test.mjs` and `CHANGELOG.md`
+    are all hyphens. This file now carries four.
+  - **Goal**: Replace the three mid-sentence em dashes with spaced hyphens and
+    leave the title line on line 1 as it is, since that one is the convention.
+  - From: UI/UX Override - the middle drop is under the tracer
