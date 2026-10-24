@@ -6,10 +6,50 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
-- [ ] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
-  - From: Bigger Features
-
 ### Create and Deploy GitHub Pages Override
+
+### Code Review Override - the half-width figure and the renderer's bare glyphs
+
+- [ ] The split screen draws its box glyphs as literal characters where the rest
+  of both builds writes `\uXXXX`
+  - **Issue**: `drawVersus`, `drawVersusResult` and `versusResultLines` carry 17
+    lines of literal non-ASCII - the frame corners and rules at
+    `index.html:4329` to `:4345` and `:4367` to `:4379`, and the bullet in the
+    two result lines at `:4292` and `:4293`. Before this turn `index.html` held
+    no non-ASCII at all outside its comments: `drawHUD` writes `'╔'`,
+    `drawFooter` `'╠'` and `nameEntryHint` `'•'`, and `src/render.ts`
+    and `src/menu.ts` write the escape with the glyph in a trailing comment.
+    Nothing fails today, since the page declares `charset="UTF-8"` and
+    `.gitattributes` pins the endings, so this is drift rather than a defect -
+    but it is total, and one function stating its glyphs a way no other function
+    in either build does is what a later reader copies.
+  - **Goal**: Write the 17 literals as the `\uXXXX` escapes the surrounding code
+    uses, with the glyph in a trailing comment where `src/render.ts` does.
+    `test/versus.test.mjs` already reads those glyphs back off the drawn buffer,
+    so `npm test` holding at 881 is the check.
+  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
+
+#### Found Issues
+
+- [ ] `VERSUS_MIN_HALF_WIDTH` and the published probe page put 42 columns at ten
+  minutes, where the probe puts it at five
+  - **Issue**: the docstring reads "40 holds the first thirty seconds, 42 holds
+    out to about ten minutes, and 45 holds every mark to the end of the walk"
+    (`index.html:4056`), and `docs/development.html:51` carries the same sentence
+    word for word. `npm run probe -- versus-half` clears 42 at the 30s, 60s, 120s
+    and 300s marks and wants 45 from 600s on, identically in both builds - so the
+    ten minute mark is the first one 42 fails rather than the last one it holds,
+    and five minutes is where it stops. Name the reader: anyone sizing a half off
+    the comment concludes 42 columns carries a ten minute round, which is a round
+    the probe says that width cannot read. The release note's copy of the
+    sentence was corrected in place this turn, so the three copies now disagree
+    with each other as well.
+  - **Goal**: Say in both that 42 holds out to five minutes and that 45 is what
+    the ten and twenty minute marks want, which is the wording `CHANGELOG.md`
+    now carries. `docs/development.html` is published, so
+    `test/docs-site.test.mjs` is what checks the edit lands; no measured figure
+    moves and `npm test` holding at 881 is the rest of it.
+  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
 
 ## Quick Wins
 
@@ -55,24 +95,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 165 earlier items in `TODO-archive.md`, newest last.
+> 166 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `test/powerups.test.mjs` builds drops without the `hold` the type now requires
-  - **Issue**: Eight fixtures - lines 188, 201, 218, 234, 243, 255, 270 and
-    419 - build `{ x, y, z, kind }`, but `Powerup` now requires `hold`
-    (`src/types.ts:137`) and both of the engine's two creation sites set it.
-    The tests still pass and still exercise what they mean to, because
-    `undefined > 0` is false and so the drift branch runs - but they pass on
-    that coercion rather than on a declared value, and this file is the
-    repository's whole coverage of the drift. The hazard is not hypothetical:
-    an assertion of the form `assert.equal(p.hold, build.BOSS_DROP_HOLD)`
-    passes vacuously while both sides are `undefined`, which is what
-    `test/boss.test.mjs:663` would have done until `test/helpers.mjs` exported
-    the constant this turn.
-  - **Goal**: Add `hold: 0` to the eight fixtures so they match the shape
-    `dropPowerup` produces. Nothing should change behaviourally and the suite
-    should stay green.
-  - From: UI/UX Override - the middle drop is under the tracer
 - [x] **Unshared Drop Clip**: Four docstrings still say `drawBullets` has one clip and the hit test
   reads it, and this release gave it a second one the hit test does not read
   - **Issue**: `drawBullets` now draws by `inCorridor(col, row) && !onDrop(col,
@@ -194,3 +218,5 @@ the roadmap section each one came from.
     and nothing in the suite reads either comment, so `npm test` staying at 843
     is the whole of the check.
   - From: Code Review Override - the second clip, and the probe nothing published
+- [x] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
+  - From: Bigger Features
