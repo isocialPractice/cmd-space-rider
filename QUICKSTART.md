@@ -39,6 +39,16 @@ npm start
 `Enter` launches a run, `Esc` returns to the menu, and `Ctrl+C` quits the
 terminal build outright.
 
+## Two at one keyboard
+
+In a browser, `V` on the title screen splits the canvas in two and seats a
+second pilot. Pilot 1 keeps `W` `A` `S` `D`, `Space`, `F` and `Q` / `E`; pilot 2
+flies the same shape on the right of the keyboard with `I` `J` `K` `L`, `Enter`,
+`;` and `U` / `O`. Both fly the same tunnel, each keeps their own score, and the
+higher score takes the round. `Enter` starts a rematch, `Esc` goes back. It wants
+a window about 91 columns wide, and the title screen offers the key only when
+there is room for one.
+
 ## How to survive
 
 - Obstacles cost 25 shield, mines cost 35. Orbs restore 10 and pay 500 points.

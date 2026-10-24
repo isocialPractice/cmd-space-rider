@@ -3191,3 +3191,22 @@ still be found by name.
   - **Goal**: Replace the three mid-sentence em dashes with spaced hyphens and
     leave the title line on line 1 as it is, since that one is the convention.
   - From: UI/UX Override - the middle drop is under the tracer
+
+## Archived 10-24-26
+
+- [x] `test/powerups.test.mjs` builds drops without the `hold` the type now requires
+  - **Issue**: Eight fixtures - lines 188, 201, 218, 234, 243, 255, 270 and
+    419 - build `{ x, y, z, kind }`, but `Powerup` now requires `hold`
+    (`src/types.ts:137`) and both of the engine's two creation sites set it.
+    The tests still pass and still exercise what they mean to, because
+    `undefined > 0` is false and so the drift branch runs - but they pass on
+    that coercion rather than on a declared value, and this file is the
+    repository's whole coverage of the drift. The hazard is not hypothetical:
+    an assertion of the form `assert.equal(p.hold, build.BOSS_DROP_HOLD)`
+    passes vacuously while both sides are `undefined`, which is what
+    `test/boss.test.mjs:663` would have done until `test/helpers.mjs` exported
+    the constant this turn.
+  - **Goal**: Add `hold: 0` to the eight fixtures so they match the shape
+    `dropPowerup` produces. Nothing should change behaviourally and the suite
+    should stay green.
+  - From: UI/UX Override - the middle drop is under the tracer

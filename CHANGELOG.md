@@ -1,6 +1,131 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.12.0] - 2026-10-24
+
+### Added
+
+- A split screen for two pilots at one keyboard, in the browser build. `V` on
+  the title screen divides the canvas into two halves with a divider between
+  them, and `index.html?versus` goes straight into a round. Pilot 1 flies the
+  solo game's own seat - `W` `A` `S` `D`, `Space`, `F`, `Q` / `E` - and pilot 2
+  the same shape moved to the right hand, `I` `J` `K` `L` with `Enter`, `;` and
+  `U` / `O`. No key is in both maps, which is what lets two hands hold a turn at
+  once. `P` pauses the round and `M` mutes it from either hand, `Enter` starts a
+  rematch once both pilots are down, and `Esc` returns to the title screen the
+  round was opened from. The mute key is answered for a pilot who is out as well
+  as for one still flying, which is the one thing a pilot nobody steps still
+  does: it is read as an or over the pair, so a wrecked pilot left holding the
+  flag would have taken the sound away for the rest of the round and for the
+  result panel, where nobody is stepped at all.
+
+  It is a composition rather than a second engine, and that is the whole design.
+  A round holds two ordinary `Game` instances, each drawn by the same
+  `renderGame` a whole screen is drawn by into a buffer half the grid wide, and
+  the two buffers are laid into the full grid through a new `ScreenBuffer.blit`.
+  So every rule a pilot flies under - what a collision costs, what an orb is
+  worth, when a boss arrives, what the combo pays - is the solo game's rule and
+  not a second copy of it that could drift. Each half keeps its own score,
+  shield, powerups, warp steps, asteroid sections and boss fight.
+
+  Three seams are all the shell adds. The keyboard is split into two maps onto
+  the names the engine already reads, so neither run knows it is one of a pair.
+  The engine's one global source of randomness is pointed at a stream of that
+  pilot's own for the span of their step and put back afterwards: two runs
+  stepped off it in turn would each be taking the next number out of the other's
+  sequence, so neither would be flying the field a seed names. And the round
+  reads a pilot's own `mode` for whether they are still flying.
+
+  Both streams come from one seed, drawn with `Math.random` when the round opens,
+  which is what "the same tunnel" means here: the field `startGame` lays down is
+  placed from the same draws in both halves, so the two pilots launch into the
+  same rocks at the same depths. The fields drift apart from the first recycle,
+  because each pilot reaches a given depth at their own speed and a pilot who
+  shoots a mine spends a draw on the drop it may leave. The opening is shared and
+  the flight is each pilot's own, which is what makes the two scores worth
+  comparing. The seed is drawn fresh for every round, so a rematch is a tunnel
+  neither player has seen.
+
+  The round goes to the higher score rather than to the later death. Score is
+  what the game already measures a run by and most of it is distance, so
+  surviving is what earns it - and one number cannot disagree with itself the way
+  "last alive" and "best score" can when a pilot dies late on a worse flight. A
+  dead heat says so. A round never reaches the leaderboard: a qualifying score
+  leaves `endGame` on the name entry screen, the round reads that as out exactly
+  as it reads a plain death, and nothing is ever routed there - the table has one
+  name to a row and a round has two pilots, so the round's scores are on the
+  round's own panel. A pilot can still set the stored best, because a half is a
+  real run flown under the ordinary rules by one player - and both pilots are
+  held to one copy of it, levelled after each pilot's step. Each `Game` reads the
+  stored figure when it is built and `endGame` weighs a run against that pilot's
+  own copy, so a pilot who beat it would leave the other holding the number from
+  before the round: over a stored 1000, pilot 1 ending a 5000 run and pilot 2
+  then ending a 3000 one would file 3000 over the 5000 just written. Levelled
+  inside the step rather than after it, because two pilots flying the same line
+  through the same opening field strike the same rock on the same frame.
+
+  Two of the solo game's own labels are replaced per half, and the borders they
+  sit on are laid down again rather than written over: the replacement and the
+  original are different lengths, so writing one straight onto the other leaves
+  the longer standing either side of it, and at 100 columns the top row read
+  `S PILOT 1 R`. The tag over each half answers the question a split screen
+  raises - whose score a reading belongs to - and the key list along the foot of
+  it answers the one it breaks, since the shared legend names `Arrows`, `Space`
+  and `F` and half of a round is flown on none of them.
+
+  A round does without the damage shake. The canvas is one object and the offset
+  carries the whole of it, so a crash would shake the tunnel the other pilot is
+  threading - a handicap earned by their rival's mistake, in the one mode where
+  that is worth refusing. The damage flash each half already draws is what
+  reports a hit there. A resize re-seats both halves, and takes its starfields
+  from the page's own randomness rather than from either pilot's stream, so
+  dragging a window edge cannot move a pilot's tunnel.
+
+  The engine is untouched, and nothing was added to `Game.state`, so
+  `test/parity.test.mjs` goes on comparing the two builds field for field. The
+  title screen is untouched for the same reason - that test reads the two builds'
+  title buffers against each other - so the label naming the key is drawn by the
+  page afterwards, set into the bottom border the way the HUD sets its own title
+  into the top one. It is drawn only on a window wide enough to open a round, so
+  the key it names always does something while it is there.
+
+- `test/probes/versus-half.mjs`, which measures how narrow a half the HUD can
+  still be read in. The split screen's floor is not half of `MIN_WIDTH`: that is
+  the width the tunnel wants, and this is the width the three readings over it
+  want, placed as they are from three different edges with SCORE pinned left,
+  DIST centred and SHIELD pinned right. Whether they clear each other depends on
+  the width and on how many digits each has reached, and both of those are facts
+  about a flight, so the probe flies one - a seeded run per build, held alive, out
+  to twenty minutes, with the score and the distance read off it at six marks -
+  and then sweeps half widths for the narrowest at which the readings stop
+  overlapping. The overlap is counted rather than looked for: every write the
+  frame makes to that row is tallied by column, and a column written twice is two
+  readings on one cell, which is what keeps the probe off a copy of the three
+  formats. 40 columns holds the first thirty seconds, 42 holds out to five
+  minutes, and 45 is what the ten and twenty minute marks want - the figure
+  `VERSUS_MIN_HALF_WIDTH` carries, and 91 columns of grid for a round. The
+  tunnel's own mouth at that width, 43 columns, is printed beside it off the
+  drawn wall columns, so what the floor costs the player sits next to what it
+  buys them.
+  Both builds, because the HUD is shared and the floor is therefore a figure
+  about `drawHUD` rather than about the browser; only the browser has halves to
+  apply it to.
+
+- `test/versus.test.mjs`, 38 cases over the four seams the shell adds. The grid
+  arithmetic is swept from 60 to 205 columns for the two halves and the seam
+  tiling the grid exactly and for the odd column going to the seam rather than to
+  a pilot, since a column of difference is a column of tunnel one pilot has and
+  the other does not. The two seats are checked to share no key and to answer the
+  same set of controls, a pilot is checked to be handed every name the engine
+  reads and nothing from the other side of the keyboard, and the arrow keys and
+  `Shift` are checked to steer nobody. The stream swap is checked to restore the
+  global on the way out and on a throw, the two pilots to open on the same field
+  from one seed, two rounds to be two different tunnels, and a round to leave the
+  page's own randomness where it found it. The rest cover a wrecked pilot being
+  frozen and silenced, a pause from either hand, the mute key still answering a
+  pilot who is out and the round's own result panel, one stored best across the
+  two pilots with no lower score filed over a higher one - including the frame
+  both are wrecked on - the standing and the winner, the audio merge, the
+  composition, and that a qualifying score never writes the table.
 
 ### Fixed
 

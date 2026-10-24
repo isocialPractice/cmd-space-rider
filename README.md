@@ -21,9 +21,10 @@ A retro DOS-style terminal space tunnel game. Pilot your ship through an endless
 - **Progressive difficulty** &mdash; Speed, obstacle density and mines all escalate with distance.
 - **Leaderboard** - A run that makes the top ten is named with three characters, arcade style, and the table is drawn on the title screen.
 - **Replay ghost** - The run you just flew comes back as a grey ship on the next one, flying the path you flew, so you can see where you are ahead.
+- **Split screen (browser)** - `V` on the title screen seats two pilots at one keyboard, each flying their own run in half the grid. The same tunnel, separate scores, and the higher score takes the round.
 - **Performance mode** - A device that cannot hold 30 frames a second has its starfield and its debris thinned automatically, and gets them back when it can.
 
-The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, the leaderboard and the replay ghost, retro sound, the CRT overlay, touch and gamepad controls, light mode, performance mode, and the five debug scenarios.
+The [full list](https://isocialpractice.github.io/cmd-space-rider/docs/features.html) covers powerups, combo scoring, the leaderboard and the replay ghost, retro sound, the CRT overlay, touch and gamepad controls, the two-pilot split screen, light mode, performance mode, and the five debug scenarios.
 
 ## [Getting Started](https://isocialpractice.github.io/cmd-space-rider/docs/getting-started.html)
 
@@ -57,6 +58,7 @@ space-rider --help                   Show help
 | `F` or `Shift` (browser) | Boost |
 | `Q` / `E` | Barrel roll |
 | `P` | Pause / resume a run |
+| `V` (browser, title screen) | Open a two-pilot split-screen round |
 | Arrows + `Enter` on the name entry screen | Spell a three-character name for a top-ten run |
 | Gamepad: left stick / `A` / `B` / triggers | Steer / fire or confirm / boost / barrel roll |
 

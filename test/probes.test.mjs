@@ -47,7 +47,7 @@ const runner = (...argv) => spawnSync(process.execPath, [RUNNER, ...argv], { enc
  * smallest `count` and `passes` it takes.
  *
  * Named by the flags rather than by what they narrow, because `count` is not
- * one unit across the five probes that read it. In `column`, `frame-rate` and
+ * one unit across the six probes that read it. In `column`, `frame-rate` and
  * `seen-versus-kill` it is the placement walk, so `count: 1` is one placement.
  * `free-flight` reads the same flag as frames - `const frames = count ??
  * FREE_FRAMES` - so `count: 1` flies a single frame, and its flight rows come
@@ -57,6 +57,9 @@ const runner = (...argv) => spawnSync(process.execPath, [RUNNER, ...argv], { enc
  * here, and this is still the smallest workload the rig can ask it for.
  * `drop-clip` reads it as frames as well, and `passes` as measurements of the
  * pair it times, so `count: 1, passes: 1` is one frame timed once either way.
+ * `versus-half` reads it as the seconds of game time its flight runs out to, so
+ * `count: 1` is a one-second flight: none of the probe's own marks is reached,
+ * and it reports the width the readings a second into a run want instead.
  *
  * Keyed by the property each flag arrives in rather than by the flag's own
  * word, so a probe is handed exactly what FLAG_ARG says it destructures and the

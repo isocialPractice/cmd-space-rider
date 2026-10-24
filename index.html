@@ -502,6 +502,24 @@ class ScreenBuffer{
   vLine(x,y,len,ch,fgColor,bgColor=0){
     for(let i=0;i<len;i++)this.put(x,y+i,ch,fgColor,bgColor);
   }
+  // Another buffer's cells copied into this one, its top left landing at (x,y).
+  //
+  // What the split screen is made of. Each pilot's half is drawn by the ordinary
+  // renderer into a buffer of its own size, and the two are laid into the full
+  // grid here, so a half is rendered by the same function a whole screen is and
+  // the two cannot come to draw a run differently.
+  //
+  // Through put() rather than into the arrays directly, which is what gives the
+  // clipping: a half wider than the room left for it is cropped at this buffer's
+  // edge rather than wrapping into the row below.
+  blit(src,x,y){
+    for(let sy=0;sy<src.height;sy++){
+      for(let sx=0;sx<src.width;sx++){
+        const i=sy*src.width+sx;
+        this.put(x+sx,y+sy,src.chars[i],src.fg[i],src.bg[i]);
+      }
+    }
+  }
   // `advance` is the width the font draws a character at, unrounded. It defaults
   // to the cell width, which is an inset of zero - a caller with no measurement
   // to hand gets the left-packed grid this build drew before.
@@ -3984,6 +4002,553 @@ function seatGrid(game,grid){
   return new ScreenBuffer(grid.cols,grid.rows);
 }
 
+// ===== Versus: two pilots, one split screen =====
+// The browser build's own, and shell-level by construction: nothing in the
+// engine knows a round is being flown. A round is two ordinary Game instances
+// side by side, each drawn by the ordinary renderer into a buffer half the grid
+// wide, so every rule a pilot flies under - what a collision costs, what an orb
+// is worth, when a boss arrives - is the solo game's rule rather than a second
+// copy of it that can drift from the first.
+//
+// Three things follow from that, and they are the whole of what this section
+// adds to the game.
+//
+// The two runs must not share a draw. Both engines reach for the one global RNG,
+// so stepping them in turn off it would interleave their draws: neither run's
+// sequence would be its own, and seeding the round would pin the pair rather
+// than either pilot. withRng points the global at one pilot's stream for the
+// span of their step and puts back whatever was there, which leaves every call
+// site inside the engine as it is.
+//
+// Both streams are seeded from one number, drawn when the round opens, and that
+// is what "the same tunnel" means here: the field startGame lays down is placed
+// from the same draws in both halves, so the two pilots launch into the same
+// rocks at the same depths. The fields drift apart from the first recycle, which
+// takes fresh draws at whatever point each pilot has reached - a pilot who
+// boosted is further along the tunnel, and a pilot who shot a mine has spent a
+// draw on the drop it may have left. The opening is shared; the flight is each
+// pilot's own, which is what makes the two scores worth comparing.
+//
+// And a round never touches the table. A pilot is flying while their run's mode
+// is 'playing' and out on anything else, which is the one reading a round takes
+// of a pilot's state: a score that qualifies leaves endGame in 'nameEntry'
+// rather than 'dead', and both read as out, so no keypress is ever routed to
+// that screen and commitEntry is never reached. The table has one name to a row
+// and a round has two pilots, so a round's scores belong on the round's own
+// panel. The stored best is the one thing a round can still move, and that is
+// deliberate: it is a real run, flown under the ordinary rules, by one pilot.
+
+/** Columns the divider between the two halves is at least. */
+const VERSUS_SEAM_COLS=1;
+/**
+ * Columns a half needs before a round will open on it.
+ *
+ * Narrower than MIN_WIDTH, which is the floor for a whole screen, because the
+ * two answer different questions: MIN_WIDTH is the width the tunnel wants, and
+ * this is the width the HUD over it wants. A half carries the whole HUD, and its
+ * three readings are placed from three different edges - SCORE pinned left, DIST
+ * centred, SHIELD pinned right - so whether they clear each other depends on the
+ * width and on how many digits each has reached.
+ *
+ * 45 is the measured answer, from `npm run probe -- versus-half`: it flies one
+ * seeded run per build out to twenty minutes, reads the score and the distance
+ * off it at six marks, and sweeps half widths counting the columns of the
+ * reading row written twice. 40 holds the first thirty seconds, 42 holds out to
+ * about ten minutes, and 45 holds every mark to the end of the walk. It leaves
+ * the tunnel 43 columns of mouth on the nearest play row, counted off the drawn
+ * wall columns rather than off the projection.
+ *
+ * Two halves and a seam put the grid a round needs at 91 columns, which is a
+ * desktop window rather than a phone held upright.
+ */
+const VERSUS_MIN_HALF_WIDTH=45;
+
+/**
+ * Where the two halves and the divider between them sit on a grid of a given
+ * size.
+ *
+ * The halves are equal to the column, and the odd column an odd-width grid
+ * leaves over goes into the seam rather than to one pilot. Both halves of that
+ * matter: a column of difference is a column of tunnel one pilot has and the
+ * other does not, in a mode whose whole point is that the two are flying the
+ * same thing; and a seam a column wider than its minimum is still a divider,
+ * which is all that column is being asked to be.
+ *
+ * `fits` is a round's own floor and it is not the screen's. Rows are shared
+ * whole by both halves, so the height a round needs is the height the game
+ * needs, while the width is a half's floor twice over plus the seam.
+ *
+ * It gates opening a round and not continuing one: a window dragged narrower
+ * mid-flight keeps the round, because taking a round away from two players in
+ * the middle of it is worse than two narrow halves, and dragging the window
+ * back restores them.
+ */
+function versusLayout(cols,rows){
+  const half=max(0,floor((cols-VERSUS_SEAM_COLS)/2));
+  const seam=max(VERSUS_SEAM_COLS,cols-half*2);
+  return{
+    half,seam,rows,
+    leftX:0,seamX:half,rightX:half+seam,
+    fits:half>=VERSUS_MIN_HALF_WIDTH&&rows>=MIN_HEIGHT,
+  };
+}
+
+/**
+ * The physical key each pilot's control is on, keyed by the engine's own name
+ * for that control.
+ *
+ * The engine reads one set of names - A and D to steer, W and S to climb and
+ * dive, Q and E to roll, F to boost, SPACE to fire - so a pilot is a map from
+ * those names onto the keys the hand flying them is actually over, and
+ * pilotKeys is what turns a round's one keyboard into two of them.
+ *
+ * Pilot 1 is the solo game's own left hand, unchanged, so a player who has flown
+ * the game alone already knows half of this. Pilot 2 is the same shape moved to
+ * the right: IJKL where WASD is, U and O flanking it as Q and E flank WASD, the
+ * semicolon where F sits beside D, and ENTER for the trigger. No key appears in
+ * both maps, which is what lets two hands hold a turn at once.
+ *
+ * The arrow keys and SHIFT steer nobody in a round. They are pilot 1's own
+ * alternates in a solo run, and a second seat at the same keyboard is the one
+ * place a control belonging to no particular pilot is worse than no control: two
+ * players cannot agree whose the arrows are by reading the screen.
+ */
+const VERSUS_BINDINGS=[
+  {W:'W',A:'A',S:'S',D:'D',Q:'Q',E:'E',F:'F',SPACE:'SPACE'},
+  {W:'I',A:'J',S:'K',D:'L',Q:'U',E:'O',F:'SEMICOLON',SPACE:'ENTER'},
+];
+
+/**
+ * Keys the whole round answers to rather than one pilot.
+ *
+ * Either hand may pause the round or mute it. The engine reads both per run, so
+ * they go to both pilots: routed to one, the two runs would come to disagree
+ * about whether the round is paused, and a paused pilot beside a flying one is
+ * a round nobody is going to accept the result of.
+ */
+const VERSUS_SHARED_KEYS=['P','M'];
+
+/**
+ * One pilot's view of the keyboard, in the names the engine reads.
+ *
+ * Every name the binding lists is answered, held or not, so the map a pilot is
+ * handed never carries a key from the other side of the keyboard - an inherited
+ * truthy name would be read by the engine as that pilot's own control. The same
+ * function serves the held map and the just-pressed one, which is the whole of
+ * what the engine is given.
+ */
+function pilotKeys(binding,keys){
+  const out={};
+  for(const name in binding)out[name]=!!keys[binding[name]];
+  for(const name of VERSUS_SHARED_KEYS)out[name]=!!keys[name];
+  return out;
+}
+
+/**
+ * Run `fn` with the engine's one source of randomness pointed at `stream`, and
+ * put back whatever it was pointed at before.
+ *
+ * Every draw the engine makes goes through RNG.next, which is what makes seeding
+ * a run possible at all and also what stops two runs being stepped off it in
+ * turn: each would be taking the next number out of the other's sequence.
+ * Swapping it around a step gives each run a sequence of its own without a call
+ * site inside the engine knowing there is more than one run.
+ *
+ * The restore is in a finally. A throw inside a step would otherwise leave the
+ * whole page drawing from one pilot's stream, which is a seeded game that looks
+ * like an ordinary one.
+ */
+function withRng(stream,fn){
+  const was=RNG.next;
+  RNG.next=stream;
+  try{return fn()}finally{RNG.next=was}
+}
+
+/**
+ * The seed a round opens on.
+ *
+ * Math.random rather than RNG.next, and drawn fresh for every round, so the
+ * field is shared between the two pilots of one round and never between two
+ * rounds: a seed a player could learn would hand the rematch to whoever
+ * remembered where the first rock was. Math.random directly for the same
+ * reason - a page whose global stream had been pinned would otherwise draw the
+ * same round's seed every time.
+ */
+function versusSeed(){
+  return floor(Math.random()*0x100000000)>>>0;
+}
+
+/** What each half's HUD title row says, in place of the shared one. */
+const VERSUS_TAGS=['PILOT 1','PILOT 2'];
+/** Appended to a tag once that pilot is out of the round. */
+const VERSUS_OUT=' WRECKED';
+
+/**
+ * The tag over one half, padded as the HUD's own title is so it reads as a label
+ * on the frame rather than as text butted against it.
+ */
+function versusTag(index,alive){
+  return ` ${VERSUS_TAGS[index]}${alive?'':VERSUS_OUT} `;
+}
+
+/**
+ * Each pilot's key list, longest form first, for the row the footer's own hint
+ * list is drawn on.
+ *
+ * A half has to carry this. The shared list names the solo game's keys - Arrows,
+ * SPACE, F - and half of a round is being flown on none of them, so pilot 2
+ * would be reading a legend for pilot 1's hand. The two forms the footer already
+ * keeps become three here, because a half is narrow and a pilot's own keys are
+ * the part that cannot be dropped: the shared keys come first where there is room
+ * for them, the pilot's four go next, and a half too narrow for the words keeps
+ * the keys alone.
+ *
+ * Both pilots' forms are written to the same lengths as each other, so neither
+ * half drops to a shorter form while the other holds a longer one - two legends
+ * of different shapes side by side read as two different games.
+ */
+const VERSUS_HINTS=[
+  [
+    'WASD:Move  SPACE:Fire  F:Boost  Q/E:Roll  P:Pause  M:Mute  ESC:Quit',
+    'WASD  SPACE:Fire  F:Boost  Q/E:Roll',
+    'WASD  SPACE  F  Q/E',
+  ],
+  [
+    'IJKL:Move  ENTER:Fire  ;:Boost  U/O:Roll  P:Pause  M:Mute  ESC:Quit',
+    'IJKL  ENTER:Fire  ;:Boost  U/O:Roll',
+    'IJKL  ENTER  ;  U/O',
+  ],
+];
+
+/**
+ * One pilot's key list in the fullest form a half of the given width holds,
+ * clear of the border corners - the rule the footer's own two forms follow,
+ * over three. The shortest is handed back whatever the width, because a legend
+ * cropped at the frame still says more than no legend at all.
+ */
+function versusHintRow(index,w){
+  const forms=VERSUS_HINTS[index];
+  for(const form of forms)if(form.length<=w-4)return form;
+  return forms[forms.length-1];
+}
+
+/**
+ * How a round stands: who is still flying, and who took it once nobody is.
+ *
+ * The winner is the higher score rather than the later death. Score is what the
+ * game already measures a run by and most of it is distance, so surviving is
+ * what earns it - and one number cannot disagree with itself the way "last
+ * alive" and "best score" can when a pilot dies late on a worse flight. A draw
+ * is -1, where the round still running is null.
+ */
+function versusStanding(a,b){
+  const alive=[a.mode==='playing',b.mode==='playing'];
+  const over=!alive[0]&&!alive[1];
+  const winner=!over?null:a.score>b.score?0:b.score>a.score?1:-1;
+  return{alive,over,winner};
+}
+
+/**
+ * One frame of a round as the audio layer reads a run.
+ *
+ * The layer takes a state and plays what it finds there, so a round hands it one
+ * reading of both pilots rather than two states in turn: fed both, every frame
+ * would start and stop the hum against itself, since each call ends by deciding
+ * whether the hum should be running at all.
+ *
+ * One of each cue, because two of a cue at one instant is the same cue louder
+ * and the queue holds names rather than events - two pilots firing on one frame
+ * is one shot heard.
+ *
+ * The hum follows whichever pilot is flying fastest, and runs for as long as
+ * either is flying. Mute is the pair's rather than one pilot's, and is read as
+ * an or over both: step() answers the key for a pilot who is out as well as for
+ * one still flying, so the two copies never come to disagree, where reading
+ * either one on its own would leave the round's sound hanging on which pilot was
+ * wrecked first.
+ */
+function versusAudioState(a,b){
+  const flying=(s)=>s.mode==='playing'&&!s.paused;
+  const lead=flying(b)&&(!flying(a)||b.speed>a.speed)?b:a;
+  return{
+    muted:a.muted||b.muted,
+    sounds:[...new Set([...a.sounds,...b.sounds])],
+    mode:flying(a)||flying(b)?'playing':'dead',
+    paused:false,
+    speed:lead.speed,
+  };
+}
+
+/**
+ * The lines the round's own panel carries once both pilots are out: who took it,
+ * what each of them scored, and the two ways out of the screen.
+ */
+function versusResultLines(a,b,standing){
+  const verdict=standing.winner<0
+    ?'A DEAD HEAT'
+    :`${VERSUS_TAGS[standing.winner]} TAKES THE ROUND`;
+  return[
+    verdict,
+    `${VERSUS_TAGS[0]}  ${a.score}   •   ${VERSUS_TAGS[1]}  ${b.score}`,
+    '[ ENTER REMATCH • ESC TO TITLE ]',
+  ];
+}
+
+/**
+ * Lay a round onto the full grid: each half's buffer, the two labels a half
+ * needs that a whole screen does not, and the divider between them.
+ *
+ * The labels are the two the solo game writes for one player. The tag takes the
+ * place of the half's centred ' SPACE RIDER ', which the player already knows
+ * and does not need told twice, and answers the question a split screen raises
+ * instead - whose score a reading belongs to. The key list takes the place of
+ * the footer's own, which names keys only one of the two pilots is flying on.
+ * Those two rows are the whole of what this reaches into a half for.
+ *
+ * Each border is laid down again rather than written over. The replacement and
+ * the original are different lengths, so writing one straight onto the other
+ * leaves the longer standing either side of it: at 100 columns the top row read
+ * `S PILOT 1 R`. Restating the border is three lines off drawHUD and drawFooter
+ * and needs no agreement with either about how long a label is.
+ *
+ * The seam is drawn after both halves rather than before, so a half cropped at
+ * the divider cannot paint over it, and it runs the full height of the grid
+ * rather than of a half - the divider is between the two canvases and not inside
+ * either of them.
+ */
+function drawVersus(screen,layout,halves,standing){
+  screen.clear(C.BLACK);
+  const xs=[layout.leftX,layout.rightX];
+  const w=layout.half;
+  for(let i=0;i<halves.length;i++){
+    const x=xs[i];
+    const half=halves[i];
+    screen.blit(half,x,0);
+
+    const tag=versusTag(i,standing.alive[i]);
+    screen.put(x,0,'╔',C.CYAN,C.BLACK);
+    screen.hLine(x+1,0,max(0,w-2),'═',C.CYAN,C.BLACK);
+    screen.put(x+w-1,0,'╗',C.CYAN,C.BLACK);
+    screen.putString(x+max(0,floor((w-tag.length)/2)),0,tag,
+      standing.alive[i]?C.BRIGHT_CYAN:C.GRAY,C.BLACK);
+
+    // The half's own footer row, read off the buffer the half was drawn into so
+    // this cannot come to disagree with drawFooter about which row that is.
+    const hintY=half.height-FOOTER_ROWS;
+    const hint=versusHintRow(i,w);
+    screen.put(x,hintY,'╠',C.CYAN,C.BLACK);
+    screen.hLine(x+1,hintY,max(0,w-2),'═',C.CYAN,C.BLACK);
+    screen.put(x+w-1,hintY,'╣',C.CYAN,C.BLACK);
+    screen.putString(x+max(0,floor((w-hint.length)/2)),hintY,hint,C.GRAY,C.BLACK);
+  }
+  for(let dx=0;dx<layout.seam;dx++){
+    screen.vLine(layout.seamX+dx,0,screen.height,'║',C.CYAN,C.BLACK);
+  }
+}
+
+/**
+ * The round's result panel, centred on the whole grid rather than on a half: it
+ * is the round's statement and not either pilot's, and it is the one thing on the
+ * screen both players read at once.
+ *
+ * The band is blanked before the box is drawn, so the panel reads as a panel
+ * instead of as text laid over two tunnels. Every write goes through put(), so a
+ * panel wider than the grid is cropped at the edge rather than wrapped.
+ */
+function drawVersusResult(screen,lines){
+  let inner=0;
+  for(const line of lines)inner=max(inner,line.length);
+  inner+=2;
+  const w=inner+2;
+  const h=lines.length+2;
+  const x=floor((screen.width-w)/2);
+  const y=max(0,floor((screen.height-h)/2));
+  screen.fillRect(x,y,w,h,' ',C.WHITE,C.BLACK);
+  screen.put(x,y,'┌',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(x+1,y,inner,'─',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x+w-1,y,'┐',C.BRIGHT_CYAN,C.BLACK);
+  for(let i=0;i<lines.length;i++){
+    const ly=y+1+i;
+    screen.put(x,ly,'│',C.BRIGHT_CYAN,C.BLACK);
+    screen.put(x+w-1,ly,'│',C.BRIGHT_CYAN,C.BLACK);
+    screen.putString(x+1+floor((inner-lines[i].length)/2),ly,lines[i],
+      i===0?C.BRIGHT_YELLOW:C.BRIGHT_CYAN,C.BLACK);
+  }
+  screen.put(x,y+h-1,'└',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(x+1,y+h-1,inner,'─',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x+w-1,y+h-1,'┘',C.BRIGHT_CYAN,C.BLACK);
+}
+
+/**
+ * The split screen's label on the title screen, in the fullest form that fits.
+ *
+ * On the bottom border, the way the HUD writes ' SPACE RIDER ' across the top of
+ * its own frame. That border is the one line of the title screen nothing else
+ * ever writes to at any grid size: every row inside it is claimed by the art, the
+ * subtitle, the four lines of controls, the launch prompt, or the table under the
+ * prompt, which grows into whatever rows are left.
+ *
+ * Drawn by the page after renderTitleScreen rather than inside it, because the
+ * split screen is the browser shell's own. test/parity.test.mjs reads the two
+ * builds' title buffers against each other, so a line inside that function would
+ * be a line the terminal build has to carry for a mode it cannot run.
+ */
+function versusHintText(w){
+  const full=' [ V ] TWO-PILOT SPLIT SCREEN ';
+  const short=' [ V ] SPLIT SCREEN ';
+  return full.length<=w-4?full:short;
+}
+
+/**
+ * The label, drawn only where a round would actually open.
+ *
+ * A window too narrow for two halves shows nothing, so the key the label names
+ * always does something when it is there - and widening the window is what
+ * reveals it, which says what the mode needs more plainly than a line of text
+ * about column counts would.
+ */
+function drawVersusHint(screen,layout){
+  if(!layout.fits)return;
+  const text=versusHintText(screen.width);
+  if(text.length>screen.width-4)return;
+  screen.putStringCenter(screen.height-1,text,C.BRIGHT_MAGENTA,C.BLACK);
+}
+
+/**
+ * A round in progress: two pilots, the buffer each half is drawn into, and the
+ * one seed both their streams were drawn from.
+ *
+ * The seed is held rather than only used, because it is the only thing that says
+ * what the two pilots had in common, and a round that cannot say that is a round
+ * whose result means nothing.
+ */
+class VersusRound{
+  constructor(seed,layout){
+    this.seed=seed;
+    this.pilots=[new Game(),new Game()];
+    // A stream for each pilot, both from the one seed. One stream shared between
+    // them would hand the two halves alternate halves of a single sequence, and
+    // neither pilot would be flying the field the seed names.
+    this.streams=this.pilots.map(()=>seededRandom(seed));
+    this.halves=this.pilots.map(()=>null);
+    this.seat(layout);
+    for(let i=0;i<this.pilots.length;i++){
+      withRng(this.streams[i],()=>this.pilots[i].startGame());
+    }
+    // Whether the round was already over when the current frame began, which is
+    // what the rematch key is read against. The frame that ends a round can be
+    // carrying the ENTER that was pilot 2's last shot, and a rematch read on
+    // that frame would relaunch on the keypress that fired it.
+    this.settled=false;
+  }
+  /** Both pilots' states, which is what every reading of a round is taken off. */
+  states(){return this.pilots.map((p)=>p.state)}
+  standing(){
+    const [a,b]=this.states();
+    return versusStanding(a,b);
+  }
+  /**
+   * Re-seat both halves on a new layout: the buffer each is drawn into, and the
+   * grid each pilot's engine lays its own screens out against.
+   *
+   * Outside both streams, deliberately. seatGrid lays a starfield, which is
+   * draws, and taking those from a pilot's stream would move that pilot's world
+   * every time the window was dragged - the one event a round has that neither
+   * player caused. The stars come from the page's own randomness instead, so a
+   * resize costs a round nothing but a new sky.
+   */
+  seat(layout){
+    this.layout=layout;
+    const grid={cols:layout.half,rows:layout.rows};
+    for(let i=0;i<this.pilots.length;i++){
+      this.halves[i]=seatGrid(this.pilots[i],grid);
+    }
+  }
+  /**
+   * Feed the frame time to both pilots, as the shell feeds it to a solo run.
+   *
+   * Both are measuring the one device, so both climb and drop the detail ladder
+   * on their own windows of it, and a pilot who is out ignores the figure - the
+   * engine reads its own mode before counting a frame. Outside the streams for
+   * seat()'s reason: a tier change tops up a starfield.
+   */
+  trackFrameRate(elapsed){
+    for(const p of this.pilots)p.trackFrameRate(elapsed);
+  }
+  /**
+   * Hold both pilots to the one stored best, which belongs to the player rather
+   * than to either of them.
+   *
+   * Each Game reads the stored figure when it is built and endGame weighs a run
+   * against that pilot's own copy of it, so a pilot who beats it leaves the
+   * other holding the number from before the round - and the other's own ending
+   * then files a lower score over the higher one just written. Over a stored
+   * 1000, pilot 1 ending a 5000 run and pilot 2 then ending a 3000 one left the
+   * best at 3000.
+   *
+   * Levelled after each pilot's step rather than after the round, because the
+   * two can be wrecked on one frame: the halves open on the same field, so two
+   * pilots flying the same line strike the same rock together, and by the time
+   * the second endGame of that frame runs it has already read its copy.
+   */
+  levelBest(){
+    let best=0;
+    for(const p of this.pilots)best=max(best,p.state.bestScore);
+    for(const p of this.pilots)p.state.bestScore=best;
+  }
+  /**
+   * Step the round one frame: each pilot who is still flying, off their own
+   * stream, with their own half of the keyboard.
+   *
+   * A pilot who is out is not stepped at all, so their half holds the frame they
+   * were wrecked on - the tunnel they did not finish, standing where they left
+   * it. Their cue queue is emptied instead, because update is what normally
+   * drains it: left alone, the damage cue they died on would be found in the
+   * queue and played again on every frame of the round that followed.
+   *
+   * The mute key is answered for them too, and that is the one thing a pilot
+   * nobody steps still does. M is the round's key rather than a pilot's and
+   * update is what normally answers it, so a pilot wrecked while the round was
+   * muted would otherwise hold a muted flag versusAudioState reads as an or over
+   * the pair - and neither the pilot still flying nor either player on the
+   * result panel, where nobody is stepped at all, could bring the sound back. P
+   * is not answered here, because update gates it on a run in progress and a
+   * pilot who is out has none.
+   */
+  step(dt,keys,justPressed){
+    const before=this.standing();
+    this.settled=before.over;
+    for(let i=0;i<this.pilots.length;i++){
+      const s=this.pilots[i].state;
+      if(!before.alive[i]){
+        s.sounds.length=0;
+        if(justPressed.M)s.muted=!s.muted;
+        continue;
+      }
+      const held=pilotKeys(VERSUS_BINDINGS[i],keys);
+      const pressed=pilotKeys(VERSUS_BINDINGS[i],justPressed);
+      withRng(this.streams[i],()=>this.pilots[i].update(dt,held,pressed));
+      this.levelBest();
+    }
+  }
+  /** One frame of the round, drawn onto the full grid. */
+  render(screen){
+    const standing=this.standing();
+    for(let i=0;i<this.pilots.length;i++){
+      renderGame(this.halves[i],this.pilots[i].state);
+    }
+    drawVersus(screen,this.layout,this.halves,standing);
+    if(standing.over){
+      const [a,b]=this.states();
+      drawVersusResult(screen,versusResultLines(a,b,standing));
+    }
+  }
+  /** The round the rematch key asks for: a new seed, on the layout showing. */
+  rematch(){
+    return new VersusRound(versusSeed(),this.layout);
+  }
+}
+
 // ===== Touch controls =====
 // A phone has no keyboard, so the browser build grows a thumbstick and two
 // buttons when it finds itself on one. The stick reading is arithmetic and
@@ -4329,6 +4894,12 @@ let gridFits=true;
 let screen;
 const game=new Game();
 
+// The split-screen round in progress, or null for the solo game. The solo game
+// above is left exactly where it stood for as long as a round runs, so leaving
+// one comes back to the title screen the round was opened from rather than to a
+// fresh page.
+let versus=null;
+
 function handleResize(){
   canvas.width=window.innerWidth;
   canvas.height=window.innerHeight;
@@ -4343,6 +4914,11 @@ function handleResize(){
   // Everything the resize does to the run, in one call above the DOM marker
   // where the suite can reach it. Nothing about a run is touched down here.
   screen=seatGrid(game,grid);
+  // A round in progress is re-seated on the halves the new grid gives it. The
+  // solo game above is seated whatever is being played, because a round ends
+  // back on its title screen and that screen has to be laid out for this window
+  // rather than for the one the round was opened in.
+  if(versus)versus.seat(versusLayout(grid.cols,grid.rows));
   // What the touch overlay anchors to and is sized against. Both figures, and
   // which property each belongs to, are overlayVars above the DOM marker where
   // the suite can reach them; these lines only hand the map to the CSS, which
@@ -4391,6 +4967,17 @@ if(explicitMode){
   game.showDebugMenu();
 }
 
+// ?versus opens a split-screen round on the page the link was followed to, so
+// two players at one keyboard can be sent straight into one. Read here with the
+// other params rather than left to the key on the title screen, and gated on the
+// same layout the key is gated on: a link followed in a window too narrow for
+// two halves lands on the title screen, which is where the label naming the key
+// appears as soon as the window is wide enough.
+if(params.has('versus')){
+  const layout=versusLayout(termWidth,termHeight);
+  if(layout.fits)versus=new VersusRound(versusSeed(),layout);
+}
+
 // ===== Input handling =====
 const keys={};
 const justPressed={};
@@ -4402,6 +4989,13 @@ function mapKey(e){
     case'KeyW':return'W';case'KeyA':return'A';case'KeyS':return'S';case'KeyD':return'D';
     case'KeyQ':return'Q';case'KeyE':return'E';case'KeyF':return'F';
     case'KeyP':return'P';case'KeyM':return'M';case'KeyC':return'C';
+    // Pilot 2's seat, and the key that opens a round for the two of them. None
+    // of these does anything in a solo run - VERSUS_BINDINGS is the only reader
+    // of the first seven - so what naming them here buys is that the browser
+    // swallows them rather than letting the page scroll under a round.
+    case'KeyI':return'I';case'KeyJ':return'J';case'KeyK':return'K';case'KeyL':return'L';
+    case'KeyU':return'U';case'KeyO':return'O';case'Semicolon':return'SEMICOLON';
+    case'KeyV':return'V';
     case'Space':return'SPACE';case'Enter':return'ENTER';
     case'Escape':return'ESCAPE';case'Tab':return'TAB';
     case'ShiftLeft':case'ShiftRight':return'SHIFT';
@@ -4627,7 +5221,11 @@ function frame(now){
   // whether the mode it was in is one worth measuring.
   const stepElapsed=(now-lastStep)/1000;
   lastStep=now;
-  game.trackFrameRate(stepElapsed);
+  // Whichever is being played. Both pilots of a round measure the one device, so
+  // both are fed; the solo game is not, because it is not advancing and a window
+  // of frames it did not fly would read as headroom it has not earned.
+  if(versus)versus.trackFrameRate(stepElapsed);
+  else game.trackFrameRate(stepElapsed);
 
   // The pad has no events to listen for, so its keys are read here. Above the
   // notice branch below, because the keyboard's listeners fire whatever the
@@ -4656,34 +5254,75 @@ function frame(now){
     return;
   }
 
-  // Handle menu input
-  game.handleMenuInput(justPressed);
-
   // C toggles the CRT overlay. It is a property of the page rather than of the
   // game, so it lives here beside the element it drives, and the choice is
   // written through so a refresh comes back the way the player left it.
+  //
+  // Above the round below rather than beside the solo game's own keys, because
+  // the overlay is the page's and a round is played on the same page.
   if(justPressed.C){
     crtOn=!crtOn;
     saveCrt(crtOn);
     applyCrt();
   }
 
-  // ESC. The name entry screen is not named here and does not need to be:
-  // handleMenuInput above reads an ESCAPE on that screen as filing the score
-  // under the name showing, which leaves the mode at 'dead', and this then takes
-  // it to the title screen in the same frame.
-  if(justPressed.ESCAPE){
-    if(game.state.mode==='playing'||game.state.mode==='dead'||game.state.mode==='debugMenu'){
-      game.state.mode='menu';
+  // Which game is being played, settled before anything is stepped so the rest
+  // of the frame has one answer. Both keys are the page's rather than a pilot's
+  // or the solo game's, which is why they are read here beside C: opening and
+  // leaving a round is a choice about what the page is showing.
+  //
+  // V works from the title screen and nowhere else, since choosing a game is
+  // what that screen is for, and it is gated on the layout so the key does what
+  // the label on that screen says - the label is drawn under the same gate. ESC
+  // leaves a round, and dropping it is the whole of leaving: the solo game is
+  // still standing at the title screen the round was opened from.
+  if(versus){
+    if(justPressed.ESCAPE){
+      versus=null;
+      audio.engineOff();
+    }
+  }else if(justPressed.V&&game.state.mode==='menu'){
+    const layout=versusLayout(termWidth,termHeight);
+    if(layout.fits){
+      versus=new VersusRound(versusSeed(),layout);
+      audio.engineOff();
     }
   }
 
-  // Update
-  game.update(dt,keys,justPressed);
+  // Step whichever is being played, and play out the frame it simulated. A round
+  // owns the frame outright: the solo game is not stepped and not handed a
+  // keypress for as long as one runs, because ENTER is pilot 2's trigger and
+  // handleMenuInput would read it as a launch and start a run under the round.
+  if(versus){
+    // The rematch, read only on a frame the round was already settled at the
+    // start of - see VersusRound.settled for the keypress that would otherwise
+    // relaunch on the shot that ended the round.
+    if(versus.settled&&justPressed.ENTER)versus=versus.rematch();
+    versus.step(dt,keys,justPressed);
+    // One reading of both pilots, because the layer decides from a single state
+    // whether the hum should be running at all.
+    audio.frame(versusAudioState(...versus.states()));
+  }else{
+    // Handle menu input
+    game.handleMenuInput(justPressed);
 
-  // Play out the frame the engine just simulated. It names the events; what
-  // they sound like is the audio layer's business.
-  audio.frame(game.state);
+    // ESC. The name entry screen is not named here and does not need to be:
+    // handleMenuInput above reads an ESCAPE on that screen as filing the score
+    // under the name showing, which leaves the mode at 'dead', and this then
+    // takes it to the title screen in the same frame.
+    if(justPressed.ESCAPE){
+      if(game.state.mode==='playing'||game.state.mode==='dead'||game.state.mode==='debugMenu'){
+        game.state.mode='menu';
+      }
+    }
+
+    // Update
+    game.update(dt,keys,justPressed);
+
+    // Play out the frame the engine just simulated. It names the events; what
+    // they sound like is the audio layer's business.
+    audio.frame(game.state);
+  }
 
   // Clear canvas, in the page's own colour so a light scheme does not leave a
   // black frame around the grid.
@@ -4691,8 +5330,15 @@ function frame(now){
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
   // Render to screen buffer
-  switch(game.state.mode){
-    case'menu':renderTitleScreen(screen,game.state);break;
+  if(versus){
+    versus.render(screen);
+  }else switch(game.state.mode){
+    case'menu':
+      renderTitleScreen(screen,game.state);
+      // The split screen's label, over the title screen the two builds share.
+      // See drawVersusHint for why it is written here and not in there.
+      drawVersusHint(screen,versusLayout(termWidth,termHeight));
+      break;
     case'debugMenu':renderDebugMenu(screen,game.state);break;
     case'playing':renderGame(screen,game.state);break;
     case'nameEntry':renderNameEntry(screen,game.state);break;
@@ -4701,7 +5347,13 @@ function frame(now){
 
   // Flush screen buffer to canvas, jolted by the damage shake. Translating the
   // whole grid leaves black at the edges, which is the shake reading as impact.
-  const shake=shakeOffset(game.state);
+  //
+  // A round is never jolted. The canvas is one object and the offset carries the
+  // whole of it, so a pilot's own crash would shake the tunnel their rival is
+  // threading - a handicap earned by the other player's mistake, in the one mode
+  // where that is worth refusing. The damage flash each half already draws is
+  // what reports a hit there.
+  const shake=versus?{x:0,y:0}:shakeOffset(game.state);
   ctx.save();
   ctx.translate(shake.x,shake.y);
   screen.render(ctx,cellW,cellH,FONT,cellAdvance);

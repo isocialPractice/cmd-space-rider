@@ -15,6 +15,7 @@ the documentation. The full text lives on the
 | `P` | Pause / resume |
 | `M` | Mute toggle |
 | `C` (browser) | CRT scanline overlay |
+| `V` (browser, title screen) | Open a two-pilot split-screen round |
 | `Enter` | Launch / relaunch |
 | `Esc` | Menu / quit |
 | `Ctrl+C` | Quit immediately (terminal) |
@@ -53,7 +54,33 @@ index.html?mode=mines                Mine Field
 index.html?mode=orbs                 Orb Harvest
 index.html?mode=obstacleCollision    Collision Course
 index.html?mode=mineCollision        Mine Sweeper
+index.html?versus                    Open a split-screen round
 ```
+
+## Split screen (browser)
+
+Two pilots at one keyboard, each flying their own run in half the grid. `V` on
+the title screen opens a round, or `index.html?versus` goes straight into one.
+
+| Control | Pilot 1 | Pilot 2 |
+| --- | --- | --- |
+| Steer | `W` `A` `S` `D` | `I` `J` `K` `L` |
+| Fire | `Space` | `Enter` |
+| Boost | `F` | `;` |
+| Barrel roll | `Q` / `E` | `U` / `O` |
+
+`P` pauses the round and `M` mutes it from either hand. `Esc` leaves, and `Enter`
+starts a rematch once both pilots are down. The arrow keys and `Shift` steer
+nobody in a round, because two players cannot agree whose they are.
+
+Both pilots launch into the same tunnel, from one seed drawn when the round
+opens, so the opening field is the same in both halves. The fields drift apart
+from there, because each pilot reaches a given depth at their own speed. Scores
+are separate and the higher one takes the round; a round never reaches the
+leaderboard, since the table has one name to a row.
+
+A round needs 45 columns a half, so 91 columns of grid. The key is only offered
+on a window wide enough for one.
 
 ## Debug modes
 
@@ -92,6 +119,7 @@ Debug runs never record a best score.
 | Boss collision | 50 shield, and it pays nothing |
 | Boss destroyed | 5000 points, 3 pickups, one of each kind |
 | Grid floor | 60 columns by 20 rows |
+| Split-screen floor | 45 columns a half, 91 of grid |
 | Leaderboard | top 10, three characters a name |
 | Replay ghost | 10 path samples a second, 10 minutes of run |
 | Detail ladder | 40 / 24 / 12 stars, full / 60% / 30% of a burst |
@@ -118,6 +146,7 @@ flags each probe takes. The probes that fly a shot take a grid and a build:
 npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
 npm run probe -- free-flight --passes 2
+npm run probe -- versus-half --count 300   # seconds of game time to fly out to
 npm run probe -- overlay-anchor    # no grid, no build: it walks viewports
 npm run probe -- glyph-tuning      # no flags: it walks the font size range
 ```
@@ -134,11 +163,19 @@ calls the shared engagement is run there too, on one grid, one build and the
 smallest `--count` and `--passes` the rig takes, because reading a probe's
 argument list never reaches the calls the probe makes. What `--count 1` narrows
 to depends on the probe: one placement for `column`, `frame-rate` and
-`seen-versus-kill`, and a single frame for `free-flight` and `drop-clip`, which
-read the flag as frames.
+`seen-versus-kill`, a single frame for `free-flight` and `drop-clip`, which read
+the flag as frames, and a one-second flight for `versus-half`, which reads it as
+the seconds of game time to fly out to.
 
 A probe reports; it never asserts. Every walk is seeded, so the same command
 gives the same numbers every time.
+
+`versus-half` is the one probe that reports a width. The split screen gives each
+pilot half the grid and the half carries the whole HUD, so the probe flies a
+seeded run out to twenty minutes, reads the score and the distance off it at six
+marks, and sweeps half widths for the narrowest at which SCORE, DIST and SHIELD
+stop overlapping. 45 columns is what holds every mark, which is the floor a round
+opens on.
 
 `glyph-tuning` is the one probe that measures nothing: it rebuilds the figures
 the browser build's glyph centring quotes about itself, out of Courier New's
@@ -168,9 +205,9 @@ size-neutral:
 ## Browser-only features
 
 High score and leaderboard persistence, sound, the CRT overlay (`C`), light
-mode, touch controls, and a canvas-offset screen shake. The terminal build jolts
-the play area by a whole character column instead, and keeps a best score and a
-table for the session only.
+mode, touch controls, the two-pilot split screen (`V`), and a canvas-offset
+screen shake. The terminal build jolts the play area by a whole character column
+instead, and keeps a best score and a table for the session only.
 
 The replay ghost and the detail ladder are in both builds and neither is stored:
 a ghost lasts as long as the session, and the ladder survives the run that

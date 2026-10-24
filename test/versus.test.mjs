@@ -363,6 +363,101 @@ test('versus: a pilot who is out is not stepped, and stops making a noise', () =
   assert.equal(one.sounds.length, 0, 'the queue of a pilot who is out is emptied');
 });
 
+test('versus: the mute key still answers a pilot who is out', () => {
+  // The one thing a pilot nobody steps still does. M is the round's key and
+  // update is what normally answers it, so a pilot wrecked while the round was
+  // muted would hold a muted flag versusAudioState reads as an or over the pair,
+  // and nothing either player pressed afterwards could lift it.
+  const r = round();
+  const [one, two] = r.states();
+  const heard = () => browser.versusAudioState(one, two).muted;
+
+  r.step(FRAME, {}, { M: true });
+  assert.equal(heard(), true, 'the round is muted from either hand');
+
+  one.shield = 0;
+  r.pilots[0].endGame();
+  r.step(FRAME, {}, {});
+  assert.equal(heard(), true, 'and stays muted with a pilot down');
+
+  r.step(FRAME, {}, { M: true });
+  assert.equal(one.muted, false, 'the wrecked pilot answers the key too');
+  assert.equal(two.muted, false, 'as does the one still flying');
+  assert.equal(heard(), false, 'so the survivor can bring the sound back');
+
+  // And on the result panel, which is the one state nothing at all is stepped
+  // in: without the key being answered there the round would end silent for good
+  // whenever the last frame it was muted on was the frame it ended.
+  r.step(FRAME, {}, { M: true });
+  two.shield = 0;
+  r.pilots[1].endGame();
+  assert.equal(r.standing().over, true, 'both pilots are out');
+  assert.equal(heard(), true, 'muted as the round ended');
+
+  r.step(FRAME, {}, { M: true });
+  assert.equal(heard(), false, 'and the key still lifts it');
+});
+
+test('versus: a round keeps one stored best, and files no lower score over a higher one', () => {
+  // Each Game reads the stored figure when it is built and endGame weighs a run
+  // against that pilot's own copy, so a pilot who beats it leaves the other
+  // holding the number from before the round. Unlevelled, the second pilot to
+  // end files their own score over the first's.
+  const store = fakeStorage({ 'cmdSpaceRider.bestScore': 1000 });
+  const engine = loadBrowserEngine(store);
+  const stored = () => Number(store.read(engine.BEST_SCORE_KEY));
+
+  const r = new engine.VersusRound(5, engine.versusLayout(WIDE.cols, WIDE.rows));
+  const [one, two] = r.states();
+  assert.deepEqual([one.bestScore, two.bestScore], [1000, 1000], 'both opened on the stored one');
+
+  one.score = 5000;
+  one.shield = 0;
+  r.pilots[0].endGame();
+  assert.equal(stored(), 5000, 'the pilot who was wrecked on the better flight set it');
+
+  r.step(FRAME, {}, {});
+  assert.equal(two.bestScore, 5000, 'and the round levels the other pilot onto it');
+
+  two.score = 3000;
+  two.shield = 0;
+  r.pilots[1].endGame();
+  assert.equal(stored(), 5000, 'so the lower score is not filed over the higher one');
+});
+
+test('versus: two pilots wrecked on one frame still leave the higher score stored', () => {
+  // The case the levelling has to run inside the step for rather than after it.
+  // Both halves open on the same field, so two pilots handed the same keys fly
+  // the same run and strike the same rock on the same frame - and by then the
+  // second endGame of that frame has already read its own copy of the best.
+  const store = fakeStorage({ 'cmdSpaceRider.bestScore': 1000 });
+  const engine = loadBrowserEngine(store);
+  const r = new engine.VersusRound(5, engine.versusLayout(WIDE.cols, WIDE.rows));
+  const [one, two] = r.states();
+
+  // Shields that one collision ends, and a lead for pilot 1 that distance cannot
+  // close, since both halves earn it at the same rate.
+  one.shield = 1;
+  two.shield = 1;
+  one.score = 5000;
+  two.score = 3000;
+
+  const wrecked = [null, null];
+  for (let f = 0; f < 900 && !r.standing().over; f++) {
+    r.step(FRAME, {}, {});
+    r.states().forEach((s, i) => {
+      if (wrecked[i] === null && s.mode !== 'playing') wrecked[i] = f;
+    });
+  }
+  assert.equal(r.standing().over, true, 'both pilots were wrecked inside thirty seconds');
+  assert.equal(wrecked[0], wrecked[1], 'on the one frame, which is what this case is');
+  assert.ok(one.score > two.score, 'pilot 1 holds the better flight');
+  assert.equal(
+    Number(store.read(engine.BEST_SCORE_KEY)), one.score,
+    'and the better flight is what is stored',
+  );
+});
+
 test('versus: a pause from either hand stops both runs', () => {
   for (const key of ['P']) {
     const r = round();
