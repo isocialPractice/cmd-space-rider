@@ -3210,3 +3210,58 @@ still be found by name.
     `dropPowerup` produces. Nothing should change behaviourally and the suite
     should stay green.
   - From: UI/UX Override - the middle drop is under the tracer
+
+## Archived 10-25-26
+
+- [x] **Unshared Drop Clip**: Four docstrings still say `drawBullets` has one clip and the hit test
+  reads it, and this release gave it a second one the hit test does not read
+  - **Issue**: `drawBullets` now draws by `inCorridor(col, row) && !onDrop(col,
+    row)` (`src/render.ts:476`, `index.html:3022`) while `contacts` still reads
+    `tracerDrawn` alone (`src/game.ts:1702`). Four passages state the single
+    clip as an invariant, and none was touched: `drawBullets`' own docstring,
+    eleven lines above the paragraph that introduces the second clip - "The hit
+    test reads the same clip, and that is the whole of what it shares with this:
+    a frame that draws no tracer registers nothing on that frame"
+    (`src/render.ts:399`, `index.html:2953`); `tracerDrawn`'s - "Read by
+    `drawBullets` and by the pulse cannon's hit test, which is the whole reason
+    it is one function" (`src/types.ts:303`); and `contacts`' in both builds -
+    "neither a target that is not being drawn nor a tracer that is not being
+    drawn can be half of a contact" and "the two cannot come to state different
+    corridors" (`src/game.ts:1596` and `:1601`, `index.html:2391` and `:2394`).
+    Name the state: the release's own staged scene, the ship held at `x: 0`, a
+    boss killed at z=-190, the axis column strung with bolts. A bolt projects
+    into the middle drop's cell, `drawBullets` paints no bar there - which is
+    what the three new `test/boss.test.mjs` cases assert, and disabling the clip
+    in both builds fails exactly those six and nothing else - and `tracerDrawn`
+    still returns true for that cell, so `contacts` counts a tracer the player
+    was not shown. The behaviour is the right one, since a pickup absorbing a
+    shot would be worse than the defect being fixed; what is wrong is that one
+    docstring now contradicts itself inside a single comment block and three
+    others state a property the code stopped having.
+  - **Goal**: Leave the behaviour alone and reconcile the four passages. Say
+    that the corridor clip is the one the hit test shares and the drop clip is
+    deliberately not, with the reason: the drop clip is about what the player is
+    being asked to read in a cell, not a statement that the shot is not in it.
+    Worth saying in the same breath how far the exposure reaches, because it
+    bounds the "saw no bolt, the block died anyway" case the corridor clip was
+    added for: a drop's block is `size = max(1, floor(scale * 2))`, which is 1
+    at every scale under 1 and so one cell at every depth in front of the ship,
+    so the clip can take at most one of a bolt's two cells and the other is
+    still painted - except where `bScr.row - 1 < gameTop` left the bolt one cell
+    to begin with. Both builds, and `src/types.ts` as well as the two renderers.
+  - From: Code Review Override - the second clip, and the probe nothing published
+- [x] `drawBullets` calls 48 frames "the read window" and `BOSS_DROP_HOLD` makes
+  that window 36
+  - **Issue**: `src/render.ts:425` and `index.html:2977` say a bolt "sat on that
+    cell for 31 to 47 of the 48 frames of the read window". `BOSS_DROP_HOLD` is
+    1.2 (`src/types.ts:716`), which is 36 frames at 30 fps, and that is how the
+    suite derives the window - `Math.round(build.BOSS_DROP_HOLD * 30)` in all
+    three of the new `test/boss.test.mjs` cases. The same release's changelog
+    entry keeps the two figures apart on purpose, writing "inside the 1.2 s
+    hold" for the window and "the 48 frames watched" for the measurement, so the
+    docstring is the one copy that merges them. Name the reader: anyone deriving
+    the read window from the constant gets 36 and finds a docstring in both
+    builds claiming it is 48.
+  - **Goal**: Call the 48 what the changelog calls it - the frames watched - in
+    both builds, and leave "read window" for the 36 that `BOSS_DROP_HOLD` buys.
+  - From: Code Review Override - the second clip, and the probe nothing published

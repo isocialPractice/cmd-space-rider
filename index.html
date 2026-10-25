@@ -4054,7 +4054,7 @@ const VERSUS_SEAM_COLS=1;
  * seeded run per build out to twenty minutes, reads the score and the distance
  * off it at six marks, and sweeps half widths counting the columns of the
  * reading row written twice. 40 holds the first thirty seconds, 42 holds out to
- * about ten minutes, and 45 holds every mark to the end of the walk. It leaves
+ * five minutes, and 45 is what the ten and twenty minute marks want. It leaves
  * the tunnel 43 columns of mouth on the nearest play row, counted off the drawn
  * wall columns rather than off the projection.
  *
@@ -4289,8 +4289,8 @@ function versusResultLines(a,b,standing){
     :`${VERSUS_TAGS[standing.winner]} TAKES THE ROUND`;
   return[
     verdict,
-    `${VERSUS_TAGS[0]}  ${a.score}   •   ${VERSUS_TAGS[1]}  ${b.score}`,
-    '[ ENTER REMATCH • ESC TO TITLE ]',
+    `${VERSUS_TAGS[0]}  ${a.score}   \u2022   ${VERSUS_TAGS[1]}  ${b.score}`,
+    '[ ENTER REMATCH \u2022 ESC TO TITLE ]',
   ];
 }
 
@@ -4326,9 +4326,9 @@ function drawVersus(screen,layout,halves,standing){
     screen.blit(half,x,0);
 
     const tag=versusTag(i,standing.alive[i]);
-    screen.put(x,0,'╔',C.CYAN,C.BLACK);
-    screen.hLine(x+1,0,max(0,w-2),'═',C.CYAN,C.BLACK);
-    screen.put(x+w-1,0,'╗',C.CYAN,C.BLACK);
+    screen.put(x,0,'\u2554',C.CYAN,C.BLACK);
+    screen.hLine(x+1,0,max(0,w-2),'\u2550',C.CYAN,C.BLACK);
+    screen.put(x+w-1,0,'\u2557',C.CYAN,C.BLACK);
     screen.putString(x+max(0,floor((w-tag.length)/2)),0,tag,
       standing.alive[i]?C.BRIGHT_CYAN:C.GRAY,C.BLACK);
 
@@ -4336,13 +4336,13 @@ function drawVersus(screen,layout,halves,standing){
     // this cannot come to disagree with drawFooter about which row that is.
     const hintY=half.height-FOOTER_ROWS;
     const hint=versusHintRow(i,w);
-    screen.put(x,hintY,'╠',C.CYAN,C.BLACK);
-    screen.hLine(x+1,hintY,max(0,w-2),'═',C.CYAN,C.BLACK);
-    screen.put(x+w-1,hintY,'╣',C.CYAN,C.BLACK);
+    screen.put(x,hintY,'\u2560',C.CYAN,C.BLACK);
+    screen.hLine(x+1,hintY,max(0,w-2),'\u2550',C.CYAN,C.BLACK);
+    screen.put(x+w-1,hintY,'\u2563',C.CYAN,C.BLACK);
     screen.putString(x+max(0,floor((w-hint.length)/2)),hintY,hint,C.GRAY,C.BLACK);
   }
   for(let dx=0;dx<layout.seam;dx++){
-    screen.vLine(layout.seamX+dx,0,screen.height,'║',C.CYAN,C.BLACK);
+    screen.vLine(layout.seamX+dx,0,screen.height,'\u2551',C.CYAN,C.BLACK);
   }
 }
 
@@ -4364,19 +4364,19 @@ function drawVersusResult(screen,lines){
   const x=floor((screen.width-w)/2);
   const y=max(0,floor((screen.height-h)/2));
   screen.fillRect(x,y,w,h,' ',C.WHITE,C.BLACK);
-  screen.put(x,y,'┌',C.BRIGHT_CYAN,C.BLACK);
-  screen.hLine(x+1,y,inner,'─',C.BRIGHT_CYAN,C.BLACK);
-  screen.put(x+w-1,y,'┐',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x,y,'\u250C',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(x+1,y,inner,'\u2500',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x+w-1,y,'\u2510',C.BRIGHT_CYAN,C.BLACK);
   for(let i=0;i<lines.length;i++){
     const ly=y+1+i;
-    screen.put(x,ly,'│',C.BRIGHT_CYAN,C.BLACK);
-    screen.put(x+w-1,ly,'│',C.BRIGHT_CYAN,C.BLACK);
+    screen.put(x,ly,'\u2502',C.BRIGHT_CYAN,C.BLACK);
+    screen.put(x+w-1,ly,'\u2502',C.BRIGHT_CYAN,C.BLACK);
     screen.putString(x+1+floor((inner-lines[i].length)/2),ly,lines[i],
       i===0?C.BRIGHT_YELLOW:C.BRIGHT_CYAN,C.BLACK);
   }
-  screen.put(x,y+h-1,'└',C.BRIGHT_CYAN,C.BLACK);
-  screen.hLine(x+1,y+h-1,inner,'─',C.BRIGHT_CYAN,C.BLACK);
-  screen.put(x+w-1,y+h-1,'┘',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x,y+h-1,'\u2514',C.BRIGHT_CYAN,C.BLACK);
+  screen.hLine(x+1,y+h-1,inner,'\u2500',C.BRIGHT_CYAN,C.BLACK);
+  screen.put(x+w-1,y+h-1,'\u2518',C.BRIGHT_CYAN,C.BLACK);
 }
 
 /**
