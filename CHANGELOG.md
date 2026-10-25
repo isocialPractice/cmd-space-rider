@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `VERSUS_MIN_HALF_WIDTH`'s docstring and `docs/development.html` both said 42
+  columns held "out to about ten minutes", where `npm run probe -- versus-half`
+  clears 42 at the 30s, 60s, 120s and 300s marks and wants 45 from 600s on, in
+  both builds. Ten minutes is the first mark 42 fails rather than the last one it
+  holds, so the sentence sent anyone sizing a half off it to a width the probe
+  says cannot read a ten minute round. Both now say 42 holds out to five minutes
+  and 45 is what the ten and twenty minute marks want, which is the wording the
+  0.12.0 release note was already corrected to - the three copies agree again.
+  No measured figure moved; the floor is still 45.
+
+### Changed
+
+- The split screen's three drawing functions state their box glyphs as `\uXXXX`
+  escapes, which is how the rest of both builds states them. `drawVersus`,
+  `drawVersusResult` and `versusResultLines` carried 17 lines of literal
+  non-ASCII - the frame corners and rules, the seam, and the bullet in the two
+  result lines - where `drawHUD`, `drawFooter` and `nameEntryHint` next to them
+  write the escape. Nothing failed on it, since the page declares
+  `charset="UTF-8"` and `.gitattributes` pins the endings, so this was drift
+  rather than a defect; it was total, though, and one function stating its glyphs
+  a way no other function in either build does is what a later reader copies.
+  `index.html` now holds no non-ASCII outside its comments again, which was the
+  state before the split screen landed. The escapes evaluate to the same
+  characters and the suite holds at 881, but it reads only three of the seventeen
+  back off the drawn buffer - the seam and the two corners a half opens with, in
+  `test/versus.test.mjs`. The result panel's frame and the bullet in its two
+  lines are covered by the panel's text and by its staying on the grid, neither
+  of which moves when a box glyph does, so the drawing being unchanged there
+  rests on reading the escapes rather than on the suite.
+
 ## [1.0.0-alpha.0.12.0] - 2026-10-24
 
 ### Added

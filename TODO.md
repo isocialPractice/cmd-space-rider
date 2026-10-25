@@ -8,48 +8,39 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the half-width figure and the renderer's bare glyphs
+### Code Review Override - the result panel's glyphs nothing reads back
 
-- [ ] The split screen draws its box glyphs as literal characters where the rest
-  of both builds writes `\uXXXX`
-  - **Issue**: `drawVersus`, `drawVersusResult` and `versusResultLines` carry 17
-    lines of literal non-ASCII - the frame corners and rules at
-    `index.html:4329` to `:4345` and `:4367` to `:4379`, and the bullet in the
-    two result lines at `:4292` and `:4293`. Before this turn `index.html` held
-    no non-ASCII at all outside its comments: `drawHUD` writes `'╔'`,
-    `drawFooter` `'╠'` and `nameEntryHint` `'•'`, and `src/render.ts`
-    and `src/menu.ts` write the escape with the glyph in a trailing comment.
-    Nothing fails today, since the page declares `charset="UTF-8"` and
-    `.gitattributes` pins the endings, so this is drift rather than a defect -
-    but it is total, and one function stating its glyphs a way no other function
-    in either build does is what a later reader copies.
-  - **Goal**: Write the 17 literals as the `\uXXXX` escapes the surrounding code
-    uses, with the glyph in a trailing comment where `src/render.ts` does.
-    `test/versus.test.mjs` already reads those glyphs back off the drawn buffer,
-    so `npm test` holding at 881 is the check.
-  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
-
-#### Found Issues
-
-- [ ] `VERSUS_MIN_HALF_WIDTH` and the published probe page put 42 columns at ten
-  minutes, where the probe puts it at five
-  - **Issue**: the docstring reads "40 holds the first thirty seconds, 42 holds
-    out to about ten minutes, and 45 holds every mark to the end of the walk"
-    (`index.html:4056`), and `docs/development.html:51` carries the same sentence
-    word for word. `npm run probe -- versus-half` clears 42 at the 30s, 60s, 120s
-    and 300s marks and wants 45 from 600s on, identically in both builds - so the
-    ten minute mark is the first one 42 fails rather than the last one it holds,
-    and five minutes is where it stops. Name the reader: anyone sizing a half off
-    the comment concludes 42 columns carries a ten minute round, which is a round
-    the probe says that width cannot read. The release note's copy of the
-    sentence was corrected in place this turn, so the three copies now disagree
-    with each other as well.
-  - **Goal**: Say in both that 42 holds out to five minutes and that 45 is what
-    the ten and twenty minute marks want, which is the wording `CHANGELOG.md`
-    now carries. `docs/development.html` is published, so
-    `test/docs-site.test.mjs` is what checks the edit lands; no measured figure
-    moves and `npm test` holding at 881 is the rest of it.
-  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
+- [ ] Fourteen of the seventeen glyph escapes the split screen now writes are
+  checked by nothing that reads them off the buffer
+  - **Issue**: this turn rewrote 17 literal glyphs in `drawVersus`,
+    `drawVersusResult` and `versusResultLines` as `\uXXXX` escapes, and the only
+    property the edit could get wrong is which character each escape names.
+    `test/versus.test.mjs` reads three of them back off the drawn buffer - the
+    seam `║` at `:594` and `:844`, and the two corners a half opens with at
+    `:601` and `:603`. Nothing reads the other fourteen: the rules and the hint
+    row's `╠ ═ ╣` in `drawVersus` (`index.html:4330`, `:4339` to
+    `:4341`), the whole eight-line frame of `drawVersusResult` (`:4367` to
+    `:4379`), and the bullet in the two result lines (`:4292`, `:4293`). The
+    panel's two cases check its text (`test/versus.test.mjs:716`) and that it
+    stays on the grid (`:742`), and a box glyph changing moves neither - the
+    bullet is not inside any asserted substring, and a wrong frame character is
+    the same width as the right one. Name the state: write `┍` at `:4367`
+    and `+` at `:4292` and `:4293`, and the panel draws a mismatched corner
+    and a `+` where the bullet goes while `npm test` holds at 881 pass, 0 fail -
+    measured, not inferred. The repository reads glyphs back off the buffer
+    everywhere else it draws a frame (`test/leaderboard.test.mjs:882`,
+    `test/menu-layout.test.mjs:138`, `test/browser-engine.test.mjs:596`), so the
+    versus result panel is the one framed thing in either build with no such
+    assertion.
+  - **Goal**: Assert the result panel's frame and the bullet off the drawn
+    buffer, the way `test/menu-layout.test.mjs:138` asserts a border row: the
+    four corners and the two rules at the panel's own `x`, `y`, `w` and `h`, and
+    `•` present in the scores line and the rematch line. `drawVersusResult`
+    centres the panel, so derive the origin from the buffer rather than
+    restating it. Browser only - the split screen has no terminal half, so
+    nothing in `test/parity.test.mjs` pairs with it. The suite should come out
+    above 881 with no existing case changed.
+  - From: Code Review Override - the result panel's glyphs nothing reads back
 
 ## Quick Wins
 
@@ -95,60 +86,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 166 earlier items in `TODO-archive.md`, newest last.
+> 168 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Unshared Drop Clip**: Four docstrings still say `drawBullets` has one clip and the hit test
-  reads it, and this release gave it a second one the hit test does not read
-  - **Issue**: `drawBullets` now draws by `inCorridor(col, row) && !onDrop(col,
-    row)` (`src/render.ts:476`, `index.html:3022`) while `contacts` still reads
-    `tracerDrawn` alone (`src/game.ts:1702`). Four passages state the single
-    clip as an invariant, and none was touched: `drawBullets`' own docstring,
-    eleven lines above the paragraph that introduces the second clip - "The hit
-    test reads the same clip, and that is the whole of what it shares with this:
-    a frame that draws no tracer registers nothing on that frame"
-    (`src/render.ts:399`, `index.html:2953`); `tracerDrawn`'s - "Read by
-    `drawBullets` and by the pulse cannon's hit test, which is the whole reason
-    it is one function" (`src/types.ts:303`); and `contacts`' in both builds -
-    "neither a target that is not being drawn nor a tracer that is not being
-    drawn can be half of a contact" and "the two cannot come to state different
-    corridors" (`src/game.ts:1596` and `:1601`, `index.html:2391` and `:2394`).
-    Name the state: the release's own staged scene, the ship held at `x: 0`, a
-    boss killed at z=-190, the axis column strung with bolts. A bolt projects
-    into the middle drop's cell, `drawBullets` paints no bar there - which is
-    what the three new `test/boss.test.mjs` cases assert, and disabling the clip
-    in both builds fails exactly those six and nothing else - and `tracerDrawn`
-    still returns true for that cell, so `contacts` counts a tracer the player
-    was not shown. The behaviour is the right one, since a pickup absorbing a
-    shot would be worse than the defect being fixed; what is wrong is that one
-    docstring now contradicts itself inside a single comment block and three
-    others state a property the code stopped having.
-  - **Goal**: Leave the behaviour alone and reconcile the four passages. Say
-    that the corridor clip is the one the hit test shares and the drop clip is
-    deliberately not, with the reason: the drop clip is about what the player is
-    being asked to read in a cell, not a statement that the shot is not in it.
-    Worth saying in the same breath how far the exposure reaches, because it
-    bounds the "saw no bolt, the block died anyway" case the corridor clip was
-    added for: a drop's block is `size = max(1, floor(scale * 2))`, which is 1
-    at every scale under 1 and so one cell at every depth in front of the ship,
-    so the clip can take at most one of a bolt's two cells and the other is
-    still painted - except where `bScr.row - 1 < gameTop` left the bolt one cell
-    to begin with. Both builds, and `src/types.ts` as well as the two renderers.
-  - From: Code Review Override - the second clip, and the probe nothing published
-- [x] `drawBullets` calls 48 frames "the read window" and `BOSS_DROP_HOLD` makes
-  that window 36
-  - **Issue**: `src/render.ts:425` and `index.html:2977` say a bolt "sat on that
-    cell for 31 to 47 of the 48 frames of the read window". `BOSS_DROP_HOLD` is
-    1.2 (`src/types.ts:716`), which is 36 frames at 30 fps, and that is how the
-    suite derives the window - `Math.round(build.BOSS_DROP_HOLD * 30)` in all
-    three of the new `test/boss.test.mjs` cases. The same release's changelog
-    entry keeps the two figures apart on purpose, writing "inside the 1.2 s
-    hold" for the window and "the 48 frames watched" for the measurement, so the
-    docstring is the one copy that merges them. Name the reader: anyone deriving
-    the read window from the constant gets 36 and finds a docstring in both
-    builds claiming it is 48.
-  - **Goal**: Call the 48 what the changelog calls it - the frames watched - in
-    both builds, and leave "read window" for the 36 that `BOSS_DROP_HOLD` buys.
-  - From: Code Review Override - the second clip, and the probe nothing published
 - [x] `test/probes/drop-clip.mjs` reached the rig and none of the published
   probe listings
   - **Issue**: the probe is wired correctly - `test/probes/probes.mjs` declares
@@ -220,3 +159,40 @@ the roadmap section each one came from.
   - From: Code Review Override - the second clip, and the probe nothing published
 - [x] **Multiplayer split-screen (browser)** — Divide the canvas into two halves. Player 1 uses WASD+Space, Player 2 uses IJKL+Enter. Shared tunnel, separate scores. Competitive survival.
   - From: Bigger Features
+- [x] The split screen draws its box glyphs as literal characters where the rest
+  of both builds writes `\uXXXX`
+  - **Issue**: `drawVersus`, `drawVersusResult` and `versusResultLines` carry 17
+    lines of literal non-ASCII - the frame corners and rules at
+    `index.html:4329` to `:4345` and `:4367` to `:4379`, and the bullet in the
+    two result lines at `:4292` and `:4293`. Before this turn `index.html` held
+    no non-ASCII at all outside its comments: `drawHUD` writes `'╔'`,
+    `drawFooter` `'╠'` and `nameEntryHint` `'•'`, and `src/render.ts`
+    and `src/menu.ts` write the escape with the glyph in a trailing comment.
+    Nothing fails today, since the page declares `charset="UTF-8"` and
+    `.gitattributes` pins the endings, so this is drift rather than a defect -
+    but it is total, and one function stating its glyphs a way no other function
+    in either build does is what a later reader copies.
+  - **Goal**: Write the 17 literals as the `\uXXXX` escapes the surrounding code
+    uses, with the glyph in a trailing comment where `src/render.ts` does.
+    `test/versus.test.mjs` already reads those glyphs back off the drawn buffer,
+    so `npm test` holding at 881 is the check.
+  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
+- [x] `VERSUS_MIN_HALF_WIDTH` and the published probe page put 42 columns at ten
+  minutes, where the probe puts it at five
+  - **Issue**: the docstring reads "40 holds the first thirty seconds, 42 holds
+    out to about ten minutes, and 45 holds every mark to the end of the walk"
+    (`index.html:4056`), and `docs/development.html:51` carries the same sentence
+    word for word. `npm run probe -- versus-half` clears 42 at the 30s, 60s, 120s
+    and 300s marks and wants 45 from 600s on, identically in both builds - so the
+    ten minute mark is the first one 42 fails rather than the last one it holds,
+    and five minutes is where it stops. Name the reader: anyone sizing a half off
+    the comment concludes 42 columns carries a ten minute round, which is a round
+    the probe says that width cannot read. The release note's copy of the
+    sentence was corrected in place this turn, so the three copies now disagree
+    with each other as well.
+  - **Goal**: Say in both that 42 holds out to five minutes and that 45 is what
+    the ten and twenty minute marks want, which is the wording `CHANGELOG.md`
+    now carries. `docs/development.html` is published, so
+    `test/docs-site.test.mjs` is what checks the edit lands; no measured figure
+    moves and `npm test` holding at 881 is the rest of it.
+  - From: Code Review Override - the half-width figure and the renderer's bare glyphs
