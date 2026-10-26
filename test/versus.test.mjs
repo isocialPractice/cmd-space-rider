@@ -50,6 +50,32 @@ function renderRound(r, cols = WIDE.cols, rows = WIDE.rows) {
   return screen;
 }
 
+/**
+ * Where the result panel landed, measured off the buffer it was drawn into.
+ *
+ * drawVersusResult centres the panel on the grid and sizes it to its longest
+ * line, so restating that arithmetic here would leave a second copy of the
+ * formula agreeing with the first whatever either of them said. The frame is
+ * what the panel is found by instead: the top left corner locates it, and the
+ * other two corners measure it. Null is a panel that drew no corner to find,
+ * which the cases below report rather than reading past.
+ */
+function panelBox(screen) {
+  const rows = screenText(screen).split('\n');
+  for (let y = 0; y < rows.length; y++) {
+    const x = rows[y].indexOf('┌');
+    if (x < 0) continue;
+    const right = rows[y].indexOf('┐', x + 1);
+    let bottom = -1;
+    for (let b = y + 1; b < rows.length; b++) {
+      if (rows[b][x] === '└') { bottom = b; break; }
+    }
+    if (right < 0 || bottom < 0) return null;
+    return { x, y, w: right - x + 1, h: bottom - y + 1, rows };
+  }
+  return null;
+}
+
 // ----- The grid, split in two -----
 
 test('versus: the two halves and the seam tile the grid exactly', () => {
@@ -606,6 +632,48 @@ test('versus: the grid is two halves with a divider between them', () => {
   }
 });
 
+test('versus: each half is framed along the two rows the shell lays down again', () => {
+  // Those two rows are the shell's rather than the half's: drawVersus restates
+  // each border instead of writing its replacement label over drawHUD's and
+  // drawFooter's, because the two labels are different lengths and the longer one
+  // was left standing either side of the shorter. What no case read is the rule
+  // between the corners, so a row could lose its ═ fill and still open and
+  // close correctly.
+  //
+  // The expected row is built the way the shell builds it, border first and the
+  // label written into it, and every glyph is a literal here so the assertion
+  // names the character rather than restating the escape index.html writes.
+  const labelled = (open, close, w, label) => {
+    const row = (open + '═'.repeat(w - 2) + close).split('');
+    const at = Math.max(0, Math.floor((w - label.length) / 2));
+    for (let i = 0; i < label.length; i++) row[at + i] = label[i];
+    return row.join('');
+  };
+
+  // Three grids whose halves span two of the hint forms, so the label centred on
+  // the lower row is a different length in each.
+  for (const cols of [100, 137, 205]) {
+    const layout = browser.versusLayout(cols, WIDE.rows);
+    const screen = renderRound(new browser.VersusRound(4242, layout), cols, WIDE.rows);
+    const w = layout.half;
+    const hintY = layout.rows - browser.FOOTER_ROWS;
+
+    for (const [i, x] of [layout.leftX, layout.rightX].entries()) {
+      const at = `${cols} columns, pilot ${i + 1}`;
+      assert.equal(
+        rowText(screen, 0).slice(x, x + w),
+        labelled('╔', '╗', w, browser.versusTag(i, true)),
+        `${at}: the tagged top row`,
+      );
+      assert.equal(
+        rowText(screen, hintY).slice(x, x + w),
+        labelled('╠', '╣', w, browser.versusHintRow(i, w)),
+        `${at}: the row the key list is set into`,
+      );
+    }
+  }
+});
+
 test('versus: each half is laid where the layout puts it', () => {
   // The blit offsets are the one thing a swap would make invisible: both halves
   // draw the same tunnel, so two halves laid in the wrong order looks right
@@ -755,6 +823,65 @@ test('versus: the result panel stays on the grid at every width a round holds', 
     ));
     assert.deepEqual(outside, [], `${cols} columns: the panel drew off the buffer`);
   }
+});
+
+test('versus: the result panel is framed on all four sides', () => {
+  // The panel is the one framed thing in either build whose frame no case read.
+  // The two cases above read its text, which carries no box glyph, and that it
+  // stays on the grid, which a wrong glyph of the same width does not move: a
+  // ┍ written at the top left corner left both of them passing.
+  //
+  // Read the way menu-layout.test.mjs reads the screen border - the two
+  // horizontal rules whole, and the two sides a row at a time - off a panel this
+  // found rather than one it placed.
+  for (const cols of [81, 100, 137, 205]) {
+    const lines = browser.versusResultLines(
+      { score: 123456 }, { score: 7 }, { over: true, winner: 0, alive: [false, false] },
+    );
+    const screen = new browser.ScreenBuffer(cols, 30);
+    browser.drawVersusResult(screen, lines);
+
+    const at = `${cols} columns`;
+    const box = panelBox(screen);
+    assert.ok(box, `${at}: the panel drew no frame to find`);
+    assert.equal(box.h, lines.length + 2, `${at}: a row per line, inside a border`);
+
+    const inner = box.w - 2;
+    assert.equal(
+      box.rows[box.y].slice(box.x, box.x + box.w),
+      `┌${'─'.repeat(inner)}┐`,
+      `${at}: the top rule and the corners either end of it`,
+    );
+    assert.equal(
+      box.rows[box.y + box.h - 1].slice(box.x, box.x + box.w),
+      `└${'─'.repeat(inner)}┘`,
+      `${at}: the bottom rule and its own two corners`,
+    );
+    for (let y = box.y + 1; y < box.y + box.h - 1; y++) {
+      assert.equal(box.rows[y][box.x], '│', `${at}: the left side at row ${y}`);
+      assert.equal(box.rows[y][box.x + box.w - 1], '│', `${at}: the right side at row ${y}`);
+    }
+  }
+});
+
+test('versus: the bullet between the two scores, and the one between the two ways out', () => {
+  // Neither bullet sits inside any substring the suite asserts - the scores case
+  // reads `PILOT 1  700` and stops short of it, and `ENTER REMATCH` ends before
+  // it - so a `+` in either line is a panel nothing would have read. Both are
+  // taken off the drawn row rather than off versusResultLines, which is the copy
+  // that moves with the code.
+  const lines = browser.versusResultLines(
+    { score: 4200 }, { score: 95 }, { over: true, winner: 0, alive: [false, false] },
+  );
+  const screen = new browser.ScreenBuffer(WIDE.cols, WIDE.rows);
+  browser.drawVersusResult(screen, lines);
+
+  const box = panelBox(screen);
+  assert.ok(box, 'the panel drew no frame to find');
+  const line = (i) => box.rows[box.y + 1 + i].slice(box.x + 1, box.x + box.w - 1);
+
+  assert.match(line(1), /PILOT 1 {2}4200 {3}• {3}PILOT 2 {2}95/, `the scores line: ${line(1)}`);
+  assert.match(line(2), /\[ ENTER REMATCH • ESC TO TITLE \]/, `the rematch line: ${line(2)}`);
 });
 
 // ----- The label on the title screen -----
