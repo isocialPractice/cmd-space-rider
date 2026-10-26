@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.12.1] - 2026-10-26
 
 ### Fixed
 
@@ -33,6 +33,37 @@
   lines are covered by the panel's text and by its staying on the grid, neither
   of which moves when a box glyph does, so the drawing being unchanged there
   rests on reading the escapes rather than on the suite.
+
+### Added
+
+- The split screen's result panel reads its own frame back off the drawn buffer,
+  and so do the two border rows the shell lays down again over each half. The
+  `Changed` note above restated 17 literal box glyphs in `drawVersus`,
+  `drawVersusResult` and `versusResultLines` as `\uXXXX` escapes, and three of
+  the seventeen were read back off a buffer - the seam and the two corners a
+  half opens with - so the other fourteen rested on reading the escape rather
+  than on the suite. The result panel's two existing cases could not catch one
+  of them: they read its text, which carries no box glyph, and that it stays on
+  the grid, which a wrong glyph of the same width does not move. Three cases in
+  `test/versus.test.mjs` close that. The panel's frame is read the way
+  `test/menu-layout.test.mjs` reads the screen border, the two rules whole and
+  the two sides a row at a time, off a panel found by its own corners rather
+  than one placed by restating the centring `drawVersusResult` does - two copies
+  of that arithmetic agree with each other whatever either of them says. The
+  bullet is read off the drawn row rather than off `versusResultLines`, which is
+  the copy that moves with the code. And each half's tagged top row and the row
+  its key list is set into are compared whole against a border built the way the
+  shell builds one, label written into the rule, at three grid widths spanning
+  two of the hint forms.
+
+  Measured rather than argued. Seven single-glyph changes are what those cases
+  are for: a wrong top left corner, either bullet, the `═` fill along a half's
+  top row, the `╠` the hint row opens with, a panel side, and the bottom rule.
+  Each was written into `index.html` in turn and the suite run on it, against
+  the test file as it was and again as it now is. All seven passed before at 881
+  pass, 0 fail - not only the two the issue named - and all seven fail now. `npm
+  test` is 884 pass, 0 fail, with no existing case changed and nothing added to
+  either build.
 
 ## [1.0.0-alpha.0.12.0] - 2026-10-24
 

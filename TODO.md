@@ -8,40 +8,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the result panel's glyphs nothing reads back
-
-- [ ] Fourteen of the seventeen glyph escapes the split screen now writes are
-  checked by nothing that reads them off the buffer
-  - **Issue**: this turn rewrote 17 literal glyphs in `drawVersus`,
-    `drawVersusResult` and `versusResultLines` as `\uXXXX` escapes, and the only
-    property the edit could get wrong is which character each escape names.
-    `test/versus.test.mjs` reads three of them back off the drawn buffer - the
-    seam `║` at `:594` and `:844`, and the two corners a half opens with at
-    `:601` and `:603`. Nothing reads the other fourteen: the rules and the hint
-    row's `╠ ═ ╣` in `drawVersus` (`index.html:4330`, `:4339` to
-    `:4341`), the whole eight-line frame of `drawVersusResult` (`:4367` to
-    `:4379`), and the bullet in the two result lines (`:4292`, `:4293`). The
-    panel's two cases check its text (`test/versus.test.mjs:716`) and that it
-    stays on the grid (`:742`), and a box glyph changing moves neither - the
-    bullet is not inside any asserted substring, and a wrong frame character is
-    the same width as the right one. Name the state: write `┍` at `:4367`
-    and `+` at `:4292` and `:4293`, and the panel draws a mismatched corner
-    and a `+` where the bullet goes while `npm test` holds at 881 pass, 0 fail -
-    measured, not inferred. The repository reads glyphs back off the buffer
-    everywhere else it draws a frame (`test/leaderboard.test.mjs:882`,
-    `test/menu-layout.test.mjs:138`, `test/browser-engine.test.mjs:596`), so the
-    versus result panel is the one framed thing in either build with no such
-    assertion.
-  - **Goal**: Assert the result panel's frame and the bullet off the drawn
-    buffer, the way `test/menu-layout.test.mjs:138` asserts a border row: the
-    four corners and the two rules at the panel's own `x`, `y`, `w` and `h`, and
-    `•` present in the scores line and the rematch line. `drawVersusResult`
-    centres the panel, so derive the origin from the buffer rather than
-    restating it. Browser only - the split screen has no terminal half, so
-    nothing in `test/parity.test.mjs` pairs with it. The suite should come out
-    above 881 with no existing case changed.
-  - From: Code Review Override - the result panel's glyphs nothing reads back
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -86,34 +52,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 168 earlier items in `TODO-archive.md`, newest last.
+> 169 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `test/probes/drop-clip.mjs` reached the rig and none of the published
-  probe listings
-  - **Issue**: the probe is wired correctly - `test/probes/probes.mjs` declares
-    it and `test/probes.test.mjs` discovers it off its own source, so the suite
-    runs it without a line being added. The published pages are the half that
-    did not move. `docs/project-structure.html:33` to `:41` lists all nine other
-    files in `test/probes/` by name with a one-line description each and omits
-    this one, so the tree publishes a directory the repository no longer has.
-    `docs/development.html:33` explains the flag as "the placement walk in
-    `column`, `frame-rate` and `seen-versus-kill`, and the frame count in
-    `free-flight`", and `CHEATSHEET.md:136` with its published copy
-    `docs/cheatsheet.html:59` says the same; `drop-clip` reads `--count` as
-    frames per figure and `--passes` as measurements of the pair, which its own
-    header says at `test/probes/drop-clip.mjs:28`, so both enumerations are a
-    probe short. Name the reader: someone working out what
-    `npm run probe -- drop-clip --count 1` narrows finds the probe in neither
-    list and the file in neither tree.
-  - **Goal**: Add `drop-clip.mjs` to the tree in `docs/project-structure.html`
-    in the shape the other nine use, and name it in the `--count` sentences in
-    `docs/development.html` and `CHEATSHEET.md`. The cheatsheet's published copy
-    has to move with the markdown, since `test/docs-site.test.mjs` reads every
-    published page against the repository file it is published from. While in
-    `docs/development.html`, close the blank line this release left at `:50`
-    between the new `drop-clip` paragraph and the one after it - no other pair
-    of paragraphs in that file carries one.
-  - From: Code Review Override - the second clip, and the probe nothing published
 - [x] Unshared Drop Clip 1 - two of the four reconciled passages state a bound
   the code does not support, and a symbol the pass they sit in does not have
   - **Issue**: Both are in the passages 0.11.4 rewrote, and both are the same
@@ -196,3 +136,34 @@ the roadmap section each one came from.
     `test/docs-site.test.mjs` is what checks the edit lands; no measured figure
     moves and `npm test` holding at 881 is the rest of it.
   - From: Code Review Override - the half-width figure and the renderer's bare glyphs
+- [x] Fourteen of the seventeen glyph escapes the split screen now writes are
+  checked by nothing that reads them off the buffer
+  - **Issue**: this turn rewrote 17 literal glyphs in `drawVersus`,
+    `drawVersusResult` and `versusResultLines` as `\uXXXX` escapes, and the only
+    property the edit could get wrong is which character each escape names.
+    `test/versus.test.mjs` reads three of them back off the drawn buffer - the
+    seam `║` at `:594` and `:844`, and the two corners a half opens with at
+    `:601` and `:603`. Nothing reads the other fourteen: the rules and the hint
+    row's `╠ ═ ╣` in `drawVersus` (`index.html:4330`, `:4339` to
+    `:4341`), the whole eight-line frame of `drawVersusResult` (`:4367` to
+    `:4379`), and the bullet in the two result lines (`:4292`, `:4293`). The
+    panel's two cases check its text (`test/versus.test.mjs:716`) and that it
+    stays on the grid (`:742`), and a box glyph changing moves neither - the
+    bullet is not inside any asserted substring, and a wrong frame character is
+    the same width as the right one. Name the state: write `┍` at `:4367`
+    and `+` at `:4292` and `:4293`, and the panel draws a mismatched corner
+    and a `+` where the bullet goes while `npm test` holds at 881 pass, 0 fail -
+    measured, not inferred. The repository reads glyphs back off the buffer
+    everywhere else it draws a frame (`test/leaderboard.test.mjs:882`,
+    `test/menu-layout.test.mjs:138`, `test/browser-engine.test.mjs:596`), so the
+    versus result panel is the one framed thing in either build with no such
+    assertion.
+  - **Goal**: Assert the result panel's frame and the bullet off the drawn
+    buffer, the way `test/menu-layout.test.mjs:138` asserts a border row: the
+    four corners and the two rules at the panel's own `x`, `y`, `w` and `h`, and
+    `•` present in the scores line and the rematch line. `drawVersusResult`
+    centres the panel, so derive the origin from the buffer rather than
+    restating it. Browser only - the split screen has no terminal half, so
+    nothing in `test/parity.test.mjs` pairs with it. The suite should come out
+    above 881 with no existing case changed.
+  - From: Code Review Override - the result panel's glyphs nothing reads back

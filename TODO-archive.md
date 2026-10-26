@@ -3265,3 +3265,32 @@ still be found by name.
   - **Goal**: Call the 48 what the changelog calls it - the frames watched - in
     both builds, and leave "read window" for the 36 that `BOSS_DROP_HOLD` buys.
   - From: Code Review Override - the second clip, and the probe nothing published
+
+## Archived 10-26-26
+
+- [x] `test/probes/drop-clip.mjs` reached the rig and none of the published
+  probe listings
+  - **Issue**: the probe is wired correctly - `test/probes/probes.mjs` declares
+    it and `test/probes.test.mjs` discovers it off its own source, so the suite
+    runs it without a line being added. The published pages are the half that
+    did not move. `docs/project-structure.html:33` to `:41` lists all nine other
+    files in `test/probes/` by name with a one-line description each and omits
+    this one, so the tree publishes a directory the repository no longer has.
+    `docs/development.html:33` explains the flag as "the placement walk in
+    `column`, `frame-rate` and `seen-versus-kill`, and the frame count in
+    `free-flight`", and `CHEATSHEET.md:136` with its published copy
+    `docs/cheatsheet.html:59` says the same; `drop-clip` reads `--count` as
+    frames per figure and `--passes` as measurements of the pair, which its own
+    header says at `test/probes/drop-clip.mjs:28`, so both enumerations are a
+    probe short. Name the reader: someone working out what
+    `npm run probe -- drop-clip --count 1` narrows finds the probe in neither
+    list and the file in neither tree.
+  - **Goal**: Add `drop-clip.mjs` to the tree in `docs/project-structure.html`
+    in the shape the other nine use, and name it in the `--count` sentences in
+    `docs/development.html` and `CHEATSHEET.md`. The cheatsheet's published copy
+    has to move with the markdown, since `test/docs-site.test.mjs` reads every
+    published page against the repository file it is published from. While in
+    `docs/development.html`, close the blank line this release left at `:50`
+    between the new `drop-clip` paragraph and the one after it - no other pair
+    of paragraphs in that file carries one.
+  - From: Code Review Override - the second clip, and the probe nothing published
