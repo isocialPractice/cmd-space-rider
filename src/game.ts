@@ -824,16 +824,40 @@ export class Game {
     s.boostSpeed = s.baseSpeed * 1.8;
     s.gameTime += dt;
 
+    // The frame stops when the run stops. Four of the passes below can empty
+    // the shield and call `endGame` - obstacles, mines, the boss's ram and its
+    // shots - and the `return` inside each of them leaves that pass, not this
+    // one, so without these checks every pass beneath the one that ended the
+    // run still ran on a run that was already over. That matters because they
+    // pay out: `updateOrbs` is worth 500 and ten shield, `updateMines` 500
+    // against the combo, `updateBullets` 200 a rock and 500 a mine, and a
+    // powerup pickup more shield still. `endGame` has already read `s.score`
+    // twice by then - once to set `bestScore`, once to ask whether the run
+    // earned a row - so a payout below it left the game over screen showing a
+    // score above the best score on the only run ever flown, and `commitEntry`
+    // filing the larger number while the stored best held the smaller one. The
+    // shield said the same thing the other way: a run that died of an empty
+    // shield reported 10, because an orb on the dying frame refilled it.
+    //
+    // Of the two numbers, the one the player sees is the score at the moment of
+    // death - the reading `endGame` already files, and the one the empty shield
+    // implies. So the check goes after each pass that can end a run rather than
+    // at the top of the next frame, and the mode is what it reads: `endGame`
+    // leaves `dead` or `nameEntry` behind, and either means this run is done.
     this.updateWarpLevel();
     this.updateAsteroidField(dt);
     this.updateBossEncounter(dt);
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance, dt);
+    if (s.mode !== 'playing') return;
     this.updateOrbs(advance);
     this.updateMines(advance, dt);
+    if (s.mode !== 'playing') return;
     this.updateBoss(dt);
+    if (s.mode !== 'playing') return;
     this.updateBossShots(dt);
+    if (s.mode !== 'playing') return;
     this.updatePowerups(advance, dt);
     this.updateBullets(dt, advance);
     this.updateParticles(dt, advance);

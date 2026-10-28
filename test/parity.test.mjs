@@ -6,11 +6,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   REPO_ROOT, loadBrowserEngine, fakeStorage,
-  screenCells, changedCells, stageAnimatedWorld, FRAME,
+  screenCells, changedCells, stageAnimatedWorld, stageFatalCollisionWithOrb, FRAME,
 } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
@@ -26,6 +27,56 @@ test('both builds carry the same game state fields', () => {
   const terminalKeys = Object.keys(new TerminalGame().state).sort();
   const browserKeys = Object.keys(new browser.Game().state).sort();
   assert.deepEqual(browserKeys, terminalKeys);
+});
+
+test('both builds hold one copy of the debug allow-list', () => {
+  // One list of five mode names was restated in five places - the DebugMode
+  // union, DEBUG_MODES, and a validModes literal in each build's parameter
+  // handler - plus a sixth copy in test/asteroid-field.test.mjs. Only the first
+  // three were tied to anything: add a sixth mode to the union and the constant
+  // and it appeared in both debug menus and startGame took it, while
+  // --mode=<new> exited 1 listing only the five and ?mode=<new> fell through to
+  // the title screen. tsc caught neither, the CLI's because validModes was
+  // inferred string[] and the call was cast, the browser's because it is untyped.
+  //
+  // Read as the text of the files, because neither handler is reachable from
+  // here: the CLI's is in the entry point that takes over stdin, and the
+  // browser's is below the `// ===== Canvas Setup & Sizing =====` marker. What
+  // is checked is the one property the suite can hold - that the list is written
+  // down exactly twice in the repository, once per build, and both times as the
+  // constant every reader takes it from.
+  const modes = ['mines', 'orbs', 'obstacleCollision', 'mineCollision', 'chaos'];
+  assert.deepEqual(terminalTypes.DEBUG_MODES, modes, 'the terminal list');
+  assert.deepEqual(browser.DEBUG_MODES, modes, 'and the browser copy of it');
+
+  const written = /\[[^[\]]*'mines'[^[\]]*'chaos'[^[\]]*\]/g;
+  const declares = {
+    'src/types.ts': 1,
+    'index.html': 1,
+    'src/index.ts': 0,
+    'src/game.ts': 0,
+    'src/menu.ts': 0,
+    'test/asteroid-field.test.mjs': 0,
+  };
+  for (const [file, want] of Object.entries(declares)) {
+    const found = readFileSync(join(REPO_ROOT, file), 'utf8').match(written) ?? [];
+    assert.equal(
+      found.length, want,
+      `${file} writes the list ${found.length} time(s), wanted ${want}: ${found.join(' | ')}`,
+    );
+  }
+
+  // And both parameter handlers read that constant rather than a copy.
+  assert.match(
+    readFileSync(join(REPO_ROOT, 'src', 'index.ts'), 'utf8'),
+    /DEBUG_MODES\.find\(\(m\) => m === explicitMode\)/,
+    'the CLI handler narrows off DEBUG_MODES, which is what removed its `as any`',
+  );
+  assert.match(
+    readFileSync(join(REPO_ROOT, 'index.html'), 'utf8'),
+    /DEBUG_MODES\.includes\(explicitMode\)/,
+    'and the browser handler reads the same constant',
+  );
 });
 
 test('both builds agree on the shared tuning constants', () => {
@@ -407,6 +458,34 @@ test('both builds refuse to record a debug run as the best score', () => {
     game.state.score = 500000;
     game.endGame();
     assert.equal(game.state.bestScore, 0);
+  }
+});
+
+test('both builds stop scoring on the frame the run ends', () => {
+  // The dying frame used to keep paying. `updateObstacles` ends the run and
+  // returns from itself, so the passes below it - an orb worth 500 and ten
+  // shield among them - ran on a run that was already over, after `endGame`
+  // had read the score to set the best and to ask whether it earned a row.
+  // The three readings that disagreed are the three asserted here: the score
+  // shown, the shield a run died of, and the row filed.
+  for (const game of [new TerminalGame(), new browser.Game()]) {
+    const s = game.state;
+    s.screenWidth = 80;
+    s.screenHeight = 24;
+    s.leaderboard = [];
+    game.startGame();
+    stageFatalCollisionWithOrb(s);
+    s.score = 1000;
+
+    game.update(FRAME, {}, {});
+
+    assert.equal(s.shield, 0, 'a run that died of an empty shield reports one');
+    assert.equal(s.bestScore, s.score, 'the number filed is the number shown');
+    assert.equal(s.orbs[0].collected, false, 'the orb on the dying frame is not collected');
+    assert.equal(s.mode, 'nameEntry', 'and the score earned a row');
+
+    game.commitEntry();
+    assert.equal(s.leaderboard[0].score, s.bestScore, 'the row files the score shown');
   }
 });
 

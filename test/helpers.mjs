@@ -22,6 +22,7 @@ const EXPORTS = [
   'renderNameEntry', 'nameEntryHint',
   'LEADERBOARD_HEAD', 'leaderText', 'leaderboardLayout', 'detailBadge',
   'tunnelSpan', 'tracerLit', 'tracerDrawn', 'SHIP_MARGIN',
+  'DEBUG_MODES', 'DEBUG_MODE_NAMES',
   'RNG', 'seedRng', 'seededRandom',
   'shakeOffset', 'rollWings', 'loadBestScore', 'saveBestScore', 'loadCrt', 'saveCrt',
   'RetroAudio', 'SOUND_CUES', 'ENGINE_BASE_HZ', 'ENGINE_GAIN',
@@ -55,6 +56,7 @@ const EXPORTS = [
   'VERSUS_BINDINGS', 'VERSUS_SHARED_KEYS', 'pilotKeys', 'withRng', 'versusSeed',
   'VERSUS_TAGS', 'VERSUS_OUT', 'versusTag', 'versusStanding', 'versusAudioState',
   'versusResultLines', 'VERSUS_HINTS', 'versusHintRow', 'drawVersus', 'drawVersusResult',
+  'versusReadingsClear', 'versusReadingRow', 'versusRematch',
   'versusHintText', 'drawVersusHint', 'VersusRound',
   'stickKeys', 'touchFireKey', 'STICK_RADIUS', 'STICK_DEADZONE', 'STICK_AXIS_SHARE',
   'padKeys', 'padsKeys', 'padPressed', 'padFireKey', 'PAD_CONTROL_KEYS', 'PAD_TRIGGER_PULL',
@@ -176,6 +178,28 @@ export function stageCollision(state) {
   state.orbs = [];
   state.mines = [];
   state.particles = [];
+}
+
+/**
+ * A fatal obstacle hit with an orb on the same spot, so the dying frame has
+ * something to pay out.
+ *
+ * The opposite staging to stageCollision, which clears `orbs` precisely so
+ * nothing but the obstacle fires. Here the orb is wanted: the obstacle empties
+ * the shield and ends the run, and the orb is what a pass below the one that
+ * ended it would score if the frame carried on. Shield 25 is one obstacle hit
+ * from gone, so the collision is fatal on the first frame.
+ */
+export function stageFatalCollisionWithOrb(state) {
+  state.obstacles = [{
+    x: state.shipX, y: state.shipY, z: 0,
+    rot: 0, rotSpeed: 0, scale: 1,
+  }];
+  state.orbs = [{ x: state.shipX, y: state.shipY, z: 0, collected: false }];
+  state.mines = [];
+  state.particles = [];
+  state.powerups = [];
+  state.shield = 25;
 }
 
 /** One frame at the engine's 30 fps target. */

@@ -69,9 +69,11 @@ the title screen opens a round, or `index.html?versus` goes straight into one.
 | Boost | `F` | `;` |
 | Barrel roll | `Q` / `E` | `U` / `O` |
 
-`P` pauses the round and `M` mutes it from either hand. `Esc` leaves, and `Enter`
-starts a rematch once both pilots are down. The arrow keys and `Shift` steer
-nobody in a round, because two players cannot agree whose they are.
+`P` pauses the round and `M` mutes it from either hand, and the mute carries
+into a round when one opens and into its rematch. `Esc` leaves, and `Enter`
+starts a rematch once both pilots are down, on a window still wide enough to
+open one. The arrow keys and `Shift` steer nobody in a round, because two players
+cannot agree whose they are.
 
 Both pilots launch into the same tunnel, from one seed drawn when the round
 opens, so the opening field is the same in both halves. The fields drift apart
@@ -80,7 +82,9 @@ are separate and the higher one takes the round; a round never reaches the
 leaderboard, since the table has one name to a row.
 
 A round needs 45 columns a half, so 91 columns of grid. The key is only offered
-on a window wide enough for one.
+on a window wide enough for one. A round dragged narrower than that keeps
+flying, with each half shortening its score, distance and shield readings to
+whatever fits, and the rematch waits for the window to come back.
 
 ## Debug modes
 

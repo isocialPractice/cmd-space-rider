@@ -6,6 +6,7 @@ import { ScreenBuffer } from './screen';
 import { renderGame } from './render';
 import { renderTitleScreen, renderDebugMenu, renderGameOver, renderNameEntry } from './menu';
 import { InputState } from './input';
+import { DEBUG_MODES } from './types';
 
 // ----- CLI argument parsing -----
 const args = process.argv.slice(2);
@@ -23,7 +24,7 @@ if (args.includes('--help') || args.includes('-h')) {
     '    space-rider --debug      Open the debug scenario menu',
     '    space-rider --mode <m>   Start a specific debug mode directly',
     '',
-    '  Debug modes: mines, orbs, obstacleCollision, mineCollision, chaos',
+    `  Debug modes: ${DEBUG_MODES.join(', ')}`,
     '',
     '  Controls:',
     '    Arrows or W/A/S/D  Steer ship',
@@ -103,14 +104,29 @@ game.initStars(termWidth, termHeight);
 game.state.screenWidth = termWidth;
 game.state.screenHeight = termHeight;
 
-// Handle CLI args
+// Handle CLI args.
+//
+// The allow-list is DEBUG_MODES rather than a copy of it. One list of five names
+// was restated in five places - the DebugMode union, DEBUG_MODES, and a
+// validModes literal in each build's parameter handler - and only the first
+// three were tied to anything: add a sixth mode and it appeared in both debug
+// menus and startGame took it, while --mode=<new> exited 1 reporting "Unknown
+// mode" and listing only the five.
+//
+// `find` rather than `includes`, because it is what buys the type back. A
+// validModes of inferred string[] does not narrow explicitMode, which is why the
+// startGame call needed an `as any` to compile - and that cast silenced the one
+// check this build could have made. DEBUG_MODES is DebugMode[], so find() hands
+// back DebugMode | undefined and the mode that reaches startGame is typed.
 if (explicitMode) {
-  const validModes = ['mines', 'orbs', 'obstacleCollision', 'mineCollision', 'chaos'];
-  if (validModes.includes(explicitMode)) {
-    game.startGame(explicitMode as any);
+  const mode = DEBUG_MODES.find((m) => m === explicitMode);
+  if (mode) {
+    game.startGame(mode);
   } else {
     stdout.write('\x1b[?25h\x1b[?1049l\x1b[0m');
-    process.stderr.write(`Unknown mode: ${explicitMode}\nValid modes: ${validModes.join(', ')}\n`);
+    process.stderr.write(
+      `Unknown mode: ${explicitMode}\nValid modes: ${DEBUG_MODES.join(', ')}\n`,
+    );
     process.exit(1);
   }
 } else if (wantsDebug) {

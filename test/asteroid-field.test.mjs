@@ -47,9 +47,6 @@ const OWN_Y_HIGH = 4.5;
 /** The tunnel radius a run opens with, which the ship's reach is measured off. */
 const TUNNEL_RADIUS = 8;
 
-/** Every debug scenario, named here because the browser build exports no list. */
-const DEBUG_MODES = ['mines', 'orbs', 'obstacleCollision', 'mineCollision', 'chaos'];
-
 /** A run with nothing in the tunnel, so only the section under test moves. */
 function quietRun(build, width = 80, height = 24) {
   const game = new build.Game();
@@ -231,7 +228,7 @@ for (const build of BUILDS) {
   test(`${build.name}: no debug scenario opens a section`, () => {
     // Each scenario is a fixed field laid out to be counted, and taking the
     // walls away for fifteen seconds of it changes what is being counted.
-    for (const mode of DEBUG_MODES) {
+    for (const mode of build.DEBUG_MODES) {
       const game = new build.Game();
       game.startGame(mode);
       game.state.screenWidth = 80;

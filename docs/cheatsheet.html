@@ -38,8 +38,10 @@ index.html?versus                    Open a split-screen round</code></pre>
 <p>Two pilots at one keyboard, each flying their own run in half the grid. <code>V</code> on
 the title screen opens a round, or <code>index.html?versus</code> goes straight into one.</p>
 <div class="table-scroll"><table><thead><tr><th>Control</th><th>Pilot 1</th><th>Pilot 2</th></tr></thead><tbody><tr><td>Steer</td><td><code>W</code> <code>A</code> <code>S</code> <code>D</code></td><td><code>I</code> <code>J</code> <code>K</code> <code>L</code></td></tr><tr><td>Fire</td><td><code>Space</code></td><td><code>Enter</code></td></tr><tr><td>Boost</td><td><code>F</code></td><td><code>;</code></td></tr><tr><td>Barrel roll</td><td><code>Q</code> / <code>E</code></td><td><code>U</code> / <code>O</code></td></tr></tbody></table></div>
-<p><code>P</code> pauses the round and <code>M</code> mutes it from either hand. <code>Esc</code> leaves, and <code>Enter</code>
-starts a rematch once both pilots are down. The arrow keys and <code>Shift</code> steer
+<p><code>P</code> pauses the round and <code>M</code> mutes it from either hand, and the mute carries
+into a round when one opens and into its rematch. <code>Esc</code> leaves, and <code>Enter</code>
+starts a rematch once both pilots are down, on a window still wide enough to
+open one. The arrow keys and <code>Shift</code> steer
 nobody in a round, because two players cannot agree whose they are.</p>
 <p>Both pilots launch into the same tunnel, from one seed drawn when the round
 opens, so the opening field is the same in both halves. The fields drift apart
@@ -47,7 +49,9 @@ from there, because each pilot reaches a given depth at their own speed. Scores
 are separate and the higher one takes the round; a round never reaches the
 leaderboard, since the table has one name to a row.</p>
 <p>A round needs 45 columns a half, so 91 columns of grid. The key is only offered
-on a window wide enough for one.</p>
+on a window wide enough for one. A round dragged narrower than that keeps
+flying, with each half shortening its score, distance and shield readings to
+whatever fits, and the rematch waits for the window to come back.</p>
 <h2 id="debug-modes">Debug modes</h2>
 <div class="table-scroll"><table><thead><tr><th>#</th><th>Mode</th><th>Flag / param</th><th>What it isolates</th></tr></thead><tbody><tr><td>1</td><td>Mine Field</td><td><code>mines</code></td><td>Pure evasion</td></tr><tr><td>2</td><td>Orb Harvest</td><td><code>orbs</code></td><td>Collection</td></tr><tr><td>3</td><td>Collision Course</td><td><code>obstacleCollision</code></td><td>Obstacle impacts</td></tr><tr><td>4</td><td>Mine Sweeper</td><td><code>mineCollision</code></td><td>Mine collisions</td></tr><tr><td>5</td><td>Chaos Protocol</td><td><code>chaos</code></td><td>Everything, permanent boost, auto-fire</td></tr></tbody></table></div>
 <p>Debug runs never record a best score.</p>
