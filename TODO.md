@@ -6,6 +6,38 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
+- [ ] Pin the three frame-loop call sites the suite cannot see
+  - **Issue**: two of this run's fixes are split across the
+    `// ===== Canvas Setup & Sizing =====` marker - a function above it, and
+    the call that reaches it below - and `test/versus.test.mjs` only reaches
+    the half above. `versusRematch` has three cases of its own; nothing checks
+    that `frame()` calls it. `VersusRound`'s `muted` argument has two; nothing
+    checks that either opening path hands it `game.state.muted`. Measured by
+    reverting the one line at `index.html:5503` to the
+    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it
+    replaced: `node --test test/versus.test.mjs test/parity.test.mjs
+    test/browser-shell.test.mjs` still reports 122 of 122 passing, while the
+    same page driven in chromium opens the rematch with pilot 2 holding six to
+    eight bullet cells against pilot 1's none, and a shot cue on the frame. So
+    the defect comes back in full with the suite green. Nothing is broken
+    today - this is the wiring being unguarded rather than wrong, the same
+    shape as `The debug-mode allow-list is written five times and compared
+    nowhere`, which this run closed for the other below-marker handler.
+  - **Goal**: Assert the three call sites as the text of `index.html`, in
+    `test/browser-shell.test.mjs` - it already reads the file at module level
+    and is written for "the seam where the arithmetic stops and the DOM
+    starts". The matches are `versus=versusRematch(versus,justPressed)` in the
+    frame loop and `new VersusRound(versusSeed(),layout,game.state.muted)` at
+    both the `V` branch and the `?versus` branch, which is the same technique
+    `test/parity.test.mjs` now uses for `DEBUG_MODES.includes(explicitMode)`
+    and for the reason it states there, that neither handler is reachable from
+    the suite. Worth a fourth assertion that `versus.rematch()` appears nowhere
+    in the loop, since the shape this defect would return in is the direct call
+    coming back beside the guarded one rather than replacing it. A source-text
+    case should say in its own comment that it pins the wiring as written and
+    not as behaving, and name where the behaviour was confirmed instead.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+
 ### Create and Deploy GitHub Pages Override
 
 ### UI/UX Override - the dying frame's score, and the HUD below the versus floor
