@@ -1833,16 +1833,40 @@ class Game{
     s.boostSpeed=s.baseSpeed*1.8;
     s.gameTime+=dt;
 
+    // The frame stops when the run stops. Four of the passes below can empty
+    // the shield and call `endGame` - obstacles, mines, the boss's ram and its
+    // shots - and the `return` inside each of them leaves that pass, not this
+    // one, so without these checks every pass beneath the one that ended the
+    // run still ran on a run that was already over. That matters because they
+    // pay out: `updateOrbs` is worth 500 and ten shield, `updateMines` 500
+    // against the combo, `updateBullets` 200 a rock and 500 a mine, and a
+    // powerup pickup more shield still. `endGame` has already read `s.score`
+    // twice by then - once to set `bestScore`, once to ask whether the run
+    // earned a row - so a payout below it left the game over screen showing a
+    // score above the best score on the only run ever flown, and `commitEntry`
+    // filing the larger number while the stored best held the smaller one. The
+    // shield said the same thing the other way: a run that died of an empty
+    // shield reported 10, because an orb on the dying frame refilled it.
+    //
+    // Of the two numbers, the one the player sees is the score at the moment of
+    // death - the reading `endGame` already files, and the one the empty shield
+    // implies. So the check goes after each pass that can end a run rather than
+    // at the top of the next frame, and the mode is what it reads: `endGame`
+    // leaves `dead` or `nameEntry` behind, and either means this run is done.
     this.updateWarpLevel();
     this.updateAsteroidField(dt);
     this.updateBossEncounter(dt);
     this.updateObstacleScaling();
     this.updateMineSpawning(dt);
     this.updateObstacles(advance,dt);
+    if(s.mode!=='playing')return;
     this.updateOrbs(advance);
     this.updateMines(advance,dt);
+    if(s.mode!=='playing')return;
     this.updateBoss(dt);
+    if(s.mode!=='playing')return;
     this.updateBossShots(dt);
+    if(s.mode!=='playing')return;
     this.updatePowerups(advance,dt);
     this.updateBullets(dt,advance);
     this.updateParticles(dt,advance);
@@ -4233,6 +4257,72 @@ function versusHintRow(index,w){
 }
 
 /**
+ * Whether a half's three HUD readings clear each other at a given width.
+ *
+ * The three anchors are drawHUD's own: SCORE two columns in from the left, DIST
+ * centred, SHIELD two columns in from the right, each written over whatever is
+ * already in the row rather than around it. Restated here rather than read back
+ * off that function, for the reason drawVersus lays the border down again
+ * instead of writing over it - three anchors is less to carry than an agreement
+ * with drawHUD about how long a reading is, and test/versus.test.mjs reads this
+ * row off the drawn buffer, so a restatement that drifts is a case that fails.
+ *
+ * One column of gap is wanted rather than none. The probe's own test is that no
+ * column is written twice, which is what puts the floor at 45 - but two
+ * readings that merely touch read as one token, and at 29 columns that is
+ * `SCORE: 667689SHIELD: 100%`. A half under the floor is being re-laid rather
+ * than measured, so it can afford the column: the form that would have touched
+ * drops its unit or its legend and buys the gap instead. An empty reading
+ * claims no column, which is how a form that has dropped one is measured.
+ */
+function versusReadingsClear(w,score,dist,shield){
+  const spans=[];
+  if(score)spans.push([2,2+score.length]);
+  if(dist){
+    const dx=floor((w-dist.length)/2);
+    spans.push([dx,dx+dist.length]);
+  }
+  if(shield)spans.push([w-shield.length-2,w-2]);
+  for(let i=0;i<spans.length;i++){
+    if(spans[i][0]<1||spans[i][1]>w-1)return false;
+    if(i>0&&spans[i][0]<=spans[i-1][1])return false;
+  }
+  return true;
+}
+
+/**
+ * A half's three HUD readings in the fullest form that clears at its width.
+ *
+ * The shape versusHintRow already has, for the same reason: a half is narrower
+ * than the screen these were written for, and a reading that will not fit is
+ * better shortened than written over its neighbour. What made it necessary is
+ * that the row degrades by overwriting rather than by crowding - at 30 columns
+ * a half the score value was gone entirely, in the one mode whose result is
+ * decided by score.
+ *
+ * The score is what every form keeps, because it is what the round is decided
+ * by and what the result panel reports. Distance goes first, its unit before
+ * the whole of it, and the shield's legend goes last. A debug run is not a case
+ * here: a round builds its pilots with new Game() and startGame(), so
+ * state.debugMode is null in both halves and the 'SCORE: ---' form drawHUD
+ * writes for a collision scenario is unreachable from a half.
+ */
+function versusReadingRow(state,w){
+  const score=`SCORE: ${state.score}`;
+  const km=(state.distance/10).toFixed(1);
+  const shield=Math.round(state.shield);
+  const forms=[
+    [score,`DIST: ${km} km`,`SHIELD: ${shield}%`],
+    [score,`DIST: ${km}`,`SHIELD: ${shield}%`],
+    [score,'',`SHIELD: ${shield}%`],
+    [score,'',`SH ${shield}%`],
+    [score,'',''],
+  ];
+  for(const form of forms)if(versusReadingsClear(w,...form))return form;
+  return forms[forms.length-1];
+}
+
+/**
  * How a round stands: who is still flying, and who took it once nobody is.
  *
  * The winner is the higher score rather than the later death. Score is what the
@@ -4282,15 +4372,24 @@ function versusAudioState(a,b){
 /**
  * The lines the round's own panel carries once both pilots are out: who took it,
  * what each of them scored, and the two ways out of the screen.
+ *
+ * `fits` is the layout the panel is sitting on, and the last line is what it
+ * changes. A rematch opens a round, so it is gated on the same floor the V key
+ * and the ?versus parameter are gated on - and a key that is offered and then
+ * does nothing is worse than one that says why, with two players watching it.
+ * So a round settled on a layout too narrow for a fresh one names the window
+ * rather than the key. ESC is the way out either way.
  */
-function versusResultLines(a,b,standing){
+function versusResultLines(a,b,standing,fits=true){
   const verdict=standing.winner<0
     ?'A DEAD HEAT'
     :`${VERSUS_TAGS[standing.winner]} TAKES THE ROUND`;
   return[
     verdict,
     `${VERSUS_TAGS[0]}  ${a.score}   \u2022   ${VERSUS_TAGS[1]}  ${b.score}`,
-    '[ ENTER REMATCH \u2022 ESC TO TITLE ]',
+    fits
+      ?'[ ENTER REMATCH \u2022 ESC TO TITLE ]'
+      :'[ WIDEN THE WINDOW TO REMATCH \u2022 ESC TO TITLE ]',
   ];
 }
 
@@ -4311,12 +4410,23 @@ function versusResultLines(a,b,standing){
  * `S PILOT 1 R`. Restating the border is three lines off drawHUD and drawFooter
  * and needs no agreement with either about how long a label is.
  *
+ * The reading row is the third thing laid down again, and only on a half under
+ * its own floor. `fits` gates opening a round and not continuing one, so a
+ * window dragged narrower mid-flight keeps the round - and the cost of that was
+ * not two narrow halves but two unreadable ones, because drawHUD writes SCORE
+ * from the left, DIST centred and SHIELD from the right over whatever is
+ * already in the row. At 40 columns a half the row read `SCORE: 0    DIST: 0.0
+ * kmSHIELD: 100%`, and by 30 the score value itself was gone, leaving
+ * `SCORE: DIST: 0SHIELD: 100%`. versusReadingRow picks the fullest
+ * form that clears instead, and this writes it back over the row drawHUD left,
+ * in drawHUD's own three colours so a shield under 30% still reads red.
+ *
  * The seam is drawn after both halves rather than before, so a half cropped at
  * the divider cannot paint over it, and it runs the full height of the grid
  * rather than of a half - the divider is between the two canvases and not inside
  * either of them.
  */
-function drawVersus(screen,layout,halves,standing){
+function drawVersus(screen,layout,halves,standing,states){
   screen.clear(C.BLACK);
   const xs=[layout.leftX,layout.rightX];
   const w=layout.half;
@@ -4331,6 +4441,22 @@ function drawVersus(screen,layout,halves,standing){
     screen.put(x+w-1,0,'\u2557',C.CYAN,C.BLACK);
     screen.putString(x+max(0,floor((w-tag.length)/2)),0,tag,
       standing.alive[i]?C.BRIGHT_CYAN:C.GRAY,C.BLACK);
+
+    // The reading row, re-laid on a half under its own floor rather than left
+    // as the overlap drawHUD's three anchors make of it there. See above.
+    if(w<VERSUS_MIN_HALF_WIDTH){
+      const s=states[i];
+      const [score,dist,shield]=versusReadingRow(s,w);
+      screen.hLine(x+1,1,max(0,w-2),' ',C.WHITE,C.BLACK);
+      screen.put(x,1,'\u2551',C.CYAN,C.BLACK);
+      screen.put(x+w-1,1,'\u2551',C.CYAN,C.BLACK);
+      if(score)screen.putString(x+2,1,score,C.BRIGHT_CYAN,C.BLACK);
+      if(dist)screen.putString(x+floor((w-dist.length)/2),1,dist,C.BRIGHT_MAGENTA,C.BLACK);
+      if(shield){
+        screen.putString(x+w-shield.length-2,1,shield,
+          s.shield<30?C.BRIGHT_RED:C.BRIGHT_GREEN,C.BLACK);
+      }
+    }
 
     // The half's own footer row, read off the buffer the half was drawn into so
     // this cannot come to disagree with drawFooter about which row that is.
@@ -4423,7 +4549,7 @@ function drawVersusHint(screen,layout){
  * whose result means nothing.
  */
 class VersusRound{
-  constructor(seed,layout){
+  constructor(seed,layout,muted=false){
     this.seed=seed;
     this.pilots=[new Game(),new Game()];
     // A stream for each pilot, both from the one seed. One stream shared between
@@ -4434,6 +4560,14 @@ class VersusRound{
     this.seat(layout);
     for(let i=0;i<this.pilots.length;i++){
       withRng(this.streams[i],()=>this.pilots[i].startGame());
+      // M is a global setting toggle rather than a property of a run, which is
+      // why startGame resets paused and deliberately not muted: mute survives a
+      // run in the solo game. A round has to be handed it, because each pilot is
+      // a Game of its own and createInitialState opens every one of them
+      // unmuted. Without this a round opened unmuted whatever the page was, and
+      // every rematch brought the sound back again - the one setting the players
+      // turned off, returning once on V and once on every ENTER.
+      this.pilots[i].state.muted=muted;
     }
     // Whether the round was already over when the current frame began, which is
     // what the rematch key is read against. The frame that ends a round can be
@@ -4531,22 +4665,81 @@ class VersusRound{
       this.levelBest();
     }
   }
+  /**
+   * The round's mute, which belongs to the pair rather than to either pilot.
+   *
+   * The same expression versusAudioState reads, for the same reason: step()
+   * answers M for a pilot who is out as well as for one still flying, so the
+   * two copies never come to disagree, and an or over both is the reading that
+   * holds whichever of them was wrecked first.
+   */
+  muted(){
+    const [a,b]=this.states();
+    return a.muted||b.muted;
+  }
   /** One frame of the round, drawn onto the full grid. */
   render(screen){
     const standing=this.standing();
+    const states=this.states();
     for(let i=0;i<this.pilots.length;i++){
       renderGame(this.halves[i],this.pilots[i].state);
     }
-    drawVersus(screen,this.layout,this.halves,standing);
+    drawVersus(screen,this.layout,this.halves,standing,states);
     if(standing.over){
-      const [a,b]=this.states();
-      drawVersusResult(screen,versusResultLines(a,b,standing));
+      const [a,b]=states;
+      drawVersusResult(screen,versusResultLines(a,b,standing,this.layout.fits));
     }
   }
-  /** The round the rematch key asks for: a new seed, on the layout showing. */
+  /**
+   * The round the rematch key asks for: a new seed, on the layout showing, at
+   * the mute the players left this one on.
+   *
+   * Gated on that layout, because opening a round is what this does and opening
+   * one is what `fits` gates - the V key and the ?versus parameter both check
+   * it, while handleResize re-seats a round unconditionally, so the layout this
+   * is sitting on can be one those two would refuse. Between 60 and 90 columns
+   * is a band of its own: fitGrid still fits, so the too-small notice does not
+   * take the screen, while a half is 29 to 44 columns and under
+   * VERSUS_MIN_HALF_WIDTH. Without the check one width was both refused and
+   * granted depending on which key reached it.
+   *
+   * Refused, the round standing is handed back unchanged, so the result panel
+   * stays up - and it names the window rather than the key, per
+   * versusResultLines. Dragging the window wider is what makes ENTER work
+   * again, which is the same thing the label on the title screen says.
+   */
   rematch(){
-    return new VersusRound(versusSeed(),this.layout);
+    if(!this.layout.fits)return this;
+    return new VersusRound(versusSeed(),this.layout,this.muted());
   }
+}
+
+/**
+ * The round the frame goes on to step, with the rematch keypress spent if it
+ * asked for one.
+ *
+ * Above the canvas marker rather than in the frame loop, so a case can reach
+ * it. The loop read the rematch and then stepped the round it opened with the
+ * same ENTER still in the ledger, which it does not clear until the end of the
+ * frame, and ENTER is pilot 2's trigger: the new round opened with pilot 2
+ * holding three bullets and a shot cue while pilot 1 held none. The pilot who
+ * asked for the rematch got the free volley, in the one mode whose premise is
+ * that the two fly the same thing.
+ *
+ * Deleting the key is how it is spent. justPressed is the frame's own ledger and
+ * the loop empties it at the end of every frame, so a key taken out of it here
+ * is one this frame has already answered. VersusRound.settled is the mirror
+ * case - the ENTER that ended a round relaunching it - and this is the same key
+ * read twice in the other direction.
+ *
+ * The keypress is spent on a refused rematch too. It was pressed to ask for one
+ * either way, and both pilots are out on a settled round, so there is no shot
+ * for it to become.
+ */
+function versusRematch(versus,justPressed){
+  if(!versus.settled||!justPressed.ENTER)return versus;
+  delete justPressed.ENTER;
+  return versus.rematch();
 }
 
 // ===== Touch controls =====
@@ -4960,9 +5153,16 @@ const audio=new RetroAudio(()=>new (window.AudioContext||window.webkitAudioConte
 const params=new URLSearchParams(window.location.search);
 const wantsDebug=params.has('debug');
 const explicitMode=params.get('mode');
+// The allow-list is DEBUG_MODES itself, declared up with the menu's own reading
+// of it, rather than a hand-written copy of the same five names. Only the
+// declaration and the DebugMode union were ever tied to anything: a sixth mode
+// added to both appeared in both debug menus and startGame took it, while
+// ?mode=<new> fell through to the title screen with no word about why and
+// --mode=<new> exited 1 listing only the five. tsc catches neither - the CLI's
+// copy was cast and this build is untyped - so reading the one constant is the
+// whole of the guard, and test/parity.test.mjs holds it there.
 if(explicitMode){
-  const validModes=['mines','orbs','obstacleCollision','mineCollision','chaos'];
-  if(validModes.includes(explicitMode))game.startGame(explicitMode);
+  if(DEBUG_MODES.includes(explicitMode))game.startGame(explicitMode);
 }else if(wantsDebug){
   game.showDebugMenu();
 }
@@ -4975,7 +5175,7 @@ if(explicitMode){
 // appears as soon as the window is wide enough.
 if(params.has('versus')){
   const layout=versusLayout(termWidth,termHeight);
-  if(layout.fits)versus=new VersusRound(versusSeed(),layout);
+  if(layout.fits)versus=new VersusRound(versusSeed(),layout,game.state.muted);
 }
 
 // ===== Input handling =====
@@ -5284,7 +5484,10 @@ function frame(now){
   }else if(justPressed.V&&game.state.mode==='menu'){
     const layout=versusLayout(termWidth,termHeight);
     if(layout.fits){
-      versus=new VersusRound(versusSeed(),layout);
+      // The page's mute goes into the round with the players. M is a global
+      // setting toggle, so a player who turned the sound off before pressing V
+      // meant it for the page and not for that one run.
+      versus=new VersusRound(versusSeed(),layout,game.state.muted);
       audio.engineOff();
     }
   }
@@ -5296,8 +5499,9 @@ function frame(now){
   if(versus){
     // The rematch, read only on a frame the round was already settled at the
     // start of - see VersusRound.settled for the keypress that would otherwise
-    // relaunch on the shot that ended the round.
-    if(versus.settled&&justPressed.ENTER)versus=versus.rematch();
+    // relaunch on the shot that ended the round, and versusRematch for the one
+    // that would otherwise be pilot 2's first shot of the round it opened.
+    versus=versusRematch(versus,justPressed);
     versus.step(dt,keys,justPressed);
     // One reading of both pilots, because the layer decides from a single state
     // whether the hum should be running at all.

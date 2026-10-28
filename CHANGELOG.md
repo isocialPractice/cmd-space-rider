@@ -1,5 +1,143 @@
 # Changelog
 
+## [1.0.0-alpha.0.13.0] - 2026-10-28
+
+### Fixed
+
+- The frame a run dies on no longer keeps scoring after the score has been
+  filed. `updatePlaying` ran its entity passes in a fixed order, and
+  `updateObstacles` ends a run in place when the shield empties - but its
+  `return` leaves that pass rather than `updatePlaying`, so every pass below the
+  one that ended the run still ran on a run that was already over, and each of
+  them can pay out: an orb is 500 points and ten shield, a mine 500 against the
+  combo, a bolt 200 a rock and 500 a mine, and a pickup more shield still.
+  `endGame` has already read `s.score` twice by then, once to set `bestScore`
+  and once to ask whether the run earned a row, so both readings were stale by
+  the end of the frame and `commitEntry` filed the larger number. Measured in a
+  browser on a cleared profile, from a run at score 1000 with the shield one
+  obstacle hit from gone and an orb on the same spot: the game over screen read
+  `1505` with `Best Score: 1005` under it on the only run ever flown, the shield
+  read 10 on a run that died of an empty one, and the table filed 1505 against a
+  stored 1005. Both builds carried it identically - `out/game.js` and
+  `loadBrowserEngine` each gave score 1506, best 1006 and shield 10 after one
+  `update(1/30, {}, {})` - and it was reachable in ordinary play, an orb sitting
+  at the same screen position as the obstacle that kills you. `updatePlaying`
+  now reads the mode between the passes that can end a run and stops when it is
+  no longer `playing`, so the number the player sees is the score at the moment
+  of death, which is the reading `endGame` already files and the one the empty
+  shield implies. `test/parity.test.mjs` pairs the two builds on it off a new
+  `stageFatalCollisionWithOrb` helper, asserting the shield, the stored best and
+  the row filed; it fails on the previous code with `10 !== 0`.
+- `rematch()` is gated on the layout it would open a round on, as the `V` key
+  and the `?versus` parameter already are. `versusLayout`'s docstring says
+  `fits` "gates opening a round and not continuing one", and a rematch opens
+  one - but it reused whatever layout the round was seated on, and
+  `handleResize` re-seats a round unconditionally, so that layout could be one
+  `fits` rejects. Measured off the engine: open a round at 100 columns
+  (`half=49`, `fits:true`), re-seat it with `versusLayout(60,30)` the way a drag
+  to 60 columns does (`half=29`, `fits:false`), then rematch, and the round that
+  came back reported `fits:false` at `half=29` with the HUD row reading
+  `SCORE:DIST: 0SHIELD: 100%`. The band is reachable and its own: between 60 and
+  90 columns `fitGrid` still fits, so the too-small notice does not take the
+  screen, while a half is 29 to 44 columns and under `VERSUS_MIN_HALF_WIDTH` 45,
+  so one width was both refused and granted depending on which key reached it.
+  Refused, the round standing is handed back unchanged and the result panel
+  stays up reading `[ WIDEN THE WINDOW TO REMATCH` + the bullet + `ESC TO TITLE ]`
+  rather than offering a key it would decline - a silent refusal leaves two
+  players no way to read why.
+- Mute survives opening a round and asking for a rematch. The engine's own
+  comment calls `M` "a global setting toggle, so it works in every mode", and
+  `startGame` resets `paused` and deliberately not `muted`, so mute survives a
+  run in the solo game. A round carried it neither way: `VersusRound` built two
+  `new Game()` and `createInitialState` opens every one of them with
+  `muted:false`, so a round opened unmuted whatever the page was, and
+  `rematch()` built a fresh pair the same way. Measured in both directions -
+  mute the page, open a round, and both pilots read `muted:false`; mute a round
+  so both pilots and `versusAudioState` read `muted:true`, rematch, and all
+  three read `muted:false`. The sound the players turned off came back once on
+  `V` and again on every `ENTER`. `VersusRound` now takes the mute as a
+  constructor argument, both opening paths hand it `game.state.muted`, and
+  `rematch()` hands it `VersusRound.muted()` - the `a.muted||b.muted` expression
+  `versusAudioState` already reads.
+- The `ENTER` that asks for a rematch is no longer also pilot 2's first shot of
+  it. The frame loop read the rematch and then stepped the round it opened with
+  the same keypress still in `justPressed`, which it does not clear until the
+  end of the frame, and `ENTER` is pilot 2's trigger in `VERSUS_BINDINGS`.
+  Measured: settle a round, rematch, then step the new round once with
+  `{ENTER:true}` - pilot 2 opened with 3 bullets and a `shot` cue while pilot 1
+  opened with none, so the pilot who asked for the rematch got the free volley
+  in the one mode whose premise is that the two fly the same thing. The read is
+  now a `versusRematch` function above the `// ===== Canvas Setup & Sizing =====`
+  marker, where the suite can reach it, and it spends the keypress on the
+  rematch by taking `ENTER` out of the frame's own ledger.
+
+### Changed
+
+- A half under its own floor shortens its HUD readings instead of writing them
+  over each other. `fits` keeps a round that a window was dragged narrower
+  mid-flight, accepting "two narrow halves" as the lesser cost - but `drawHUD`
+  writes SCORE from the left, DIST centred and SHIELD from the right, each over
+  whatever is already in the row, so the halves were not narrow below 45 columns
+  but unreadable. Measured off the drawn buffer at a fresh run's figures:
+  `half=44` `SCORE: 0      DIST: 0.0 km  SHIELD: 100%`, `half=40`
+  `SCORE: 0    DIST: 0.0 kmSHIELD: 100%`, `half=36`
+  `SCORE: 0  DIST: 0.0 SHIELD: 100%`, `half=30`
+  `SCORE: DIST: 0SHIELD: 100%`, `half=24` `SCORDISTSHIELD: 100%`. By 30 columns
+  the score value was gone entirely, in the one mode whose result is decided by
+  score and whose panel reports both pilots' scores at the end. `drawVersus` now
+  lays that row down again below `VERSUS_MIN_HALF_WIDTH`, the way it already
+  lays down each half's two borders, in the fullest of five forms that clears at
+  the width: the distance loses its unit, then the whole reading, then the
+  shield's legend, the way `versusHintRow` already drops to shorter legends. The
+  clearance test is the probe's own - no column written twice - plus one column
+  of gap, because two readings that merely touch read as one token. At the
+  twenty minute mark's figures the row now reads
+  `SCORE: 667689 DIST: 4826.0  SHIELD: 100%` at `half=44` and
+  `SCORE: 667689     SH 100%` at `half=29`, which is the narrowest half a 60
+  column grid gives. The floor itself has not moved: 45 is still what
+  `npm run probe -- versus-half` measures, still what a round opens on, and at
+  and above it the row is `drawHUD`'s own.
+- Both parameter handlers read the debug allow-list off `DEBUG_MODES` instead of
+  restating it. One list of five mode names was written five times - the
+  `DebugMode` union, `DEBUG_MODES` and its browser copy, and a `validModes`
+  literal in each build's handler - plus a sixth in
+  `test/asteroid-field.test.mjs` and a seventh in the CLI's own `--help` text,
+  and only the first three were tied to anything. Name the change that broke it:
+  add a sixth mode to the union and the constant in both builds and it appears
+  in both debug menus and `startGame` takes it, while `--mode=<new>` exits 1
+  reporting "Unknown mode" and listing only the five, and `?mode=<new>` falls
+  through to the title screen with no word about why. `tsc` caught neither, the
+  first because `validModes` was inferred `string[]` so
+  `validModes.includes(explicitMode)` did not narrow and the call needed an
+  `as any`, the second because the browser build is untyped. The lists did
+  agree, so nothing failed - this was the drift being unguarded rather than
+  present. The CLI now narrows with `DEBUG_MODES.find((m) => m === explicitMode)`,
+  which removes the cast, and reports `DEBUG_MODES.join(', ')` in both the error
+  and the help text; the browser handler reads the same constant, declared above
+  it with the debug menu's own reading of it. `test/parity.test.mjs` holds it:
+  the list is written down exactly twice in the repository, once per build, and
+  both handlers are read as text because neither is reachable from the suite.
+
+### Added
+
+- `test/versus.test.mjs` reads a half under its own floor back off the drawn
+  buffer, which nothing did: every grid from 90 columns down to the 60 the
+  too-small notice takes over at, both halves, at the figures the probe's twenty
+  minute mark reaches, with the row's own words collapsed on whitespace compared
+  against the form `versusReadingRow` chose - so nothing lost, nothing
+  overwritten and nothing run together, in one assertion. Beside it: the three
+  colours the re-laid row restates, with a shield at 12% reading red and at 80%
+  green; that a half at 45 columns is left exactly as `drawHUD` wrote it; the
+  rematch refused below the floor and granted above it, with the panel's line
+  read either way; mute carried both directions across an opening and a rematch,
+  and read as an or over the pair; and the rematch keypress spent, with the
+  defect kept beside it as the contrast - the same round stepped with the key
+  the frame loop used to leave behind still opens with pilot 2 holding a volley.
+  `test/parity.test.mjs` gains the dying frame paired across both builds and the
+  allow-list case. The suite comes out at 896 from 884, with no existing case
+  changed except the result panel's grid sweep, which now walks both forms of
+  its last line at 60 columns as well.
+
 ## [1.0.0-alpha.0.12.1] - 2026-10-26
 
 ### Fixed

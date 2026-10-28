@@ -38,6 +38,18 @@ function round(seed = 4242) {
   return new browser.VersusRound(seed, wideLayout());
 }
 
+/**
+ * End both pilots' runs and step the frame that settles the round, which is the
+ * state the result panel and the rematch key are read in.
+ */
+function settle(r) {
+  r.states()[0].shield = 0;
+  r.pilots[0].endGame();
+  r.pilots[1].endGame();
+  r.step(FRAME, {}, {});
+  return r;
+}
+
 /** Step a round a number of frames with one set of keys held throughout. */
 function fly(r, frames, keys = {}, pressed = {}) {
   for (let i = 0; i < frames; i++) r.step(FRAME, keys, pressed);
@@ -808,20 +820,27 @@ test('versus: the result panel is drawn once the round is over and not before', 
 });
 
 test('versus: the result panel stays on the grid at every width a round holds', () => {
-  for (const cols of [81, 100, 137, 205]) {
-    const screen = new browser.ScreenBuffer(cols, 30);
-    const outside = [];
-    const put = screen.put.bind(screen);
-    screen.put = (x, y, ch, fg, bg) => {
-      const px = Math.floor(x);
-      const py = Math.floor(y);
-      if (px < 0 || px >= cols || py < 0 || py >= 30) outside.push(`${px},${py}`);
-      put(x, y, ch, fg, bg);
-    };
-    browser.drawVersusResult(screen, browser.versusResultLines(
-      { score: 123456 }, { score: 7 }, { over: true, winner: 0, alive: [false, false] },
-    ));
-    assert.deepEqual(outside, [], `${cols} columns: the panel drew off the buffer`);
+  // Both forms of the last line, because the one that names the window instead
+  // of the key is the longer of the two at 46 characters, and it is the one only
+  // a narrow grid ever shows. 60 columns is the narrowest grid a round is drawn
+  // on at all, which is where it has least room.
+  for (const fits of [true, false]) {
+    for (const cols of [60, 81, 100, 137, 205]) {
+      const screen = new browser.ScreenBuffer(cols, 30);
+      const outside = [];
+      const put = screen.put.bind(screen);
+      screen.put = (x, y, ch, fg, bg) => {
+        const px = Math.floor(x);
+        const py = Math.floor(y);
+        if (px < 0 || px >= cols || py < 0 || py >= 30) outside.push(`${px},${py}`);
+        put(x, y, ch, fg, bg);
+      };
+      browser.drawVersusResult(screen, browser.versusResultLines(
+        { score: 123456 }, { score: 7 }, { over: true, winner: 0, alive: [false, false] },
+        fits,
+      ));
+      assert.deepEqual(outside, [], `${cols} columns, fits ${fits}: the panel drew off the buffer`);
+    }
   }
 });
 
@@ -882,6 +901,117 @@ test('versus: the bullet between the two scores, and the one between the two way
 
   assert.match(line(1), /PILOT 1 {2}4200 {3}• {3}PILOT 2 {2}95/, `the scores line: ${line(1)}`);
   assert.match(line(2), /\[ ENTER REMATCH • ESC TO TITLE \]/, `the rematch line: ${line(2)}`);
+});
+
+// ----- A half under its own floor -----
+
+/**
+ * The widths a round can actually be dragged to below its own floor.
+ *
+ * fitGrid's MIN_WIDTH is 60, so 60 columns of grid is the narrowest the halves
+ * are ever drawn at - under that the too-small notice takes the screen for a
+ * round as well as for a run. 90 is the widest grid whose half is still under
+ * VERSUS_MIN_HALF_WIDTH, and 91 is the floor itself, so the band is 60 to 90.
+ */
+const NARROW_GRIDS = [90, 89, 85, 81, 71, 65, 61, 60];
+
+/** A half's HUD reading row, read back off the grid a round was drawn onto. */
+function readingRow(screen, layout, i) {
+  const x = i === 0 ? layout.leftX : layout.rightX;
+  return rowText(screen, 1).slice(x, x + layout.half);
+}
+
+test('versus: a half under its own floor still reads back every figure whole', () => {
+  // `fits` gates opening a round and not continuing one, so a window dragged
+  // narrower mid-flight keeps the round - and the cost of that was not two
+  // narrow halves but two unreadable ones. drawHUD writes SCORE from the left,
+  // DIST centred and SHIELD from the right over whatever is already in the row,
+  // so at 40 columns a half the row read `SCORE: 0    DIST: 0.0 kmSHIELD: 100%`
+  // and by 30 the score value itself was gone, leaving
+  // `SCORE: DIST: 0SHIELD: 100%`, in the one mode whose result is decided
+  // by score. Flown at the figures the probe's own twenty minute mark reaches,
+  // which is where the overlap is worst.
+  for (const cols of NARROW_GRIDS) {
+    const layout = browser.versusLayout(cols, 30);
+    assert.equal(layout.fits, false, `${cols} columns should be under the floor`);
+
+    const r = round();
+    r.seat(layout);
+    for (const s of r.states()) {
+      s.score = 667689;
+      s.distance = 48260;
+      s.shield = 100;
+    }
+    const screen = new browser.ScreenBuffer(cols, 30);
+    r.render(screen);
+
+    for (let i = 0; i < 2; i++) {
+      const at = `${cols} columns, half ${i + 1}`;
+      const row = readingRow(screen, layout, i);
+      const parts = browser.versusReadingRow(r.states()[i], layout.half).filter(Boolean);
+
+      // Nothing lost, nothing overwritten and nothing run together: the row's
+      // own words, collapsed on whitespace, are the form that was chosen.
+      assert.equal(
+        row.slice(1, layout.half - 1).trim().replace(/ +/g, ' '),
+        parts.join(' '),
+        `${at}: the row reads ${JSON.stringify(row)}`,
+      );
+      assert.equal(row[0], '║', `${at}: the frame either side of it`);
+      assert.equal(row[layout.half - 1], '║');
+
+      // The two the mode cannot do without. Score is what the round is decided
+      // by and what the result panel reports; the shield is what says why a
+      // half stopped flying.
+      assert.equal(parts[0], 'SCORE: 667689', `${at}: the score survives whole`);
+      assert.ok(
+        parts.some((part) => /^SH(IELD:)? \d+%$/.test(part)),
+        `${at}: and a shield reading with it, got ${JSON.stringify(parts)}`,
+      );
+    }
+  }
+});
+
+test('versus: the shortened row keeps the HUD\'s own three colours', () => {
+  // Re-laid rather than left alone, so the colour each reading is written in is
+  // restated here too - and a shield under 30% reading green is the one way that
+  // restatement can be wrong without moving a glyph.
+  const layout = browser.versusLayout(71, 30);
+  const r = round();
+  r.seat(layout);
+  for (const s of r.states()) { s.score = 4200; s.distance = 1000; s.shield = 12; }
+  const screen = new browser.ScreenBuffer(71, 30);
+  r.render(screen);
+
+  const row = readingRow(screen, layout, 0);
+  const colorAt = (col) => screen.fg[1 * screen.width + layout.leftX + col];
+  assert.equal(colorAt(row.indexOf('SCORE')), browser.C.BRIGHT_CYAN, 'the score');
+  assert.equal(colorAt(row.indexOf('SH')), browser.C.BRIGHT_RED, 'and a shield at 12%');
+
+  for (const s of r.states()) s.shield = 80;
+  r.render(screen);
+  const healthy = readingRow(screen, layout, 0);
+  assert.equal(colorAt(healthy.indexOf('SH')), browser.C.BRIGHT_GREEN, 'and at 80%');
+});
+
+test('versus: a half at or above its own floor is left as drawHUD wrote it', () => {
+  // The re-lay is for a half under the floor and nowhere else. 45 columns is the
+  // width the probe cleared every mark at, so the row there is drawHUD's own
+  // three anchors - and a re-lay reaching it would be this shortening a row that
+  // already fits.
+  const layout = browser.versusLayout(91, 30);
+  assert.equal(layout.half, browser.VERSUS_MIN_HALF_WIDTH);
+
+  const r = round();
+  r.seat(layout);
+  for (const s of r.states()) { s.score = 667689; s.distance = 48260; s.shield = 100; }
+  const screen = new browser.ScreenBuffer(91, 30);
+  r.render(screen);
+
+  const row = readingRow(screen, layout, 0);
+  assert.ok(row.includes('SCORE: 667689'), `the score, as drawHUD placed it: ${row}`);
+  assert.ok(row.includes('DIST: 4826.0 km'), 'the distance with its unit');
+  assert.ok(row.includes('SHIELD: 100%'), 'and the shield with its legend');
 });
 
 // ----- The label on the title screen -----
@@ -983,6 +1113,143 @@ test('versus: a rematch is a new round on the layout showing', () => {
     again.states()[1].obstacles, again.states()[0].obstacles,
     'and both into the same one as each other',
   );
+});
+
+test('versus: a rematch is refused on a layout a round would not open on', () => {
+  // `fits` gates opening a round, and a rematch opens one. The V key and the
+  // ?versus parameter both check it; this checked nothing and reused whatever
+  // layout the round was seated on, which handleResize re-seats unconditionally.
+  // Between 60 and 90 columns is a band of its own - fitGrid still fits, so the
+  // too-small notice does not take the screen, while a half is under
+  // VERSUS_MIN_HALF_WIDTH - so one width was both refused and granted depending
+  // on which key reached it.
+  const r = settle(round(31));
+  assert.equal(r.layout.fits, true, 'opened on a layout a round fits');
+
+  r.seat(browser.versusLayout(60, 30));
+  assert.equal(r.layout.fits, false, 'and dragged to one it does not');
+
+  const again = r.rematch();
+  assert.equal(again, r, 'the round standing is handed back, not a fresh one');
+  assert.equal(again.seed, r.seed, 'on the seed it was already flying');
+
+  // And the panel says why, rather than leaving ENTER looking broken.
+  const screen = new browser.ScreenBuffer(60, 30);
+  r.render(screen);
+  const text = screenText(screen);
+  assert.ok(text.includes('WIDEN THE WINDOW TO REMATCH'), `the panel reads:\n${text}`);
+  assert.ok(!text.includes('ENTER REMATCH'), 'and does not offer the key it would refuse');
+});
+
+test('versus: a rematch on a layout that fits is still a fresh round', () => {
+  // The other side of the gate, so a refusal cannot be mistaken for the rule.
+  const r = settle(round(32));
+  const again = r.rematch();
+  assert.notEqual(again, r, 'a round of its own');
+  assert.notEqual(again.seed, r.seed, 'on a seed neither pilot has seen');
+  const panel = screenText(renderRound(r));
+  assert.ok(panel.includes('ENTER REMATCH'), 'and the panel offers the key');
+});
+
+// ----- The mute across a round's two boundaries -----
+
+test('versus: a round opens at the page\'s mute and carries it into a rematch', () => {
+  // M is "a global setting toggle, so it works in every mode", and startGame
+  // resets paused and deliberately not muted, so mute survives a run in the solo
+  // game. A round carried it neither way: VersusRound built two Games and
+  // createInitialState opens every one of them unmuted, so a round opened
+  // unmuted whatever the page was and every rematch brought the sound back.
+  const quiet = new browser.VersusRound(41, wideLayout(), true);
+  assert.deepEqual(quiet.states().map((s) => s.muted), [true, true], 'both pilots open muted');
+  assert.equal(quiet.muted(), true, 'and the round reads as muted');
+  assert.equal(browser.versusAudioState(...quiet.states()).muted, true, 'as does its audio');
+
+  assert.deepEqual(
+    quiet.rematch().states().map((s) => s.muted), [true, true],
+    'and the rematch opens muted too',
+  );
+
+  // The other direction: muted inside the round, which is the pair's own value
+  // rather than the page's.
+  const loud = new browser.VersusRound(41, wideLayout());
+  assert.deepEqual(loud.states().map((s) => s.muted), [false, false], 'a round opens unmuted');
+  loud.step(FRAME, {}, { M: true });
+  assert.deepEqual(loud.states().map((s) => s.muted), [true, true], 'M reaches both pilots');
+
+  const again = loud.rematch();
+  assert.deepEqual(again.states().map((s) => s.muted), [true, true], 'and the rematch holds it');
+  assert.equal(browser.versusAudioState(...again.states()).muted, true);
+
+  // Unmuted again inside the round, and the rematch follows that too, so the
+  // carry is the value showing rather than a flag that only ever goes one way.
+  again.step(FRAME, {}, { M: true });
+  assert.deepEqual(again.rematch().states().map((s) => s.muted), [false, false]);
+});
+
+test('versus: the round\'s mute is the pair\'s, read as an or over both', () => {
+  // The expression versusAudioState already reads, so a pilot wrecked while the
+  // round was muted cannot hand the rematch a quieter or louder answer than the
+  // one still flying.
+  const r = round(42);
+  const [a, b] = r.states();
+  assert.equal(r.muted(), false);
+  a.muted = true;
+  assert.equal(r.muted(), true, 'either pilot muted is a muted round');
+  a.muted = false;
+  b.muted = true;
+  assert.equal(r.muted(), true);
+});
+
+// ----- The keypress a rematch is asked for with -----
+
+test('versus: the ENTER that asks for a rematch is not also pilot 2\'s first shot', () => {
+  // The frame loop read the rematch and then stepped the round it opened with
+  // the same ENTER still in the ledger, which it does not clear until the end of
+  // the frame - and ENTER is pilot 2's trigger. versusRematch spends the key on
+  // the rematch, and it is above the canvas marker so this case can reach it.
+  const r = settle(round(51));
+  const ledger = { ENTER: true };
+  const again = browser.versusRematch(r, ledger);
+
+  assert.notEqual(again, r, 'the key opened a fresh round');
+  assert.equal('ENTER' in ledger, false, 'and was spent doing it');
+
+  again.step(FRAME, {}, ledger);
+  const [a, b] = again.states();
+  assert.deepEqual(
+    [a.bullets.length, b.bullets.length], [0, 0],
+    'neither pilot opens the round firing',
+  );
+  for (const s of [a, b]) {
+    assert.ok(!s.sounds.includes('shot'), 'and neither opens it with a shot cue');
+  }
+});
+
+test('versus: the keypress left in the ledger was pilot 2\'s free volley', () => {
+  // What the defect was, kept as the contrast: the same round stepped with the
+  // key the loop used to leave behind opens with the two seats launching
+  // differently, in the mode whose premise is that they fly the same thing.
+  const r = settle(round(51));
+  const again = r.rematch();
+  again.step(FRAME, {}, { ENTER: true });
+
+  const [a, b] = again.states();
+  assert.equal(a.bullets.length, 0, 'pilot 1 opens with nothing');
+  assert.ok(b.bullets.length > 0, 'and pilot 2 with a volley, which is the asymmetry');
+});
+
+test('versus: nothing is spent on a frame that asked for no rematch', () => {
+  const r = settle(round(52));
+
+  const empty = {};
+  assert.equal(browser.versusRematch(r, empty), r, 'no ENTER, no rematch');
+  assert.deepEqual(empty, {}, 'and nothing taken out of the ledger');
+
+  const unsettled = round(52);
+  const pressed = { ENTER: true };
+  assert.equal(unsettled.settled, false, 'a round opens unsettled');
+  assert.equal(browser.versusRematch(unsettled, pressed), unsettled, 'so ENTER is pilot 2\'s');
+  assert.equal(pressed.ENTER, true, 'and stays in the ledger for them');
 });
 
 test('versus: a round is not settled until a frame has been stepped on it', () => {
