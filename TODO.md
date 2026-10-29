@@ -6,39 +6,61 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
-- [ ] Pin the three frame-loop call sites the suite cannot see
-  - **Issue**: two of this run's fixes are split across the
-    `// ===== Canvas Setup & Sizing =====` marker - a function above it, and
-    the call that reaches it below - and `test/versus.test.mjs` only reaches
-    the half above. `versusRematch` has three cases of its own; nothing checks
-    that `frame()` calls it. `VersusRound`'s `muted` argument has two; nothing
-    checks that either opening path hands it `game.state.muted`. Measured by
-    reverting the one line at `index.html:5503` to the
-    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it
-    replaced: `node --test test/versus.test.mjs test/parity.test.mjs
-    test/browser-shell.test.mjs` still reports 122 of 122 passing, while the
-    same page driven in chromium opens the rematch with pilot 2 holding six to
-    eight bullet cells against pilot 1's none, and a shot cue on the frame. So
-    the defect comes back in full with the suite green. Nothing is broken
-    today - this is the wiring being unguarded rather than wrong, the same
-    shape as `The debug-mode allow-list is written five times and compared
-    nowhere`, which this run closed for the other below-marker handler.
-  - **Goal**: Assert the three call sites as the text of `index.html`, in
-    `test/browser-shell.test.mjs` - it already reads the file at module level
-    and is written for "the seam where the arithmetic stops and the DOM
-    starts". The matches are `versus=versusRematch(versus,justPressed)` in the
-    frame loop and `new VersusRound(versusSeed(),layout,game.state.muted)` at
-    both the `V` branch and the `?versus` branch, which is the same technique
-    `test/parity.test.mjs` now uses for `DEBUG_MODES.includes(explicitMode)`
-    and for the reason it states there, that neither handler is reachable from
-    the suite. Worth a fourth assertion that `versus.rematch()` appears nowhere
-    in the loop, since the shape this defect would return in is the direct call
-    coming back beside the guarded one rather than replacing it. A source-text
-    case should say in its own comment that it pins the wiring as written and
-    not as behaving, and name where the behaviour was confirmed instead.
-  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
-
 ### Create and Deploy GitHub Pages Override
+
+### Code Review Override - the versus wiring cases
+
+#### Found Issues
+
+- [ ] The mute check tells two openings apart by line, so one line can hide an
+      unmuted round
+  - **Issue**: `test/browser-shell.test.mjs:1089` subtracts the openings that
+    read `game.state.muted` from the openings found, but both sides are the
+    `index.html:<line>` strings `wiringAt` returns, so two openings sharing a
+    source line are one entry as far as `includes` is concerned. Measured by
+    collapsing a second, unmuted opening onto `index.html:5178` beside the
+    `?versus` one -
+    `...layout,game.state.muted);else if(params.has('v2'))versus=new VersusRound(versusSeed(),layout,false);`
+    - and removing the `V` key's so the count still reads 2: `muted` comes back
+    holding `index.html:5178`, `opens.filter((at) => !muted.includes(at))` comes
+    back empty, and 'browser: both openings hand the round the page's mute'
+    reports a tick with `layout,false)` standing in the file. That is the one
+    thing the case exists to refuse, and its own comment at 1076 says so:
+    "counted rather than matched branch by branch, so a third way into a round
+    is a failure here instead of a silently unmuted one". Nothing is wrong in
+    `index.html` today - the two openings are at 5178 and 5490, a line apart in
+    the only arrangement the file has had - and the sibling case 'the V key and
+    the ?versus link are the two openings' did fail on the arrangement above by
+    its own route, so what is blind is this assertion rather than the suite.
+  - **Goal**: Give each match an identity the source line does not decide. Have
+    `wiringAt` return the match offset alongside the line - the
+    `index.html:<line>` string for the failure text, `m.index` for the
+    comparison - so the subtraction is exact while the messages read as they do
+    now. Then rebuild the collapsed-line arrangement above and confirm the mute
+    case is what fails, since today it is the only one of the four that does
+    not.
+  - From: Code Review Override - the versus wiring cases
+- [ ] The `wiring` docstring credits a `doesNotMatch` the block does not use
+  - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
+    the file rather than to `</script>` by saying the wider slice "leaves the
+    `doesNotMatch` below reading the larger region". No assertion in the file
+    reads `wiring` through `doesNotMatch`. The four the file holds are at 460,
+    929, 990 and 991, and every one reads `html` or a data URI, so none is
+    affected by where the slice ends. The case that would have been that
+    `doesNotMatch` is 'browser: nothing in the wiring opens a rematch directly'
+    at 1057, and it deliberately does the opposite - it collects locations and
+    asserts `deepEqual(at, [])` - for the reason the block comment gives at
+    1029: "a regex assertion over a 20,000-character slice prints the slice, and
+    a failure nobody can read is a failure nobody acts on". So the docstring
+    states the design the block was written to replace, 993 lines above the note
+    saying why it was replaced, and a reader taking it at its word would restore
+    the assertion form that note argues against.
+  - **Goal**: Rewrite the docstring's second paragraph around the reason that
+    still holds - nothing after `</script>` carries JavaScript, 26 characters of
+    `</body></html>`, so slicing to the end costs a case nothing and leaves the
+    marker as the only index the block needs - and drop the clause naming
+    `doesNotMatch`.
+  - From: Code Review Override - the versus wiring cases
 
 ## Quick Wins
 
@@ -84,42 +106,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 175 earlier items in `TODO-archive.md`, newest last.
+> 176 earlier items in `TODO-archive.md`, newest last.
 
-- [x] A round dragged under 45 columns a half eats its own HUD readings
-  - **Issue**: `versusLayout`'s docstring says the `fits` gate "gates opening a
-    round and not continuing one", so a window dragged narrower mid-flight keeps
-    the round on purpose, accepting "two narrow halves" as the lesser cost. But
-    the half's HUD is not merely narrow below 45: `drawHUD` writes SCORE from
-    the left, DIST centred, then SHIELD from the right, each over whatever is
-    already in the row, so they overwrite each other rather than crowd. Measured
-    off the drawn buffer at a fresh run's figures - `half=44`
-    `SCORE: 0      DIST: 0.0 km  SHIELD: 100%`, `half=40`
-    `DIST: 0.0 kmSHIELD: 100%`, `half=36` `DIST: 0.0 SHIELD: 100%`, `half=30`
-    `SCORE: DIST: 0SHIELD: 100%`, `half=24` `SCORDISTSHIELD: 100%`. By 30
-    columns the score value is gone entirely, in the one mode whose result is
-    decided by score and whose panel reports both pilots' scores at the end.
-    Seen on screen at a 620px viewport with a round already open. This is the
-    same overlap `npm run probe -- versus-half` measures to put the floor at 45
-    ("a column written twice is an overlap"); the gate keeps a round below the
-    width the probe measured, and nothing re-reads it. Only the HUD breaks -
-    `versusHintRow` abbreviates correctly all the way down and the frames,
-    labels and seam hold at every width swept from 1600px to 120px. The solo
-    game is unaffected: its own floor is `MIN_WIDTH` 60, which clears all three
-    readings out to twenty minutes with room to spare, and below the grid floor
-    the too-small notice takes the screen for a round as well as for a run.
-  - **Goal**: Decide what a round does below its own floor, rather than leaving
-    it to whichever reading is written last. Either give `drawVersus` a
-    shortened HUD form for a half under `VERSUS_MIN_HALF_WIDTH` - the way
-    `versusHintRow` already drops to shorter legends - or have the resize path
-    show the round's own "too narrow" notice over the halves while keeping the
-    round seated, so dragging the window back restores it as it does today.
-    Leaving it as it stands is also a decision, but then the docstring should
-    say what "two narrow halves" costs, since it currently reads as a smaller
-    tunnel rather than as an unreadable score. Whichever way it goes,
-    `test/versus.test.mjs` should read the HUD row back off a half below the
-    floor, which nothing does today.
-  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
 - [x] `rematch()` opens a round on a layout the `fits` gate would refuse
   - **Issue**: `versusLayout`'s docstring says `fits` "gates opening a round and
     not continuing one", and both paths that open one from the page check it -
@@ -225,4 +213,35 @@ the roadmap section each one came from.
     `:1283`. A case pairing each build's accepted modes against `DEBUG_MODES`
     would hold it, and `test/asteroid-field.test.mjs:51` can take the constant
     rather than its own copy.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+- [x] Pin the three frame-loop call sites the suite cannot see
+  - **Issue**: two of this run's fixes are split across the
+    `// ===== Canvas Setup & Sizing =====` marker - a function above it, and
+    the call that reaches it below - and `test/versus.test.mjs` only reaches
+    the half above. `versusRematch` has three cases of its own; nothing checks
+    that `frame()` calls it. `VersusRound`'s `muted` argument has two; nothing
+    checks that either opening path hands it `game.state.muted`. Measured by
+    reverting the one line at `index.html:5503` to the
+    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it
+    replaced: `node --test test/versus.test.mjs test/parity.test.mjs
+    test/browser-shell.test.mjs` still reports 122 of 122 passing, while the
+    same page driven in chromium opens the rematch with pilot 2 holding six to
+    eight bullet cells against pilot 1's none, and a shot cue on the frame. So
+    the defect comes back in full with the suite green. Nothing is broken
+    today - this is the wiring being unguarded rather than wrong, the same
+    shape as `The debug-mode allow-list is written five times and compared
+    nowhere`, which this run closed for the other below-marker handler.
+  - **Goal**: Assert the three call sites as the text of `index.html`, in
+    `test/browser-shell.test.mjs` - it already reads the file at module level
+    and is written for "the seam where the arithmetic stops and the DOM
+    starts". The matches are `versus=versusRematch(versus,justPressed)` in the
+    frame loop and `new VersusRound(versusSeed(),layout,game.state.muted)` at
+    both the `V` branch and the `?versus` branch, which is the same technique
+    `test/parity.test.mjs` now uses for `DEBUG_MODES.includes(explicitMode)`
+    and for the reason it states there, that neither handler is reachable from
+    the suite. Worth a fourth assertion that `versus.rematch()` appears nowhere
+    in the loop, since the shape this defect would return in is the direct call
+    coming back beside the guarded one rather than replacing it. A source-text
+    case should say in its own comment that it pins the wiring as written and
+    not as behaving, and name where the behaviour was confirmed instead.
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
