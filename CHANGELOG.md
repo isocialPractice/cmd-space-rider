@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.0.0-alpha.0.13.1] - 2026-10-29
+
+### Added
+
+- `test/browser-shell.test.mjs` pins the three lines of page wiring that reach
+  the split-screen arithmetic, which nothing held: the frame loop's
+  `versus=versusRematch(versus,justPressed)`, and the
+  `new VersusRound(versusSeed(),layout,game.state.muted)` at the `V` key and at
+  the `?versus` parameter. All three are below the
+  `// ===== Canvas Setup & Sizing =====` marker, so no case can execute them -
+  the five cases `test/versus.test.mjs` holds over `versusRematch` and the
+  round's `muted` argument construct what they test themselves, and say nothing
+  about the lines that reach it. Measured by reverting the frame loop to the
+  `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it replaced:
+  `test/versus.test.mjs` and `test/parity.test.mjs` came out at 76 of 76, and
+  the two new rematch cases are what fail instead. What that green suite was
+  hiding is the reading `TODO.md` carried over from the day the defect was
+  found: the same page driven in chromium opened the rematch with pilot 2
+  holding six to eight bullet cells against pilot 1's none, and a shot cue on
+  the frame. Each case was then checked against the defect it pins - the direct
+  call back in place of the guard, and back beside it; an opening dropping
+  `game.state.muted`; a third opening path appearing; each branch losing its
+  `layout.fits` gate; and the `V` key no longer opening a round at all - and
+  each reports the `index.html` line it found rather than printing the
+  20,000-character region it searched, so a failure names the line to go and
+  read. Suite comes out at 900 from 896.
+
+### Changed
+
+- `test/helpers.mjs` exports `DOM_MARKER` rather than holding it privately, so
+  the marker is written down once for both halves of the file it divides: the
+  logic above it that `loadBrowserEngine` evaluates, and the wiring below it
+  that the cases above read as text.
+
 ## [1.0.0-alpha.0.13.0] - 2026-10-28
 
 ### Fixed

@@ -12,8 +12,14 @@ import { dirname, join } from 'node:path';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(HERE, '..');
 
-/** Marker where index.html stops being testable logic and starts touching the DOM. */
-const DOM_MARKER = '// ===== Canvas Setup & Sizing =====';
+/**
+ * Marker where index.html stops being testable logic and starts touching the DOM.
+ *
+ * Exported because the text below it is checkable even though it cannot be run:
+ * test/browser-shell.test.mjs slices there to pin the calls the page wiring
+ * makes into the logic above.
+ */
+export const DOM_MARKER = '// ===== Canvas Setup & Sizing =====';
 
 /** Names the harness pulls out of the evaluated browser script. */
 const EXPORTS = [

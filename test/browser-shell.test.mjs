@@ -10,17 +10,32 @@
 // is elements and pointers, and nothing in this suite can reach it.
 //
 // The favicon is checked as the text of the file, because that is all it is.
+//
+// So is the versus wiring, for the opposite reason: the round and the rematch
+// are arithmetic this suite walks in full from test/versus.test.mjs, and the
+// three lines that reach them are below the marker where nothing can call them.
+// Those cases pin the calls as written and say where the behaviour was
+// confirmed instead.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT, loadBrowserEngine, fakeStorage } from './helpers.mjs';
+import { REPO_ROOT, loadBrowserEngine, fakeStorage, DOM_MARKER } from './helpers.mjs';
 import { pageStyle } from './page-style.mjs';
 
 const browser = loadBrowserEngine(fakeStorage());
 const html = readFileSync(join(REPO_ROOT, 'index.html'), 'utf8');
+/**
+ * The page wiring: everything from the DOM marker on, which is the half
+ * loadBrowserEngine throws away and no case can execute.
+ *
+ * Sliced from the marker to the end of the file rather than to `</script>`.
+ * Nothing after the script carries JavaScript, so the wider slice costs a case
+ * nothing and leaves the `doesNotMatch` below reading the larger region.
+ */
+const wiring = html.slice(html.indexOf(DOM_MARKER));
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -992,4 +1007,116 @@ test('the inlined icon is the one in icon.svg', () => {
     .map((attr) => attr.replace(/"/g, "'"));
 
   assert.deepEqual(shapes(svg), shapes(source));
+});
+
+// ----- The versus wiring below the marker -----
+//
+// Three lines in the page wiring are the whole of what connects a split-screen
+// round to the arithmetic that runs it, and each was a defect in its own right
+// before it was written the way it is now. test/versus.test.mjs holds five
+// cases across the two functions involved and not one of them touches these
+// lines: the frame loop and both opening branches are below the marker, so a
+// call site can be reverted with the suite staying green. Measured by putting
+// `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` back in the
+// loop - test/versus.test.mjs and test/parity.test.mjs reported 76 of 76
+// passing, while the same page driven in chromium opened the rematch with
+// pilot 2 holding six to eight bullet cells against pilot 1's none, and a shot
+// cue on the frame.
+//
+// So these read the text of index.html. Every one pins the wiring as written
+// and not as behaving, and names the case that confirmed the behaviour.
+//
+// They report locations rather than asserting against `wiring` itself. A
+// regex assertion over a 20,000-character slice prints the slice, and a
+// failure nobody can read is a failure nobody acts on.
+
+/** Where a pattern hits in the page wiring, as `index.html:<line>` strings. */
+function wiringAt(pattern) {
+  const offset = html.indexOf(DOM_MARKER);
+  const out = [];
+  for (const m of wiring.matchAll(new RegExp(pattern, 'g'))) {
+    const line = html.slice(0, offset + m.index).split('\n').length;
+    out.push(`index.html:${line}`);
+  }
+  return out;
+}
+
+test('browser: the frame loop reads the rematch through versusRematch', () => {
+  // Behaviour: test/versus.test.mjs, 'the ENTER that asks for a rematch is not
+  // also pilot 2's first shot', 'the keypress left in the ledger was pilot 2's
+  // free volley' and 'nothing is spent on a frame that asked for no rematch'.
+  // Those three walk the function; this is the only thing that says the loop
+  // ever calls it.
+  const at = wiringAt(/versus\s*=\s*versusRematch\(\s*versus\s*,\s*justPressed\s*\)/);
+  assert.equal(
+    at.length, 1,
+    `the loop reaches versusRematch ${at.length} time(s), wanted 1: ${at.join(' ') || 'nowhere'}`,
+  );
+});
+
+test('browser: nothing in the wiring opens a rematch directly', () => {
+  // The shape the defect would come back in is the direct call returning beside
+  // the guarded one rather than in place of it: the loop spends the key through
+  // versusRematch and then relaunches on the ENTER it just deleted, which reads
+  // as a loop handling the rematch twice. `versus.rematch()` belongs in exactly
+  // one place, inside versusRematch above the marker where a case can reach it.
+  const at = wiringAt(/\.rematch\(\s*\)/);
+  assert.deepEqual(
+    at, [],
+    `a rematch is opened directly at ${at.join(' ')}; it belongs to versusRematch`,
+  );
+});
+
+test('browser: both openings hand the round the page\'s mute', () => {
+  // Behaviour: test/versus.test.mjs, 'a round opens at the page's mute and
+  // carries it into a rematch' and 'the round's mute is the pair's, read as an
+  // or over both'. Both construct a VersusRound themselves, so neither says
+  // that the V key or the ?versus link passes the argument they rely on.
+  //
+  // Counted rather than matched branch by branch, so a third way into a round
+  // is a failure here instead of a silently unmuted one: M is a page setting,
+  // and a player who turned the sound off before opening a round meant it.
+  const opens = wiringAt(/new VersusRound\(/);
+  assert.equal(
+    opens.length, 2,
+    `the wiring opens a round ${opens.length} time(s), wanted 2 - the V key and ?versus: ${opens.join(' ')}`,
+  );
+
+  const muted = wiringAt(
+    /new VersusRound\(\s*versusSeed\(\)\s*,\s*layout\s*,\s*game\.state\.muted\s*\)/,
+  );
+  assert.deepEqual(
+    opens.filter((at) => !muted.includes(at)), [],
+    `these openings do not read game.state.muted: ${opens.filter((at) => !muted.includes(at)).join(' ')}`,
+  );
+});
+
+test('browser: the V key and the ?versus link are the two openings', () => {
+  // Which two, so the count above fails with a name attached rather than a
+  // number. Each is read from its branch down to the round it opens, so an
+  // opening lifted out of its branch fails here even though the count above
+  // still reads two.
+  //
+  // What that span has to hold is the layout gate. versusLayout's `fits` is
+  // what keeps a round out of a window too narrow for two halves - the halves
+  // do not merely crowd below VERSUS_MIN_HALF_WIDTH, they overwrite each
+  // other's HUD readings - and test/versus.test.mjs walks the gate itself
+  // under 'a rematch is refused on a layout a round would not open on'.
+  // Neither branch is reachable from here, so this is the only thing that says
+  // either one asks.
+  const branches = { 'the ?versus link': "params.has('versus')", 'the V key': 'justPressed.V' };
+  const ungated = [];
+  for (const [where, keyword] of Object.entries(branches)) {
+    const from = wiring.indexOf(keyword);
+    assert.notEqual(from, -1, `${where} is in the wiring`);
+
+    const opens = wiring.indexOf('new VersusRound(', from);
+    assert.notEqual(opens, -1, `${where} opens a round`);
+
+    if (!wiring.slice(from, opens).includes('layout.fits')) ungated.push(where);
+  }
+  assert.deepEqual(
+    ungated, [],
+    `these open a round without asking whether the layout fits: ${ungated.join(', ')}`,
+  );
 });

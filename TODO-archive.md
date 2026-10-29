@@ -3431,3 +3431,40 @@ still be found by name.
     the obstacle that kills you, which is an ordinary tunnel arrangement.
   - **Goal**: Resolve to [death-frame-score-drift.prompt.md](.claude/prompts/death-frame-score-drift.prompt.md)
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+
+## Archived 10-29-26
+
+- [x] A round dragged under 45 columns a half eats its own HUD readings
+  - **Issue**: `versusLayout`'s docstring says the `fits` gate "gates opening a
+    round and not continuing one", so a window dragged narrower mid-flight keeps
+    the round on purpose, accepting "two narrow halves" as the lesser cost. But
+    the half's HUD is not merely narrow below 45: `drawHUD` writes SCORE from
+    the left, DIST centred, then SHIELD from the right, each over whatever is
+    already in the row, so they overwrite each other rather than crowd. Measured
+    off the drawn buffer at a fresh run's figures - `half=44`
+    `SCORE: 0      DIST: 0.0 km  SHIELD: 100%`, `half=40`
+    `DIST: 0.0 kmSHIELD: 100%`, `half=36` `DIST: 0.0 SHIELD: 100%`, `half=30`
+    `SCORE: DIST: 0SHIELD: 100%`, `half=24` `SCORDISTSHIELD: 100%`. By 30
+    columns the score value is gone entirely, in the one mode whose result is
+    decided by score and whose panel reports both pilots' scores at the end.
+    Seen on screen at a 620px viewport with a round already open. This is the
+    same overlap `npm run probe -- versus-half` measures to put the floor at 45
+    ("a column written twice is an overlap"); the gate keeps a round below the
+    width the probe measured, and nothing re-reads it. Only the HUD breaks -
+    `versusHintRow` abbreviates correctly all the way down and the frames,
+    labels and seam hold at every width swept from 1600px to 120px. The solo
+    game is unaffected: its own floor is `MIN_WIDTH` 60, which clears all three
+    readings out to twenty minutes with room to spare, and below the grid floor
+    the too-small notice takes the screen for a round as well as for a run.
+  - **Goal**: Decide what a round does below its own floor, rather than leaving
+    it to whichever reading is written last. Either give `drawVersus` a
+    shortened HUD form for a half under `VERSUS_MIN_HALF_WIDTH` - the way
+    `versusHintRow` already drops to shorter legends - or have the resize path
+    show the round's own "too narrow" notice over the halves while keeping the
+    round seated, so dragging the window back restores it as it does today.
+    Leaving it as it stands is also a decision, but then the docstring should
+    say what "two narrow halves" costs, since it currently reads as a smaller
+    tunnel rather than as an unreadable score. Whichever way it goes,
+    `test/versus.test.mjs` should read the HUD row back off a half below the
+    floor, which nothing does today.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
