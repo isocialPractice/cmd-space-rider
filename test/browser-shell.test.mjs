@@ -32,8 +32,9 @@ const html = readFileSync(join(REPO_ROOT, 'index.html'), 'utf8');
  * loadBrowserEngine throws away and no case can execute.
  *
  * Sliced from the marker to the end of the file rather than to `</script>`.
- * Nothing after the script carries JavaScript, so the wider slice costs a case
- * nothing and leaves the `doesNotMatch` below reading the larger region.
+ * What that takes in is 26 characters - the closing script tag, `</body>` and
+ * `</html>` - and none of it carries JavaScript, so the wider slice costs a
+ * case nothing and leaves the marker as the only index this has to find.
  */
 const wiring = html.slice(html.indexOf(DOM_MARKER));
 
@@ -1030,16 +1031,55 @@ test('the inlined icon is the one in icon.svg', () => {
 // regex assertion over a 20,000-character slice prints the slice, and a
 // failure nobody can read is a failure nobody acts on.
 
-/** Where a pattern hits in the page wiring, as `index.html:<line>` strings. */
+/**
+ * Where a pattern hits in the page wiring: one `{ at, index }` per match, `at`
+ * the `index.html:<line>` string a failure prints and `index` the offset into
+ * `wiring` that tells two matches apart.
+ *
+ * The offset is what one list of matches is subtracted from another by, because
+ * a line is not an identity. Two openings written onto one line share an `at`,
+ * and while `at` was all a match carried, the mute case below subtracted them
+ * as one entry: collapsing a second, unmuted opening beside the `?versus` one
+ * left the filter empty and the case ticking with `layout,false)` standing in
+ * the file. The messages still read by line, which is what a reader wants.
+ */
 function wiringAt(pattern) {
   const offset = html.indexOf(DOM_MARKER);
   const out = [];
   for (const m of wiring.matchAll(new RegExp(pattern, 'g'))) {
     const line = html.slice(0, offset + m.index).split('\n').length;
-    out.push(`index.html:${line}`);
+    out.push({ at: `index.html:${line}`, index: m.index });
   }
   return out;
 }
+
+/** The `index.html:<line>` strings of a match list, for a failure message. */
+function wiringLines(matches) {
+  return matches.map((m) => m.at).join(' ');
+}
+
+test('browser: a wiring match is identified by its offset, not by its line', () => {
+  // What the mute case below subtracts by, and the reason it subtracts by it.
+  // Two matches on one line are one `at` and two offsets, so a list subtracted
+  // by `at` loses the second: an unmuted opening written onto the `?versus`
+  // one's line read as the same entry, the filter came back empty, and the case
+  // ticked with `layout,false)` standing in index.html.
+  //
+  // Read off a pattern the page gives repeats of on one line rather than a
+  // fixture, so this is the helper the cases use over the file they read.
+  const hits = wiringAt(/versus/);
+  assert.ok(hits.length > 1, `the wiring names versus ${hits.length} time(s)`);
+
+  const offsets = new Set(hits.map((m) => m.index));
+  assert.equal(offsets.size, hits.length, 'every match has an offset of its own');
+
+  const lines = new Set(hits.map((m) => m.at));
+  assert.ok(
+    lines.size < hits.length,
+    `all ${hits.length} matches are on lines of their own, so nothing here shows `
+      + 'what the offset is for; point this at a line the page repeats a match on',
+  );
+});
 
 test('browser: the frame loop reads the rematch through versusRematch', () => {
   // Behaviour: test/versus.test.mjs, 'the ENTER that asks for a rematch is not
@@ -1050,7 +1090,7 @@ test('browser: the frame loop reads the rematch through versusRematch', () => {
   const at = wiringAt(/versus\s*=\s*versusRematch\(\s*versus\s*,\s*justPressed\s*\)/);
   assert.equal(
     at.length, 1,
-    `the loop reaches versusRematch ${at.length} time(s), wanted 1: ${at.join(' ') || 'nowhere'}`,
+    `the loop reaches versusRematch ${at.length} time(s), wanted 1: ${wiringLines(at) || 'nowhere'}`,
   );
 });
 
@@ -1062,8 +1102,8 @@ test('browser: nothing in the wiring opens a rematch directly', () => {
   // one place, inside versusRematch above the marker where a case can reach it.
   const at = wiringAt(/\.rematch\(\s*\)/);
   assert.deepEqual(
-    at, [],
-    `a rematch is opened directly at ${at.join(' ')}; it belongs to versusRematch`,
+    at.map((m) => m.at), [],
+    `a rematch is opened directly at ${wiringLines(at)}; it belongs to versusRematch`,
   );
 });
 
@@ -1076,18 +1116,25 @@ test('browser: both openings hand the round the page\'s mute', () => {
   // Counted rather than matched branch by branch, so a third way into a round
   // is a failure here instead of a silently unmuted one: M is a page setting,
   // and a player who turned the sound off before opening a round meant it.
+  //
+  // Subtracted by offset and not by line. Both patterns begin at the same
+  // `new VersusRound(`, so a match that reads the mute carries the same offset
+  // in both lists, while two openings sharing a line do not - which is what
+  // let an unmuted one hide here when a line was all the subtraction had.
   const opens = wiringAt(/new VersusRound\(/);
   assert.equal(
     opens.length, 2,
-    `the wiring opens a round ${opens.length} time(s), wanted 2 - the V key and ?versus: ${opens.join(' ')}`,
+    `the wiring opens a round ${opens.length} time(s), wanted 2 - the V key and ?versus: ${wiringLines(opens)}`,
   );
 
-  const muted = wiringAt(
-    /new VersusRound\(\s*versusSeed\(\)\s*,\s*layout\s*,\s*game\.state\.muted\s*\)/,
+  const muted = new Set(
+    wiringAt(/new VersusRound\(\s*versusSeed\(\)\s*,\s*layout\s*,\s*game\.state\.muted\s*\)/)
+      .map((m) => m.index),
   );
+  const unmuted = opens.filter((m) => !muted.has(m.index));
   assert.deepEqual(
-    opens.filter((at) => !muted.includes(at)), [],
-    `these openings do not read game.state.muted: ${opens.filter((at) => !muted.includes(at)).join(' ')}`,
+    unmuted.map((m) => m.at), [],
+    `these openings do not read game.state.muted: ${wiringLines(unmuted)}`,
   );
 });
 

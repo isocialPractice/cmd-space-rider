@@ -8,60 +8,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the versus wiring cases
-
-#### Found Issues
-
-- [ ] The mute check tells two openings apart by line, so one line can hide an
-      unmuted round
-  - **Issue**: `test/browser-shell.test.mjs:1089` subtracts the openings that
-    read `game.state.muted` from the openings found, but both sides are the
-    `index.html:<line>` strings `wiringAt` returns, so two openings sharing a
-    source line are one entry as far as `includes` is concerned. Measured by
-    collapsing a second, unmuted opening onto `index.html:5178` beside the
-    `?versus` one -
-    `...layout,game.state.muted);else if(params.has('v2'))versus=new VersusRound(versusSeed(),layout,false);`
-    - and removing the `V` key's so the count still reads 2: `muted` comes back
-    holding `index.html:5178`, `opens.filter((at) => !muted.includes(at))` comes
-    back empty, and 'browser: both openings hand the round the page's mute'
-    reports a tick with `layout,false)` standing in the file. That is the one
-    thing the case exists to refuse, and its own comment at 1076 says so:
-    "counted rather than matched branch by branch, so a third way into a round
-    is a failure here instead of a silently unmuted one". Nothing is wrong in
-    `index.html` today - the two openings are at 5178 and 5490, a line apart in
-    the only arrangement the file has had - and the sibling case 'the V key and
-    the ?versus link are the two openings' did fail on the arrangement above by
-    its own route, so what is blind is this assertion rather than the suite.
-  - **Goal**: Give each match an identity the source line does not decide. Have
-    `wiringAt` return the match offset alongside the line - the
-    `index.html:<line>` string for the failure text, `m.index` for the
-    comparison - so the subtraction is exact while the messages read as they do
-    now. Then rebuild the collapsed-line arrangement above and confirm the mute
-    case is what fails, since today it is the only one of the four that does
-    not.
-  - From: Code Review Override - the versus wiring cases
-- [ ] The `wiring` docstring credits a `doesNotMatch` the block does not use
-  - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
-    the file rather than to `</script>` by saying the wider slice "leaves the
-    `doesNotMatch` below reading the larger region". No assertion in the file
-    reads `wiring` through `doesNotMatch`. The four the file holds are at 460,
-    929, 990 and 991, and every one reads `html` or a data URI, so none is
-    affected by where the slice ends. The case that would have been that
-    `doesNotMatch` is 'browser: nothing in the wiring opens a rematch directly'
-    at 1057, and it deliberately does the opposite - it collects locations and
-    asserts `deepEqual(at, [])` - for the reason the block comment gives at
-    1029: "a regex assertion over a 20,000-character slice prints the slice, and
-    a failure nobody can read is a failure nobody acts on". So the docstring
-    states the design the block was written to replace, 993 lines above the note
-    saying why it was replaced, and a reader taking it at its word would restore
-    the assertion form that note argues against.
-  - **Goal**: Rewrite the docstring's second paragraph around the reason that
-    still holds - nothing after `</script>` carries JavaScript, 26 characters of
-    `</body></html>`, so slicing to the end costs a case nothing and leaves the
-    marker as the only index the block needs - and drop the clause naming
-    `doesNotMatch`.
-  - From: Code Review Override - the versus wiring cases
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -106,64 +52,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 176 earlier items in `TODO-archive.md`, newest last.
+> 178 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `rematch()` opens a round on a layout the `fits` gate would refuse
-  - **Issue**: `versusLayout`'s docstring says `fits` "gates opening a round and
-    not continuing one", and both paths that open one from the page check it -
-    the `V` key (`index.html:5284-5287`) and the `?versus` parameter
-    (`:4976-4979`). `rematch()` opens one too and checks nothing:
-    `new VersusRound(versusSeed(),this.layout)` (`:4548`) reuses whatever layout
-    the round is seated on, and `handleResize` re-seats a round unconditionally
-    (`:4921`), so that layout can be one `fits` rejects. Measured off the
-    engine: open a round at 100 columns (`half=49`, `fits:true`), call `seat`
-    with `versusLayout(60,30)` the way a drag to 60 columns does (`half=29`,
-    `fits:false`), then call `rematch()` - the round that comes back reports
-    `fits:false` at `half=29`, and the HUD row of the half it renders reads
-    `SCORE:DIST: 0SHIELD: 100%`, with the score value gone. Reachable in
-    ordinary play, in a band of its own: between 60 and 90 columns `fitGrid`
-    still reports `fits:true` (`MIN_WIDTH` 60) so the too-small notice does not
-    take the screen, while a half is 29 to 44 columns and under
-    `VERSUS_MIN_HALF_WIDTH` 45. So one width is both refused and granted
-    depending on which key reaches it: `V` and `?versus` decline to open a round
-    there, and ENTER on the result panel opens one.
-  - **Goal**: Apply the gate at the rematch as the other two paths apply it, and
-    decide what ENTER does on a result panel too narrow for a fresh round -
-    refusing silently leaves the players no way to read why. This is the same
-    floor as `A round dragged under 45 columns a half eats its own HUD readings`
-    above and the two want deciding together: a shortened HUD form below the
-    floor answers both at once, where that item's "too narrow notice over the
-    halves" option answers the resize and leaves `rematch()` still opening a
-    round the gate refuses. Whichever way it goes, `test/versus.test.mjs` should
-    re-seat a round below the floor and read back what `rematch()` returns,
-    which nothing does today.
-  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
-- [x] Mute does not survive opening a round or asking for a rematch
-  - **Issue**: the engine's own comment calls M "a global setting toggle, so it
-    works in every mode" (`src/game.ts:701`, and the inline copy at
-    `index.html:1729`), and `startGame` resets `paused` but deliberately not
-    `muted` (`src/game.ts:381`), so mute survives a run in the solo game. A
-    round carries it neither way: `VersusRound`'s constructor builds two
-    `new Game()` (`index.html:4428`) and `createInitialState` sets `muted:false`
-    (`:1320`), so a round opens unmuted whatever the page was, and `rematch()`
-    builds a fresh pair the same way. Measured in both directions - mute the
-    page's game with M, then open a round, and both pilots read `muted:false`;
-    mute a round with M so both pilots read `muted:true` and `versusAudioState`
-    reports `muted:true`, then `rematch()`, and both read `muted:false` with
-    `versusAudioState` reporting `muted:false`. The sound the players turned off
-    returns once when they press `V` and again on every ENTER. Nothing inside a
-    round drifts: `VERSUS_SHARED_KEYS` routes M to both pilots, `step` answers
-    it for a pilot who is out, and the two copies held in step at every standing
-    flown - the setting is lost at the round boundary, not within one.
-  - **Goal**: Carry the page's mute into a round when one opens, and the round's
-    own into its rematch. The round's value is already `a.muted||b.muted`, which
-    is what `versusAudioState` reads, so the rematch half is that expression
-    written onto the new pair; the open half needs the two call sites at
-    `index.html:5287` and `:4978` to hand `VersusRound` what `game.state.muted`
-    holds, which is a constructor argument it does not take today.
-    `test/versus.test.mjs` should read `muted` back off both pilots across a
-    `rematch()`, which nothing does today.
-  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
 - [x] The ENTER that asks for a rematch is also pilot 2's first shot of it
   - **Issue**: the frame loop reads the rematch and then steps the round it
     opened with the same keypress still in the map:
@@ -245,3 +135,52 @@ the roadmap section each one came from.
     case should say in its own comment that it pins the wiring as written and
     not as behaving, and name where the behaviour was confirmed instead.
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+- [x] The mute check tells two openings apart by line, so one line can hide an
+      unmuted round
+  - **Issue**: `test/browser-shell.test.mjs:1089` subtracts the openings that
+    read `game.state.muted` from the openings found, but both sides are the
+    `index.html:<line>` strings `wiringAt` returns, so two openings sharing a
+    source line are one entry as far as `includes` is concerned. Measured by
+    collapsing a second, unmuted opening onto `index.html:5178` beside the
+    `?versus` one -
+    `...layout,game.state.muted);else if(params.has('v2'))versus=new VersusRound(versusSeed(),layout,false);`
+    - and removing the `V` key's so the count still reads 2: `muted` comes back
+    holding `index.html:5178`, `opens.filter((at) => !muted.includes(at))` comes
+    back empty, and 'browser: both openings hand the round the page's mute'
+    reports a tick with `layout,false)` standing in the file. That is the one
+    thing the case exists to refuse, and its own comment at 1076 says so:
+    "counted rather than matched branch by branch, so a third way into a round
+    is a failure here instead of a silently unmuted one". Nothing is wrong in
+    `index.html` today - the two openings are at 5178 and 5490, a line apart in
+    the only arrangement the file has had - and the sibling case 'the V key and
+    the ?versus link are the two openings' did fail on the arrangement above by
+    its own route, so what is blind is this assertion rather than the suite.
+  - **Goal**: Give each match an identity the source line does not decide. Have
+    `wiringAt` return the match offset alongside the line - the
+    `index.html:<line>` string for the failure text, `m.index` for the
+    comparison - so the subtraction is exact while the messages read as they do
+    now. Then rebuild the collapsed-line arrangement above and confirm the mute
+    case is what fails, since today it is the only one of the four that does
+    not.
+  - From: Code Review Override - the versus wiring cases
+- [x] The `wiring` docstring credits a `doesNotMatch` the block does not use
+  - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
+    the file rather than to `</script>` by saying the wider slice "leaves the
+    `doesNotMatch` below reading the larger region". No assertion in the file
+    reads `wiring` through `doesNotMatch`. The four the file holds are at 460,
+    929, 990 and 991, and every one reads `html` or a data URI, so none is
+    affected by where the slice ends. The case that would have been that
+    `doesNotMatch` is 'browser: nothing in the wiring opens a rematch directly'
+    at 1057, and it deliberately does the opposite - it collects locations and
+    asserts `deepEqual(at, [])` - for the reason the block comment gives at
+    1029: "a regex assertion over a 20,000-character slice prints the slice, and
+    a failure nobody can read is a failure nobody acts on". So the docstring
+    states the design the block was written to replace, 993 lines above the note
+    saying why it was replaced, and a reader taking it at its word would restore
+    the assertion form that note argues against.
+  - **Goal**: Rewrite the docstring's second paragraph around the reason that
+    still holds - nothing after `</script>` carries JavaScript, 26 characters of
+    `</body></html>`, so slicing to the end costs a case nothing and leaves the
+    marker as the only index the block needs - and drop the clause naming
+    `doesNotMatch`.
+  - From: Code Review Override - the versus wiring cases

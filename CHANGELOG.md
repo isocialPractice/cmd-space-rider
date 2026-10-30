@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.0.0-alpha.0.13.2] - 2026-10-30
+
+### Fixed
+
+- The mute case in `test/browser-shell.test.mjs` told two openings apart by
+  source line, so one line could hide an unmuted round. `wiringAt` returned
+  `index.html:<line>` strings and nothing else, and the case subtracted the
+  openings that read `game.state.muted` from the openings found by comparing
+  those strings - so two openings sharing a line were one entry as far as
+  `includes` was concerned. Measured by collapsing a second, unmuted opening
+  onto `index.html:5178` beside the `?versus` one and removing the `V` key's so
+  the count still read 2: the filter came back empty and 'browser: both openings
+  hand the round the page's mute' reported a tick with `layout,false)` standing
+  in the file, which is the one thing the case exists to refuse. A match now
+  carries the offset it was found at alongside its line - the line for the
+  failure text, the offset for the subtraction - and both patterns begin at the
+  same `new VersusRound(`, so a match that reads the mute carries the same
+  offset in both lists while two openings on one line do not. Rebuilding that
+  arrangement now fails the mute case, and dropping `game.state.muted` from the
+  `V` key's opening on a line of its own still fails it as before. Nothing was
+  wrong in `index.html` either way: the two openings are at 5178 and 5490, a
+  line apart in the only arrangement the file has had.
+- The `wiring` docstring credited a `doesNotMatch` the block does not use. It
+  explained slicing to the end of the file rather than to `</script>` by saying
+  the wider slice "leaves the `doesNotMatch` below reading the larger region",
+  and no assertion in the file reads `wiring` through `doesNotMatch` - the four
+  the file holds read `html` or a data URI, so none is affected by where the
+  slice ends. The case that would have been that `doesNotMatch` deliberately
+  does the opposite, collecting locations and asserting `deepEqual(at, [])`, for
+  the reason its own block comment gives: a regex assertion over a
+  20,000-character slice prints the slice, and a failure nobody can read is a
+  failure nobody acts on. So the docstring stated the design the block was
+  written to replace, 993 lines above the note saying why. Rewritten around the
+  reason that still holds: what the wider slice takes in is 26 characters, the
+  closing script tag and `</body></html>`, none of it JavaScript, so the slice
+  costs a case nothing and leaves the marker as the only index to find.
+
+### Added
+
+- A case holding the identity the subtraction above depends on: every match
+  `wiringAt` returns has an offset of its own, and at least two of them share a
+  line, which is what the offset is for. Read off a pattern the page gives
+  repeats of on one line rather than a fixture, so it exercises the helper the
+  cases use over the file they read. Suite comes out at 901 from 900.
+
 ## [1.0.0-alpha.0.13.1] - 2026-10-29
 
 ### Added

@@ -3468,3 +3468,62 @@ still be found by name.
     `test/versus.test.mjs` should read the HUD row back off a half below the
     floor, which nothing does today.
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+
+## Archived 10-30-26
+
+- [x] `rematch()` opens a round on a layout the `fits` gate would refuse
+  - **Issue**: `versusLayout`'s docstring says `fits` "gates opening a round and
+    not continuing one", and both paths that open one from the page check it -
+    the `V` key (`index.html:5284-5287`) and the `?versus` parameter
+    (`:4976-4979`). `rematch()` opens one too and checks nothing:
+    `new VersusRound(versusSeed(),this.layout)` (`:4548`) reuses whatever layout
+    the round is seated on, and `handleResize` re-seats a round unconditionally
+    (`:4921`), so that layout can be one `fits` rejects. Measured off the
+    engine: open a round at 100 columns (`half=49`, `fits:true`), call `seat`
+    with `versusLayout(60,30)` the way a drag to 60 columns does (`half=29`,
+    `fits:false`), then call `rematch()` - the round that comes back reports
+    `fits:false` at `half=29`, and the HUD row of the half it renders reads
+    `SCORE:DIST: 0SHIELD: 100%`, with the score value gone. Reachable in
+    ordinary play, in a band of its own: between 60 and 90 columns `fitGrid`
+    still reports `fits:true` (`MIN_WIDTH` 60) so the too-small notice does not
+    take the screen, while a half is 29 to 44 columns and under
+    `VERSUS_MIN_HALF_WIDTH` 45. So one width is both refused and granted
+    depending on which key reaches it: `V` and `?versus` decline to open a round
+    there, and ENTER on the result panel opens one.
+  - **Goal**: Apply the gate at the rematch as the other two paths apply it, and
+    decide what ENTER does on a result panel too narrow for a fresh round -
+    refusing silently leaves the players no way to read why. This is the same
+    floor as `A round dragged under 45 columns a half eats its own HUD readings`
+    above and the two want deciding together: a shortened HUD form below the
+    floor answers both at once, where that item's "too narrow notice over the
+    halves" option answers the resize and leaves `rematch()` still opening a
+    round the gate refuses. Whichever way it goes, `test/versus.test.mjs` should
+    re-seat a round below the floor and read back what `rematch()` returns,
+    which nothing does today.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+- [x] Mute does not survive opening a round or asking for a rematch
+  - **Issue**: the engine's own comment calls M "a global setting toggle, so it
+    works in every mode" (`src/game.ts:701`, and the inline copy at
+    `index.html:1729`), and `startGame` resets `paused` but deliberately not
+    `muted` (`src/game.ts:381`), so mute survives a run in the solo game. A
+    round carries it neither way: `VersusRound`'s constructor builds two
+    `new Game()` (`index.html:4428`) and `createInitialState` sets `muted:false`
+    (`:1320`), so a round opens unmuted whatever the page was, and `rematch()`
+    builds a fresh pair the same way. Measured in both directions - mute the
+    page's game with M, then open a round, and both pilots read `muted:false`;
+    mute a round with M so both pilots read `muted:true` and `versusAudioState`
+    reports `muted:true`, then `rematch()`, and both read `muted:false` with
+    `versusAudioState` reporting `muted:false`. The sound the players turned off
+    returns once when they press `V` and again on every ENTER. Nothing inside a
+    round drifts: `VERSUS_SHARED_KEYS` routes M to both pilots, `step` answers
+    it for a pilot who is out, and the two copies held in step at every standing
+    flown - the setting is lost at the round boundary, not within one.
+  - **Goal**: Carry the page's mute into a round when one opens, and the round's
+    own into its rematch. The round's value is already `a.muted||b.muted`, which
+    is what `versusAudioState` reads, so the rematch half is that expression
+    written onto the new pair; the open half needs the two call sites at
+    `index.html:5287` and `:4978` to hand `VersusRound` what `game.state.muted`
+    holds, which is a constructor argument it does not take today.
+    `test/versus.test.mjs` should read `muted` back off both pilots across a
+    `rematch()`, which nothing does today.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
