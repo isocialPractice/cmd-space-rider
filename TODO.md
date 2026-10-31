@@ -55,6 +55,56 @@ its origin survives archiving into `## Complete`.
     muted', which pins the footer's indicator the same way.
   - From: UI/UX Override - the title screen's silent mute
 
+- [ ] A gamepad in a split-screen round shoots for the wrong pilot
+  - **Issue**: both below-marker call sites that resolve a fire key read the
+    solo game's mode while a round owns the frame, and a round leaves that mode
+    at `menu`: `padsKeys(navigator.getGamepads(),game.state.mode)`
+    (`index.html:5250`) and `holdButton(fireEl,()=>touchFireKey(game.state.mode))`
+    (`:5392`). `touchFireKey` (`:4799`) answers `SPACE` only for `'playing'`, so
+    through a whole round the A button sends `ENTER` - and `ENTER` is pilot 2's
+    trigger in `VERSUS_BINDINGS` (`:4142`). Measured through `test/helpers.mjs`
+    at a 100x30 grid, one standard-layout pad with A down, the poll at `:5247`
+    reconstructed and a fresh round stepped one frame on what it produced:
+    pilot 2 opens with 3 bullets and a `shot` cue, pilot 1 with none. The rest
+    of the pad lands on the other seat - B sends `F` and the two triggers send
+    `Q` and `E`, all three pilot 1's - and the left stick steers nobody, since
+    `pilotKeys` (`:4164`) routes the arrows to neither pilot, which is the
+    decision `VERSUS_BINDINGS` states in its own docstring. So one controller
+    holds pilot 1's boost and both rolls, pilot 2's gun, and nobody's steering,
+    in the one mode whose premise is that the two fly the same thing. Which seat
+    the trigger lands in also depends on how the round was opened:
+    `?mode=tunnel&versus` leaves the solo game at `'playing'`, so the same
+    button sends `SPACE` and fires pilot 1 instead - one pad, one button, a
+    different pilot by route. The on-screen FIRE button reads the same way at
+    `:5392`, reachable on a landscape tablet wide enough for 91 columns. Nothing
+    in the suite pairs either input with a round: the poll's own case pins its
+    shape and never its mode argument (`test/browser-shell.test.mjs:671`), and
+    `padKeys` is only ever asked for `'menu'` and `'playing'` (`:538`), both of
+    which are right about the solo game.
+  - **Goal**: Decide what a pad does in a round, then wire it to the round
+    rather than to the solo game. Three answers are open and choosing is the
+    work: drive pilot 1 with the whole pad, which wants the stick routed onto
+    that pilot's `W`/`A`/`S`/`D` as well as A onto `SPACE`, and is the only one
+    that makes the boost and rolls the pad already lands there coherent; seat
+    the pad as pilot 1 against pilot 2's keyboard, which is a feature rather
+    than a fix; or feed it nothing while a round runs, which is one line and
+    gives up the three controls that already work. Whichever is taken, the mode
+    handed to `padsKeys` and `touchFireKey` has to be a reading of what is being
+    played rather than of `game.state`, which is the shape every other
+    below-marker read already has - `shakeOffset` is gated `versus?{x:0,y:0}:`
+    at `:5560`, and the render and audio calls sit inside the solo branch.
+    `docs/features.html`'s gamepad bullet says the stick steers and A fires
+    during a run, and wants a line about a round once the behaviour is settled.
+    A case holds this without a browser: `padsKeys`, `padFireKey`,
+    `PAD_CONTROL_KEYS`, `pilotKeys` and `VersusRound` are all above the marker
+    and exported by `test/helpers.mjs`, so `test/browser-shell.test.mjs` can
+    rebuild the poll the way its own case at 671 does and step a round on what
+    it produces. The line that hands the mode over wants the source-text pin the
+    three versus wiring lines already have, since no case can execute
+    `pollGamepads`, and it should say in its own comment that it pins the wiring
+    as written and not as behaving.
+  - From: UI/UX Override - the title screen's silent mute
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
