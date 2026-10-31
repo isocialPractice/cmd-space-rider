@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Notes
+
+- A review turn. `## Current` held no workable items - every roadmap section is
+  empty of work a run may take, and the one item left in `## Polish` says in its
+  own text that it wants a decision rather than a run - so nothing was built, no
+  version was applied, and the manifest was left at `1.0.0-alpha.0.13.2`. The
+  suite was run against the source as it stands: 901 of 901 passing, nothing
+  skipped, and `npm run probe` prints its usage rather than a figure when called
+  without a probe name, which is what it is meant to do. What the turn wrote is
+  two request flags under `.claude/`, which this repository does not track, so
+  the code review reads the whole repository rather than an empty diff and an
+  unattended browser pass drives the page wiring the suite cannot execute.
+
 ## [1.0.0-alpha.0.13.2] - 2026-10-30
 
 ### Fixed
