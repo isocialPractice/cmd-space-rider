@@ -8,6 +8,53 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
+### UI/UX Override - the title screen's silent mute
+
+#### Found Issues
+
+- [ ] The title screen never says the page is muted
+  - **Issue**: `M` works on the title screen and nothing on that screen reports
+    it. Driven in chromium at 1280x800 against `index.html` served over
+    `http://127.0.0.1`: one `M` on the title screen takes `game.state.muted`
+    from `false` to `true`, and the 44-row grid is **byte-identical** before and
+    after - every row, including the bottom border. No row names the `M` key
+    either; the title screen names `WASD or ARROWS`, `F`, `SPACE`, `Q / E`,
+    `[ PRESS ENTER TO LAUNCH ]` and `[ V ] TWO-PILOT SPLIT SCREEN`, and no
+    more. The setting is live all the same, which is what makes the silence
+    cost something: a round opened with `V` straight afterwards reports
+    `versus.muted()` true with both pilots muted, and plays no cue and no hum -
+    so a player who pressed `M` once too often, or who cannot hear whether the
+    page is muted, has no way to read the state until they launch a run and see
+    the footer. In a run it is reported properly: `drawFooter` reserves
+    `' MUTED '` (`index.html:3402`) and writes it at `:3420`, observed as
+    `═ MUTED ═╝` in the status strip. `MUTED` occurs nowhere else in the file,
+    and `renderTitleScreen` (`:3711`) takes no reading of `state.muted` at all,
+    which is why `case'menu':` (`:5540`) draws the same screen either way.
+  - **Goal**: Report the state on the title screen the way the footer already
+    does in a run. The bottom border row is already a status line on that
+    screen - `drawVersusHint` (`:4536`) writes the versus label centred into
+    `screen.height-1` after `renderTitleScreen` (`:5541-5544`) - so a right
+    aligned ` MUTED ` at `w-mute.length-2`, the offset `drawFooter` uses, has a
+    place to sit that the centred hint does not want. Worth deciding whether it
+    belongs inside `renderTitleScreen`, which is handed the state and so can
+    read the flag directly, or beside `drawVersusHint` as another thing the
+    page writes over the shared title screen; `drawVersusHint`'s own docstring
+    in `test/versus.test.mjs:1020` gives the reason that call sits outside
+    `renderTitleScreen`, and the same reasoning may or may not apply here.
+    Either way the narrow widths want the same guard the hint has, since
+    `versusHintText` is gated on width and a label dropped onto a border too
+    short for it is the defect `drawVersus` restates its borders to avoid.
+    A case holds this without a browser: `renderTitleScreen` is above the
+    `// ===== Canvas Setup & Sizing =====` marker and the suite already renders
+    it (`test/menu-layout.test.mjs:194`, `test/parity.test.mjs:589`), so
+    `test/browser-engine.test.mjs` - whose header already names mute as one of
+    its subjects - can render a title screen at `muted:false` and at
+    `muted:true` and assert the two buffers differ and that the muted one
+    carries the word. That is the sibling of
+    `test/browser-engine.test.mjs:520`, 'the mute indicator appears only when
+    muted', which pins the footer's indicator the same way.
+  - From: UI/UX Override - the title screen's silent mute
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
