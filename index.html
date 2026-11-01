@@ -3755,6 +3755,32 @@ function renderTitleScreen(screen,state){
 
   // The top scores, in whatever room is left under the prompt.
   drawLeaderboard(screen,state,promptY);
+
+  // The page's mute, reported where drawFooter reports it in a run: ' MUTED '
+  // set into the bottom border two columns off the right edge.
+  //
+  // M works on this screen and nothing on it used to say so, and the setting
+  // outlives the screen - a round opened with V straight afterwards carries the
+  // page's mute in and plays no cue and no hum - so a player who pressed M once
+  // too often, or who cannot hear whether the page is muted, had no way to read
+  // the state until they launched a run and saw the footer.
+  //
+  // Here rather than beside drawVersusHint, which writes the other label on this
+  // same border: the split screen is the browser shell's own, and mute is both
+  // builds'. M is read by the engine, so the terminal build carries this line
+  // for the same state and test/parity.test.mjs reads the two title screens
+  // against each other muted as well as unmuted.
+  //
+  // Right aligned at the offset drawFooter uses, which leaves the middle of the
+  // row to the centred versus hint - the two never meet, since a round wants 91
+  // columns and the label takes the last nine. Gated on the width the way
+  // versusHintText is: a label dropped onto a border too short to hold it is
+  // what drawVersus restates its own borders to avoid.
+  if(state.muted){
+    const mute=' MUTED ';
+    if(mute.length<=w-4)
+      screen.putString(w-mute.length-2,h-1,mute,C.BRIGHT_YELLOW,C.BLACK);
+  }
 }
 
 function renderDebugMenu(screen,state){
@@ -4939,6 +4965,104 @@ function padsKeys(pads,mode){
   return out;
 }
 
+/**
+ * The mode a device's buttons are read against: whichever game owns the frame.
+ *
+ * `padKeys` and `touchFireKey` both ask what is being played, and a round
+ * leaves the solo game's mode at 'menu' - the game it was opened from is left
+ * exactly where it stood. So a pad or a FIRE button read off `game.state.mode`
+ * through a round sends ENTER, which is pilot 2's trigger in VERSUS_BINDINGS:
+ * the A button fired the other player's gun for the whole round. Which seat it
+ * landed in even depended on the route in, since `?mode=tunnel&versus` leaves
+ * the solo game at 'playing' and the same button then fired pilot 1.
+ *
+ * A round owns the frame outright, which is the reading every other call below
+ * the marker already takes of it - the render, the audio and the shake all ask
+ * `versus` first. This is that reading, for the two calls that were asking the
+ * solo game instead.
+ *
+ * A round owns it while it is being flown, which is what `settled` is already
+ * the name for: a settled round is a result panel, and the panel waits on the
+ * ENTER versusRematch reads exactly as the game over screen does. Read as
+ * 'playing' there, A resolves to a trigger instead and the panel has nothing
+ * left that answers it - the pad can neither ask for a rematch nor leave, since
+ * it has no ESCAPE. So the gate is the same one the rematch itself is behind,
+ * and the two agree frame for frame about when the round stopped being flown.
+ *
+ * A settled round answers 'menu' outright rather than handing back the solo
+ * game's mode, because the panel is a screen of the round's own and the game
+ * behind it is not what the player is looking at. Handing the mode back would
+ * leave `?mode=tunnel&versus` with a panel that reads 'playing', where A is a
+ * trigger with nobody left to fire it - the same route-dependent answer this
+ * reading exists to remove, arriving one screen later.
+ */
+function inputMode(mode,round){
+  if(!round)return mode;
+  return round.settled?'menu':'playing';
+}
+
+/** The seat a pad flies in a round. */
+const PAD_PILOT=0;
+
+/**
+ * The engine's own name for each key a pad reading carries.
+ *
+ * `padKeys` answers in the names a solo run reads, where the arrows and W/A/S/D
+ * are alternates for one control. A round reads a pilot's binding instead, and
+ * VERSUS_BINDINGS gives the arrows to neither pilot for a reason it states
+ * itself: two players at one keyboard cannot agree whose they are. So a stick
+ * that is to steer anybody in a round has to be read as the steering control
+ * first and put through the binding second, which is what this names.
+ *
+ * ENTER is deliberately absent. In a round the A button is read as 'playing'
+ * and sends SPACE, so the only way ENTER arrives here is a press carried in
+ * from the title screen under padFireKey's hold - and a key pressed for the
+ * screen before the round belongs to no pilot in it.
+ */
+const PAD_ENGINE_KEYS={
+  LEFT:'A',RIGHT:'D',UP:'W',DOWN:'S',
+  SPACE:'SPACE',F:'F',Q:'Q',E:'E',
+};
+
+/**
+ * A pad reading as one pilot's half of the keyboard.
+ *
+ * The whole pad on one seat, which is the answer the controls the pad already
+ * landed there were asking for: B sent F and the two triggers sent Q and E, all
+ * three pilot 1's, while the stick sent arrows that steered nobody and A sent
+ * pilot 2's trigger. One controller is one pair of hands, so there is no case
+ * for splitting it the way the keyboard is split - and a pad that flies a pilot
+ * entirely is the only reading under which the three controls that already
+ * worked make sense.
+ *
+ * Every name the seat can press is answered, held or not, the way pilotKeys
+ * answers every name its binding lists: a reading that leaves a key out is a
+ * key the poll has nothing left to release.
+ */
+function padPilotKeys(held,binding){
+  const out={};
+  for(const name in PAD_ENGINE_KEYS)out[binding[PAD_ENGINE_KEYS[name]]]=false;
+  for(const name in PAD_ENGINE_KEYS)if(held[name])out[binding[PAD_ENGINE_KEYS[name]]]=true;
+  return out;
+}
+
+/** Every key padPilotKeys can press, for a caller that has to release them. */
+const PAD_PILOT_KEYS=Object.keys(padPilotKeys({},VERSUS_BINDINGS[PAD_PILOT]));
+
+/**
+ * Every key a pad can press, over the solo game and a round both.
+ *
+ * The two readings name different keys - the solo game's steering is the arrows
+ * and the seat's is W/A/S/D - and the frame a round opens or closes on is read
+ * one way and released the other. So the poll walks the union: a name the new
+ * reading does not carry reads as not held, which is what releases it, and a
+ * name missing from the list entirely is a key nothing is left to lift.
+ */
+const PAD_HELD_KEYS=[
+  ...PAD_CONTROL_KEYS,
+  ...PAD_PILOT_KEYS.filter((k)=>!PAD_CONTROL_KEYS.includes(k)),
+];
+
 // ===== Sound (Web Audio) =====
 // Every cue is synthesized on the spot: there are no audio files to fetch, so
 // nothing to load before a run and nothing to keep in step with the build.
@@ -5247,7 +5371,10 @@ let padFire=null;
 function pollGamepads(){
   if(typeof navigator?.getGamepads!=='function')return;
 
-  const held=padsKeys(navigator.getGamepads(),game.state.mode);
+  // Read for whichever game owns the frame, not for the solo game: a round
+  // leaves that game's mode at 'menu', and A read against 'menu' sends the
+  // ENTER that is pilot 2's trigger. See inputMode.
+  const held=padsKeys(navigator.getGamepads(),inputMode(game.state.mode,versus));
   // A fire key is the press's, not the frame's - see padFireKey for the mode
   // change that reads an unmoved button as a different key. Written back into
   // the reading so the release below is the release of what was pressed.
@@ -5255,8 +5382,19 @@ function pollGamepads(){
   held.SPACE=padFire==='SPACE';
   held.ENTER=padFire==='ENTER';
 
-  for(const k of PAD_CONTROL_KEYS){
-    if(held[k]){
+  // Seated on the pilot the pad flies while a round runs. The engine's own
+  // names are what a solo run reads; a round reads a pilot's binding, and the
+  // arrows belong to neither pilot.
+  //
+  // Unseated again once the round settles, on the same gate inputMode takes:
+  // the seat answers no ENTER by design - see PAD_ENGINE_KEYS - and ENTER is
+  // what the result panel is waiting for, so a reading left seated there holds
+  // the rematch key out of a panel whose only other way out is a key no pad
+  // sends.
+  const reading=versus&&!versus.settled?padPilotKeys(held,VERSUS_BINDINGS[PAD_PILOT]):held;
+
+  for(const k of PAD_HELD_KEYS){
+    if(reading[k]){
       // The first press is also the gesture a browser wants before it will let
       // a page make a sound, the way a keydown and a touch are.
       if(!padWasHeld?.[k])audio.resume();
@@ -5265,7 +5403,7 @@ function pollGamepads(){
       setKey(k,false);
     }
   }
-  padWasHeld=held;
+  padWasHeld=reading;
 }
 
 // ===== Touch controls, wired to the page =====
@@ -5389,7 +5527,19 @@ function holdButton(el,resolve){
   }
 }
 
-holdButton(fireEl,()=>touchFireKey(game.state.mode));
+// FIRE reads whichever game owns the frame, for the reason the poll above does:
+// read off the solo game a round leaves at 'menu', the button sent pilot 2's
+// ENTER, so a thumb on the biggest control on the screen fired the other
+// player's gun. In a round it sends pilot 1's trigger, which is where the rest
+// of a one-device reading lands.
+//
+// The stick beside it keeps the arrows, which steer nobody in a round, and that
+// is not an oversight: a round needs two seats and the other one has no keys to
+// sit at, so the only device that can open a round on glass is one with a
+// keyboard beside it. What is worth fixing on a tablet wide enough for 91
+// columns is the button that fired the wrong pilot, not steering for a player
+// who cannot be there.
+holdButton(fireEl,()=>touchFireKey(inputMode(game.state.mode,versus)));
 holdButton(boostEl,()=>'F');
 
 // ===== Main loop =====

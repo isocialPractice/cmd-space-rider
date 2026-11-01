@@ -1,19 +1,140 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.14.0] - 2026-11-01
+
+### Fixed
+
+- A gamepad in a split-screen round shot for the wrong pilot. Both of the page's
+  device readings asked the solo game what was being played -
+  `padsKeys(navigator.getGamepads(),game.state.mode)` in the poll and
+  `holdButton(fireEl,()=>touchFireKey(game.state.mode))` on the on-screen FIRE
+  button - and a round leaves that game's mode at `menu`, because the game a
+  round was opened from is left exactly where it stood. `touchFireKey` answers
+  `SPACE` only for `'playing'`, so through a whole round the A button sent
+  `ENTER`, which is pilot 2's trigger in `VERSUS_BINDINGS`. Measured through
+  `test/helpers.mjs` at a 100x30 grid, one standard-layout pad with A down and
+  the poll reconstructed over a fresh round stepped one frame: pilot 2 opened
+  with 3 bullets and a `shot` cue, pilot 1 with none. The rest of the pad landed
+  on the other seat - B sent `F` and the two triggers sent `Q` and `E`, all
+  three pilot 1's - and the left stick steered nobody, since `pilotKeys` routes
+  the arrows to neither pilot. So one controller held pilot 1's boost and both
+  rolls, pilot 2's gun, and nobody's steering, in the one mode whose premise is
+  that the two fly the same thing - and which seat the trigger landed in
+  depended on the route in, since `?mode=tunnel&versus` leaves the solo game at
+  `'playing'` and the same button then fired pilot 1 instead.
+
+  The answer taken is that the whole pad flies one pilot. A controller is one
+  pair of hands, so there is no reading under which half of it belongs to the
+  other seat, and it is the only answer that makes the boost and the two rolls
+  the pad already landed on pilot 1 coherent. Two readings above the
+  `// ===== Canvas Setup & Sizing =====` marker carry it, and both call sites
+  now hand them over. `inputMode` answers which game owns the frame rather than
+  which mode the solo game is in, which is the reading the render, the audio and
+  the shake below the marker already take of a round. `padPilotKeys` puts a
+  reading through a pilot's binding, so the stick steers on that pilot's own
+  `W`/`A`/`S`/`D` where it used to send arrows that reach nobody, and the poll
+  walks the union of both readings' names so the frame a round opens or closes
+  on releases what it pressed. `ENTER` is deliberately absent from the seat:
+  inside a round A resolves to `SPACE`, so the only way `ENTER` arrives is a
+  press carried in from the title screen under `padFireKey`'s hold, and a key
+  pressed for the screen before the round belongs to no pilot in it.
+
+  Both readings are gated on the round still being flown rather than on there
+  being one, because `ENTER` being absent from the seat is only right while
+  somebody is flying. A settled round is a result panel, and the panel waits on
+  the `ENTER` `versusRematch` reads exactly as the game over screen does: read
+  as `'playing'` there, A resolves to a trigger that steps nobody, the seat
+  answers no `ENTER` at all, and the panel is left with nothing that answers it
+  - no pad sends `ESCAPE`, so the round could be neither rematched nor left. The
+  gate is `settled`, which is the same one the rematch itself is behind, so the
+  two agree frame for frame about when the round stopped being flown; the A
+  button is pilot 1's trigger for every frame of the flight and the panel's
+  confirm key from the frame it settles. The panel answers `'menu'` outright
+  rather than handing back the solo game's mode, so the route in does not decide
+  this either: read back, `?mode=tunnel&versus` would leave a panel reading
+  `'playing'` and answering A with a trigger that steps nobody, which is the
+  same route-dependent answer the reading exists to remove arriving one screen
+  later. The on-screen FIRE button comes back with it, on the same reading.
+
+  The on-screen FIRE button lands on the same pilot for the same reason, which
+  is what a landscape tablet wide enough for 91 columns reaches. The thumbstick
+  beside it keeps the arrows, and that is a decision rather than an oversight: a
+  round wants two seats and a touchscreen has no keys for the second one, so the
+  only device that can open a round on glass has a keyboard beside it. What was
+  worth fixing there is the button that fired the wrong pilot, not steering for
+  a player who cannot be at the other seat.
+- The title screen never said the page was muted. `M` works on that screen and
+  nothing on it reported it: driven in chromium at 1280x800, one `M` took
+  `game.state.muted` from `false` to `true` and left the 44-row grid
+  byte-identical, every row including the bottom border, and no row named the
+  key either. The setting is live all the same, which is what made the silence
+  cost something - a round opened with `V` straight afterwards reports
+  `versus.muted()` true with both pilots muted, and plays no cue and no hum - so
+  a player who pressed `M` once too often, or who cannot hear whether the page
+  is muted, had no way to read the state until they launched a run and saw the
+  footer, where `drawFooter` has always reserved and written `' MUTED '`.
+  `renderTitleScreen` now writes the same label into the bottom border of that
+  screen, right aligned at the offset `drawFooter` uses. Both builds carry it in
+  their own `renderTitleScreen`, because mute is a setting the engine reads
+  rather than one build's - which is the opposite of the split screen's label on
+  that same border, drawn outside the function because the terminal build has no
+  round to name. The label is gated on the width the way `versusHintText` is, so
+  a grid too narrow to hold it drops it rather than writing over the corner, and
+  it never meets the centred versus hint: a round wants 91 columns and the label
+  takes the last nine.
+
+### Added
+
+- `test/browser-shell.test.mjs` grows a section for a pad in a round. Ten
+  cases walk the two new readings and the round they feed: the seat every
+  control lands on, that nothing of the other pilot's is pressed, the `ENTER`
+  carried in reaching neither pilot, a round stepped on a rebuilt poll with
+  pilot 1 opening fire and pilot 2 silent and still, the same push steering
+  nobody unseated, the release set covering both readings, and the two sides of
+  the `settled` gate - a result panel handing the pad back the `ENTER` its
+  rematch waits on, and a round short of that still reading A as the trigger of
+  the pilot it flies. Four more pin the
+  two call sites as the text of `index.html`, since neither a poll over
+  `navigator.getGamepads()` nor a pointer listener is reachable from the suite -
+  including one that refuses `game.state.mode` to any device reading, counted
+  over both at once so a third device is a failure here rather than a round
+  flown from the wrong seat. The contrast is kept as a case of its own: the same
+  snapshot read off `game.state.mode` still opens the round with pilot 2's free
+  volley, which is what the defect was. Measured by reverting each line, which
+  is also what says the eight are not enough on their own - the behaviour cases
+  rebuild the poll and stay green, while the two mode pins and the refusal fail
+  on the call sites, and the seating pin fails on the seat.
+- `test/browser-engine.test.mjs` holds the title screen's mute label, the
+  sibling of 'the mute indicator appears only when muted' which pins the same
+  word in a run: the two title buffers differ and the muted one carries the
+  word, with the starfield cleared so the comparison is of the label rather than
+  of `Math.random`. A second case holds the width gate at a grid narrower than
+  any the game lays out, where the label is dropped and the corner still closes
+  the frame. `test/parity.test.mjs` now renders both builds' title screens muted
+  as well as unmuted, because a label added to one `renderTitleScreen` and not
+  the other is a drift the unmuted comparison cannot see, and it asserts the two
+  screens are not the same screen muted - so a day where neither build reports
+  the state fails rather than agreeing.
+
+### Changed
+
+- `docs/usage.html` says where the `MUTED` indicator appears, which is two
+  places now, and why the setting is the page's rather than a run's. Its gamepad
+  paragraph, `docs/features.html`'s gamepad bullet, and the gamepad paragraph in
+  both `CHEATSHEET.md` and `docs/cheatsheet.html` say what a pad does in a
+  round.
 
 ### Notes
 
-- A review turn. `## Current` held no workable items - every roadmap section is
-  empty of work a run may take, and the one item left in `## Polish` says in its
-  own text that it wants a decision rather than a run - so nothing was built, no
-  version was applied, and the manifest was left at `1.0.0-alpha.0.13.2`. The
-  suite was run against the source as it stands: 901 of 901 passing, nothing
-  skipped, and `npm run probe` prints its usage rather than a figure when called
-  without a probe name, which is what it is meant to do. What the turn wrote is
-  two request flags under `.claude/`, which this repository does not track, so
-  the code review reads the whole repository rather than an empty diff and an
-  unattended browser pass drives the page wiring the suite cannot execute.
+- The turn before this one built nothing: `## Current` held no workable items,
+  every roadmap section was empty of work a run may take, and the one item left
+  in `## Polish` says in its own text that it wants a decision rather than a
+  run. What that turn wrote is two request flags under `.claude/`, which this
+  repository does not track - a verbose code review over the whole repository
+  rather than an empty diff, and an unattended browser pass over the page wiring
+  the suite cannot execute. The browser pass is what found the two defects above
+  and queued them, and the suite it ran against was 901 of 901 passing with
+  nothing skipped.
 
 ## [1.0.0-alpha.0.13.2] - 2026-10-30
 

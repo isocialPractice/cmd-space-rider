@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT, loadBrowserEngine, fakeStorage, DOM_MARKER } from './helpers.mjs';
+import { REPO_ROOT, loadBrowserEngine, fakeStorage, DOM_MARKER, FRAME } from './helpers.mjs';
 import { pageStyle } from './page-style.mjs';
 
 const browser = loadBrowserEngine(fakeStorage());
@@ -617,8 +617,12 @@ test('the keys a pad can hold are all keys the engine reads', () => {
   // A name this map produces that nothing downstream looks at is a control that
   // silently does nothing, and the engine is the only thing that says which
   // names those are. Read out of the compiled engine rather than listed again.
+  //
+  // Over the whole union rather than the solo game's half of it: a round is
+  // flown on a pilot's binding, so the pad presses W/A/S/D there where it
+  // presses the arrows in a solo run.
   const engine = readFileSync(join(REPO_ROOT, 'src', 'game.ts'), 'utf8');
-  for (const k of browser.PAD_CONTROL_KEYS) {
+  for (const k of browser.PAD_HELD_KEYS) {
     assert.ok(
       engine.includes(`keys['${k}']`) || engine.includes(`justPressed['${k}']`),
       `${k} is held by the pad but read nowhere in the engine`
@@ -705,6 +709,219 @@ test('the page polls the pad once a frame and releases only what it pressed', ()
   const poll = html.indexOf('\n  pollGamepads();');
   const notice = html.indexOf('if(!gridFits){');
   assert.ok(poll < notice, 'the poll should come before the notice branch returns');
+});
+
+// ----- A pad in a split-screen round -----
+//
+// Both of the page's device readings used to ask the solo game what was being
+// played, and a round leaves that game's mode at 'menu': `padKeys` answers A
+// with ENTER outside a run, and ENTER is pilot 2's trigger in VERSUS_BINDINGS.
+// So through a whole round one controller held pilot 1's boost and both rolls,
+// pilot 2's gun, and nobody's steering - the stick sent arrows, which
+// VERSUS_BINDINGS gives to neither pilot. Which seat the trigger landed in even
+// depended on the route in, since `?mode=tunnel&versus` leaves the solo game at
+// 'playing' and the same button then fired pilot 1.
+//
+// A pad is one pair of hands, so the whole of it flies one pilot. What that
+// wants is a reading of which game owns the frame and a seat to put the reading
+// through, and both are above the marker where these cases can reach them. The
+// two call sites that hand them over are below it, and are pinned as text at the
+// foot of this file.
+
+/** A round on a grid wide enough for one, the way test/versus.test.mjs opens them. */
+function round(seed = 4242) {
+  return new browser.VersusRound(seed, browser.versusLayout(100, 30));
+}
+
+/** The seat a pad flies, as the binding the reading is put through. */
+const padSeat = () => browser.VERSUS_BINDINGS[browser.PAD_PILOT];
+
+/**
+ * The poll's reading of one pad, rebuilt: the mode of whichever game owns the
+ * frame, the fire key resolved through the hold, and the result seated on the
+ * pilot the pad flies when there is a round being flown.
+ *
+ * The three steps the poll takes, in its order, because the defect was in how
+ * they compose rather than in any one of them. The seat is behind the poll's own
+ * `settled` gate for the same reason: a settled round is a result panel, and a
+ * reading seated there answers no ENTER for the panel to act on.
+ */
+function padReading(snapshot, mode, r = null, was = null) {
+  const flying = r && !r.settled;
+  const held = browser.padsKeys([snapshot], browser.inputMode(mode, r));
+  const fire = browser.padFireKey(held, was);
+  held.SPACE = fire === 'SPACE';
+  held.ENTER = fire === 'ENTER';
+  return flying ? browser.padPilotKeys(held, padSeat()) : held;
+}
+
+test('a device is read for the game that owns the frame', () => {
+  // A round owns it outright, which is the reading the render, the audio and
+  // the shake below the marker already take. Without one the solo game's own
+  // mode is the answer, unchanged.
+  const r = round();
+  for (const mode of ['menu', 'playing', 'dead', 'debugMenu', 'nameEntry']) {
+    assert.equal(browser.inputMode(mode, null), mode, `no round: ${mode}`);
+    assert.equal(browser.inputMode(mode, undefined), mode, `no round: ${mode}`);
+    assert.equal(browser.inputMode(mode, r), 'playing', `a round over ${mode}`);
+  }
+});
+
+test('the whole pad lands on the pilot it is flying', () => {
+  // Every control on one seat, which is the answer the three that already
+  // landed there were asking for: B sent F and the triggers sent Q and E, all
+  // three pilot 1's, while the stick steered nobody and A fired pilot 2.
+  const seated = (snap) => heldNames(browser.padPilotKeys(
+    browser.padsKeys([snap], 'playing'), padSeat(),
+  ));
+  assert.equal(seated(padSnapshot({ x: -1 })), 'A', 'the stick steers');
+  assert.equal(seated(padSnapshot({ x: 1 })), 'D');
+  assert.equal(seated(padSnapshot({ y: -1 })), 'W');
+  assert.equal(seated(padSnapshot({ y: 1 })), 'S');
+  assert.equal(seated(padSnapshot({ a: 1 })), 'SPACE', 'A is the pilot\'s own trigger');
+  assert.equal(seated(padSnapshot({ b: 1 })), 'F');
+  assert.equal(seated(padSnapshot({ lt: 1 })), 'Q');
+  assert.equal(seated(padSnapshot({ rt: 1 })), 'E');
+  assert.equal(
+    seated(padSnapshot({ x: 1, y: -1, a: 1, b: 1, lt: 1, rt: 1 })),
+    'D+E+F+Q+SPACE+W',
+    'a full handful should all come through at once, and all on one seat',
+  );
+});
+
+test('a seated pad presses nothing of the other pilot\'s', () => {
+  // The defect stated as the invariant: pilot 2's trigger is ENTER, and a pad
+  // read for the solo game sent exactly that. No key is in both bindings, so
+  // seating the reading is what makes this true - and it has to stay true if
+  // the seat ever changes, which is why it is read off the bindings.
+  const other = Object.values(browser.VERSUS_BINDINGS[1 - browser.PAD_PILOT]);
+  const full = padSnapshot({ x: 1, y: 1, a: 1, b: 1, lt: 1, rt: 1 });
+  const seated = browser.padPilotKeys(browser.padsKeys([full], 'playing'), padSeat());
+  const theirs = Object.keys(seated).filter((k) => seated[k] && other.includes(k));
+  assert.deepEqual(theirs, [], `the pad is holding pilot ${2 - browser.PAD_PILOT}'s keys`);
+});
+
+test('an ENTER carried into a round reaches neither pilot', () => {
+  // padFireKey holds the key A went down on until it comes up, so a press made
+  // outside a round arrives inside one as the ENTER it was resolved to. That
+  // key is pilot 2's trigger, and a press made for the screen before the round
+  // is not a shot either pilot asked for.
+  const carried = padReading(padSnapshot({ a: 1 }), 'menu', round(), 'ENTER');
+  assert.equal(heldNames(carried), '', 'the carried hold presses nothing in the round');
+});
+
+test('a pad in a round fires the pilot it is flying', () => {
+  // Behaviour, on the poll rebuilt above. Measured at a 100x30 grid with one
+  // standard-layout pad holding A: read off the solo game the round opened
+  // from, pilot 2 opened with 3 bullets and a shot cue and pilot 1 with none.
+  const r = round();
+  const reading = padReading(padSnapshot({ a: 1 }), 'menu', r);
+  r.step(FRAME, reading, reading);
+
+  const [one, two] = r.states();
+  assert.ok(one.bullets.length > 0, 'the pilot the pad flies opened fire');
+  assert.ok(one.sounds.includes('shot'), 'and the shot was heard');
+  assert.equal(two.bullets.length, 0, 'the other pilot fired nothing');
+  assert.ok(!two.sounds.includes('shot'), 'and made no noise');
+});
+
+test('read off the solo game, a pad in a round fired the other pilot', () => {
+  // What the defect was, kept as the contrast: the same snapshot taken against
+  // `game.state.mode`, which a round leaves at 'menu'. The round is stepped on
+  // what that produces, and the free volley lands on the seat nobody is at.
+  const r = round();
+  const held = browser.padsKeys([padSnapshot({ a: 1 })], 'menu');
+  assert.equal(heldNames(held), 'ENTER', 'which is pilot 2\'s trigger');
+  r.step(FRAME, held, held);
+
+  const [one, two] = r.states();
+  assert.equal(one.bullets.length, 0, 'pilot 1 opens with nothing');
+  assert.ok(two.bullets.length > 0, 'and pilot 2 with a volley, which is the asymmetry');
+});
+
+test('the stick steers the pilot the pad is flying, where the arrows steer nobody', () => {
+  // The other half of the same defect, and the one that cost the pad its
+  // steering outright: VERSUS_BINDINGS routes the arrows to neither pilot, for
+  // the reason it states itself, so a stick not put through a binding moves
+  // nothing in a round.
+  const seated = round();
+  const left = padReading(padSnapshot({ x: -1 }), 'playing', seated);
+  for (let i = 0; i < 20; i++) seated.step(FRAME, left, {});
+  const [mine, theirs] = seated.states();
+  assert.ok(mine.shipX < 0, 'the pad pushed its own pilot left');
+  assert.equal(theirs.shipX, 0, 'and left the other pilot where it was');
+
+  const bare = round();
+  const arrows = browser.padsKeys([padSnapshot({ x: -1 })], 'playing');
+  assert.equal(heldNames(arrows), 'LEFT', 'the engine\'s own name for the push');
+  for (let i = 0; i < 20; i++) bare.step(FRAME, arrows, {});
+  assert.deepEqual(
+    bare.states().map((s) => s.shipX), [0, 0],
+    'unseated, the push steers nobody - which is what it did for the whole round',
+  );
+});
+
+/** A round stepped with nobody flying until both pilots are out and it has settled. */
+function settledRound() {
+  const r = round();
+  let n = 0;
+  while (!r.standing().over && n < 100000) { r.step(FRAME, {}, {}); n++; }
+  // `settled` is taken from the standing at the start of a step, so the round is
+  // settled from the frame after the one it ended on - the same frame
+  // versusRematch starts reading ENTER on.
+  r.step(FRAME, {}, {});
+  assert.ok(r.settled, 'the round should have settled');
+  return r;
+}
+
+test('a settled round hands the pad back the key its panel waits on', () => {
+  // A round owns the frame while it is flown; a settled round is a result panel,
+  // and the panel waits on the ENTER versusRematch reads. Measured on a 100x30
+  // grid with one standard-layout pad: read as 'playing' the A button resolved
+  // to pilot 1's SPACE, the seat answers no ENTER at all, and the panel had
+  // nothing left that answered it - no pad sends ESCAPE, so the round could
+  // neither be rematched nor left.
+  const r = settledRound();
+
+  // Whatever the solo game behind it is doing, because the panel is a screen of
+  // the round's own: `?mode=tunnel&versus` leaves that game at 'playing', and a
+  // panel reading its mode back would answer A with a trigger on that route and
+  // the confirm key on the other. The route is not meant to decide this.
+  for (const mode of ['menu', 'playing', 'dead', 'nameEntry']) {
+    assert.equal(browser.inputMode(mode, r), 'menu', `a settled round over ${mode}`);
+    const reading = padReading(padSnapshot({ a: 1 }), mode, r);
+    assert.equal(heldNames(reading), 'ENTER', `A asks for the rematch over ${mode}`);
+    assert.notEqual(
+      browser.versusRematch(r, { ...reading }), r,
+      `and the rematch the panel offers opens over ${mode}`,
+    );
+  }
+});
+
+test('a round still being flown is read for the round, settled or not', () => {
+  // The gate is `settled` rather than `standing().over`, so it moves with the
+  // rematch's own reading of when the round stopped being flown. An unsettled
+  // round is flown whatever its standing, which is what keeps the trigger on
+  // pilot 1 for the frame the round ends on.
+  const r = round();
+  assert.equal(browser.inputMode('menu', r), 'playing', 'a fresh round is flown');
+  const reading = padReading(padSnapshot({ a: 1 }), 'menu', r);
+  assert.equal(heldNames(reading), 'SPACE', 'and A is still the trigger of the pilot it flies');
+});
+
+test('every key a seated pad can press is a key the poll can release', () => {
+  // The poll remembers one reading and releases out of the next, and the two
+  // name different keys across the frame a round opens or closes on: the arrows
+  // one side of it and W/A/S/D the other. A name the union leaves out is a key
+  // nothing is left to lift - a stick held as a round closes would go on
+  // steering after the thumb came off it.
+  for (const k of [...browser.PAD_PILOT_KEYS, ...browser.PAD_CONTROL_KEYS]) {
+    assert.ok(browser.PAD_HELD_KEYS.includes(k), `${k} can be pressed but never released`);
+  }
+  assert.equal(
+    new Set(browser.PAD_HELD_KEYS).size, browser.PAD_HELD_KEYS.length,
+    'a name twice over is a key pressed twice and released once',
+  );
 });
 
 // ----- Where the controls sit -----
@@ -1165,5 +1382,84 @@ test('browser: the V key and the ?versus link are the two openings', () => {
   assert.deepEqual(
     ungated, [],
     `these open a round without asking whether the layout fits: ${ungated.join(', ')}`,
+  );
+});
+
+// ----- The device readings below the marker -----
+//
+// Two more lines in the page wiring, on the same footing as the three above: the
+// poll's reading of a pad and the FIRE button's reading of its own key. Both
+// asked the solo game what was being played, both therefore sent pilot 2's
+// trigger through a whole round, and neither is reachable from here - the poll
+// takes navigator.getGamepads() and the button is a pointer listener on an
+// element.
+//
+// What is reachable is inputMode, padPilotKeys and the round itself, which the
+// cases under 'A pad in a split-screen round' walk in full. These pin the two
+// lines that reach them as written and not as behaving, and name those cases as
+// where the behaviour was confirmed.
+
+test('browser: the pad is polled for whichever game owns the frame', () => {
+  // Behaviour: 'a pad in a round fires the pilot it is flying' and 'read off
+  // the solo game, a pad in a round fired the other pilot'. Both rebuild the
+  // poll; this is the only thing that says the poll is built that way.
+  const at = wiringAt(
+    /padsKeys\(\s*navigator\.getGamepads\(\)\s*,\s*inputMode\(\s*game\.state\.mode\s*,\s*versus\s*\)\s*\)/,
+  );
+  assert.equal(
+    at.length, 1,
+    `the poll reads the mode through inputMode ${at.length} time(s), wanted 1: ${wiringLines(at) || 'nowhere'}`,
+  );
+});
+
+test('browser: the FIRE button reads its key for whichever game owns the frame', () => {
+  // The same defect on the other device, and the one a landscape tablet wide
+  // enough for 91 columns reaches: a thumb on the biggest control on the screen
+  // fired the other player's gun. Behaviour: 'a device is read for the game
+  // that owns the frame', which walks what this hands over.
+  const at = wiringAt(
+    /touchFireKey\(\s*inputMode\(\s*game\.state\.mode\s*,\s*versus\s*\)\s*\)/,
+  );
+  assert.equal(
+    at.length, 1,
+    `FIRE reads the mode through inputMode ${at.length} time(s), wanted 1: ${wiringLines(at) || 'nowhere'}`,
+  );
+});
+
+test('browser: no device reading asks the solo game what is being played', () => {
+  // The shape the defect would come back in is a third device, or either of
+  // these two rewritten, reading game.state.mode straight - which is correct
+  // for the solo game and silently wrong for the whole of a round. Counted over
+  // both readers at once, so a new one is a failure here rather than a round
+  // flown from the wrong seat.
+  const at = wiringAt(/(?:padsKeys\([^)]*\)|touchFireKey)\(\s*game\.state\.mode\s*\)/);
+  assert.deepEqual(
+    at.map((m) => m.at), [],
+    `these read the solo game's mode for a device: ${wiringLines(at)}`,
+  );
+});
+
+test('browser: the poll seats its reading on the pilot the pad flies', () => {
+  // The mode alone only settles the trigger. The stick still answers in the
+  // engine's own names, and VERSUS_BINDINGS routes the arrows to neither pilot,
+  // so a round needs the reading put through a seat or the pad steers nobody.
+  // Behaviour: 'the stick steers the pilot the pad is flying, where the arrows
+  // steer nobody'.
+  const start = html.indexOf('function pollGamepads(){');
+  assert.ok(start > 0, 'the page should have a poll');
+  const body = html.slice(start, html.indexOf('\n}', start));
+
+  assert.ok(
+    /padPilotKeys\(held,VERSUS_BINDINGS\[PAD_PILOT\]\)/.test(body),
+    'the poll should seat its reading on the pad\'s pilot',
+  );
+  assert.ok(
+    body.includes('versus&&!versus.settled?padPilotKeys('),
+    'and only while a round is being flown - a solo run reads the engine\'s own '
+    + 'names, and a settled round is a panel waiting on ENTER',
+  );
+  assert.ok(
+    body.includes('for(const k of PAD_HELD_KEYS)'),
+    'and walk the union of both readings, so what it pressed is what it releases',
   );
 });
