@@ -327,6 +327,28 @@ export function renderTitleScreen(screen: ScreenBuffer, state: GameState): void 
 
   // The top scores, in whatever room is left under the prompt.
   drawLeaderboard(screen, state, promptY);
+
+  // The page's mute, reported where drawFooter reports it in a run: ' MUTED '
+  // set into the bottom border two columns off the right edge.
+  //
+  // M works on this screen and nothing on it used to say so, and the setting
+  // outlives the screen, so a player who pressed M once too often had no way to
+  // read the state until they launched a run and saw the footer.
+  //
+  // The browser build carries the same line, in its own renderTitleScreen:
+  // mute is a setting the engine reads, so it is not one build's. The split
+  // screen's label shares this border there and is drawn outside the function
+  // for the opposite reason - test/parity.test.mjs reads the two title screens
+  // against each other, and the terminal has no round to label.
+  //
+  // Gated on the width, so a grid too narrow to hold the label drops it rather
+  // than writing over the corner.
+  if (state.muted) {
+    const mute = ' MUTED ';
+    if (mute.length <= w - 4) {
+      screen.putString(w - mute.length - 2, h - 1, mute, C.BRIGHT_YELLOW, C.BLACK);
+    }
+  }
 }
 
 export function renderDebugMenu(screen: ScreenBuffer, state: GameState): void {

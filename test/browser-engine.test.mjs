@@ -531,6 +531,60 @@ test('the mute indicator appears only when muted', () => {
   assert.match(rowText(screen, screen.height - 1), /MUTED/);
 });
 
+test('the title screen says the page is muted', () => {
+  // M works on the title screen and nothing on that screen used to report it.
+  // Driven in chromium at 1280x800, one M on the title screen took
+  // game.state.muted from false to true and left the 44-row grid
+  // byte-identical - every row, including the bottom border. The setting is
+  // live all the same: a round opened with V straight afterwards carries the
+  // page's mute in and plays no cue and no hum, so a player who pressed M once
+  // too often had no way to read the state until they launched a run and saw
+  // the footer.
+  //
+  // The sibling of 'the mute indicator appears only when muted' above, which
+  // pins the same word in a run. 40 rows so the leaderboard has room to grow
+  // under the prompt without reaching the border the label sits on.
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game, 80, 40);
+  // The starfield is drawn from Math.random, so two renders of it never match
+  // and a buffer comparison would pass whatever the label did.
+  game.state.stars = [];
+
+  engine.renderTitleScreen(screen, game.state);
+  const quiet = screenCells(screen);
+  assert.doesNotMatch(screenText(screen), /MUTED/);
+
+  game.state.muted = true;
+  engine.renderTitleScreen(screen, game.state);
+  assert.notDeepEqual(
+    changedCells(quiet, screenCells(screen)), [],
+    'the two screens should not be the same screen',
+  );
+  assert.match(
+    rowText(screen, screen.height - 1), /MUTED/,
+    'on the bottom border, where the footer writes it in a run',
+  );
+});
+
+test('the title screen drops the mute label rather than writing over the border', () => {
+  // The gate versusHintText has, for the reason drawVersus restates its own
+  // borders: a label dropped onto a row too short to hold it overwrites the
+  // corner, and the corner is what says the frame is closed. No grid the game
+  // lays out is this narrow - MIN_WIDTH is 60 - so this is the guard holding
+  // rather than a width a player reaches.
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game, 10, 20);
+  game.state.stars = [];
+  game.state.muted = true;
+
+  engine.renderTitleScreen(screen, game.state);
+  const border = rowText(screen, screen.height - 1);
+  assert.doesNotMatch(border, /MUTED/, 'no room for the label');
+  assert.ok(border.endsWith('╝'), `the corner should still close the frame: ${border}`);
+});
+
 test('the paused overlay is drawn only while paused', () => {
   const engine = loadBrowserEngine(fakeStorage());
   const game = new engine.Game();

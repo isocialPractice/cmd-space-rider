@@ -34,7 +34,8 @@ and take a short deadzone after a hold.
 
 A gamepad has to report the standard layout before it drives anything, and its
 stick takes the same dead zone and eight sectors the on-screen thumbstick does.
-Any pad plugged in can fly the run, and a second one alongside does no harm.
+Any pad plugged in can fly the run, and a second one alongside does no harm. In a
+split-screen round the whole pad flies pilot 1, stick and trigger both.
 
 ## CLI
 

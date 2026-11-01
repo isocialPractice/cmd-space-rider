@@ -68,6 +68,8 @@ const EXPORTS = [
   'padKeys', 'padsKeys', 'padPressed', 'padFireKey', 'PAD_CONTROL_KEYS', 'PAD_TRIGGER_PULL',
   'PAD_A', 'PAD_B', 'PAD_LEFT_TRIGGER', 'PAD_RIGHT_TRIGGER',
   'PAD_STICK_X', 'PAD_STICK_Y',
+  'inputMode', 'PAD_PILOT', 'PAD_ENGINE_KEYS', 'padPilotKeys',
+  'PAD_PILOT_KEYS', 'PAD_HELD_KEYS',
 ];
 
 /** In-memory stand-in for window.localStorage. */

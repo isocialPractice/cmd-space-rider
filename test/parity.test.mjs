@@ -587,12 +587,28 @@ test('both builds draw the same name entry screen and the same table', () => {
     s.mode = 'menu';
     s.leaderboard = table;
     build.menu.renderTitleScreen(screen, s);
-    return { entry, title: screenCells(screen) };
+    const title = screenCells(screen);
+
+    // And again muted, because the title screen reports that now and mute is a
+    // setting the engine reads rather than one build's: a label added to one
+    // renderTitleScreen and not the other is a drift the unmuted screen above
+    // cannot see.
+    s.muted = true;
+    build.menu.renderTitleScreen(screen, s);
+    return { entry, title, muted: screenCells(screen) };
   });
 
   const [mine, theirs] = drawn;
   assert.deepEqual(changedCells(mine.entry, theirs.entry), [], 'the entry screens differ');
   assert.deepEqual(changedCells(mine.title, theirs.title), [], 'the title screens differ');
+  assert.deepEqual(
+    changedCells(mine.muted, theirs.muted), [],
+    'the muted title screens differ',
+  );
+  assert.notDeepEqual(
+    changedCells(mine.title, mine.muted), [],
+    'both builds drew the same screen muted and unmuted, so neither reports it',
+  );
 });
 
 test('both builds freeze the same cells while paused', () => {

@@ -3527,3 +3527,56 @@ still be found by name.
     `test/versus.test.mjs` should read `muted` back off both pilots across a
     `rematch()`, which nothing does today.
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+
+## Archived 11-01-26
+
+- [x] The ENTER that asks for a rematch is also pilot 2's first shot of it
+  - **Issue**: the frame loop reads the rematch and then steps the round it
+    opened with the same keypress still in the map:
+    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` is followed
+    immediately by `versus.step(dt,keys,justPressed)` (`index.html:5300-5301`),
+    and ENTER is pilot 2's trigger in `VERSUS_BINDINGS` (`:4118`). The clear at
+    `:5363` does not run until the end of the frame. Measured: settle a round,
+    call `rematch()`, then step the new round once with `{ENTER:true}` - pilot 2
+    opens with 3 bullets and a `shot` cue while pilot 1 opens with none. So the
+    two seats do not launch alike in the one mode whose premise is that they fly
+    the same thing, and the pilot who asked for the rematch is the one who gets
+    the free volley. `VersusRound.settled` exists for the mirror case - the
+    ENTER that ended a round relaunching it - so this is the same key read twice
+    in the other direction, and it is not handled.
+  - **Goal**: Spend the keypress on the rematch rather than on both, by clearing
+    ENTER from `justPressed` on the frame a rematch opens. The edit is in the
+    frame loop, which sits below the `// ===== Canvas Setup & Sizing =====`
+    marker and so is not reachable from the suite - `test/versus.test.mjs` says
+    as much in its own header - so either the read moves above the marker where
+    a case can reach it, or the fix is taken with the frame loop's other
+    untested wiring and the reasoning recorded beside it.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+- [x] The debug-mode allow-list is written five times and compared nowhere
+  - **Issue**: one list of five mode names is restated in five places - the
+    `DebugMode` union (`src/types.ts:4`), `DEBUG_MODES` (`src/types.ts:6` and
+    its browser copy `index.html:1283`), and a `validModes` literal in each
+    build's parameter handler (`src/index.ts:108`, `index.html:4964`) - plus a
+    sixth copy in `test/asteroid-field.test.mjs:51`. Only the first three are
+    tied to anything; the two `validModes` copies are hand-written and nothing
+    in the suite compares them against `DEBUG_MODES`. The terminal copy also
+    discards the one check its build could have made: `validModes` is inferred
+    `string[]`, so `validModes.includes(explicitMode)` does not narrow
+    `explicitMode`, and `game.startGame(explicitMode as any)`
+    (`src/index.ts:110`) silences what would otherwise be a type error. Name the
+    change that breaks it: add a sixth mode to `DebugMode` and `DEBUG_MODES` in
+    both builds and it appears in both debug menus and `startGame` takes it,
+    while `--mode=<new>` exits 1 reporting "Unknown mode" and listing only the
+    five, and `?mode=<new>` falls through to the title screen with no word about
+    why. `tsc` catches neither, the first because of the cast and the second
+    because the browser build is untyped. The lists do agree today, so nothing
+    fails now - this is the drift being unguarded rather than present.
+  - **Goal**: Read the allow-list off `DEBUG_MODES` in both parameter handlers
+    instead of restating it. In `src/index.ts` that also removes the `as any`:
+    `DEBUG_MODES.find((m) => m === explicitMode)` narrows to `DebugMode` on its
+    own, and the error path can report `DEBUG_MODES.join(', ')`. The browser
+    handler reads the same constant, which is already declared above it at
+    `:1283`. A case pairing each build's accepted modes against `DEBUG_MODES`
+    would hold it, and `test/asteroid-field.test.mjs:51` can take the constant
+    rather than its own copy.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
