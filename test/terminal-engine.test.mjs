@@ -17,6 +17,7 @@ const require = createRequire(import.meta.url);
 const { Game } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ScreenBuffer } = require(join(REPO_ROOT, 'out', 'screen.js'));
 const { renderGame, shakeColumns } = require(join(REPO_ROOT, 'out', 'render.js'));
+const menu = require(join(REPO_ROOT, 'out', 'menu.js'));
 const { SHAKE_TIME, NEW_BEST_FLASH_TIME, BASE_SPEED_START } = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const HUD_ROWS = 3;
@@ -318,6 +319,101 @@ test('the mute indicator appears only when muted', () => {
   game.state.muted = true;
   renderGame(screen, game.state);
   assert.match(rowText(screen, screen.height - 1), /MUTED/);
+});
+
+/** The three menu screens the mute label is drawn on, and their staging. */
+const MUTED_SCREENS = [
+  ['title screen', menu.renderTitleScreen, () => {}],
+  ['name entry screen', menu.renderNameEntry, (game) => {
+    game.startGame();
+    game.state.score = 4321;
+    game.endGame();
+  }],
+  ['game over screen', menu.renderGameOver, (game) => {
+    game.startGame();
+    game.state.score = 1234;
+    game.state.distance = 5678;
+    game.endGame();
+  }],
+];
+
+test('every menu screen a player can press M on says the game is muted', () => {
+  // The sibling of the case above, on the screens outside a run. M is answered
+  // in Game.update with no mode gate, so the key works on all five screens, and
+  // for a while only two reported it: the footer during a run and the title
+  // screen. 40 rows so the title screen's leaderboard has room to grow under
+  // the prompt without reaching the border the label sits on.
+  for (const [name, render, setUp] of MUTED_SCREENS) {
+    const game = new Game();
+    const screen = stage(game, 80, 40);
+    setUp(game);
+    // The starfield is seeded from Math.random, so two renders of it never
+    // match and a buffer comparison would pass whatever the label did.
+    game.state.stars = [];
+
+    render(screen, game.state);
+    const quiet = screenCells(screen);
+    assert.doesNotMatch(screenText(screen), /MUTED/, `${name}: unmuted`);
+
+    game.state.muted = true;
+    render(screen, game.state);
+    assert.notDeepEqual(
+      changedCells(quiet, screenCells(screen)), [],
+      `${name}: the two screens should not be the same screen`,
+    );
+    assert.match(
+      rowText(screen, screen.height - 1), /MUTED/,
+      `${name}: on the bottom border, where the footer writes it in a run`,
+    );
+  }
+});
+
+test('the debug menu is left out of the mute label', () => {
+  // The one screen chosen against. It is reached only by --debug, so it is a
+  // developer's screen rather than a session anybody is listening to, and
+  // test/menu-layout.test.mjs reads its bottom border back as exactly the
+  // border under 'the debug menu never draws on the border or past the buffer'.
+  // Pinned here so the exclusion is a decision on the record rather than an
+  // omission in the diff.
+  const game = new Game();
+  const screen = stage(game, 80, 40);
+  game.state.stars = [];
+  game.state.muted = true;
+
+  menu.renderDebugMenu(screen, game.state);
+  assert.doesNotMatch(screenText(screen), /MUTED/);
+  assert.equal(
+    rowText(screen, screen.height - 1), `╚${'═'.repeat(78)}╝`,
+    'and the border it would have been written into is still only a border',
+  );
+});
+
+test('every menu screen drops the mute label rather than writing over the border', () => {
+  // The terminal sibling the width gate never had. It is written in both builds
+  // (src/menu.ts and index.html) and was exercised in one, so this side's
+  // `mute.length <= w - 4` could have been dropped, or written as `w - 2`, with
+  // the suite staying green - which is the one convention the footer's own
+  // indicator does not depart from, since it is checked on both sides.
+  //
+  // A label dropped onto a row too short to hold it overwrites the corner, and
+  // the corner is what says the frame is closed. No grid the game lays out is
+  // this narrow - MIN_WIDTH is 60 - so this is the guard holding rather than a
+  // width a player reaches.
+  for (const [name, render, setUp] of MUTED_SCREENS) {
+    const game = new Game();
+    const screen = stage(game, 10, 20);
+    setUp(game);
+    game.state.stars = [];
+    game.state.muted = true;
+
+    render(screen, game.state);
+    const border = rowText(screen, screen.height - 1);
+    assert.doesNotMatch(border, /MUTED/, `${name}: no room for the label`);
+    assert.ok(
+      border.endsWith('╝'),
+      `${name}: the corner should still close the frame: ${border}`,
+    );
+  }
 });
 
 // ----- Speed readout -----

@@ -585,6 +585,104 @@ test('the title screen drops the mute label rather than writing over the border'
   assert.ok(border.endsWith('╝'), `the corner should still close the frame: ${border}`);
 });
 
+/** The three menu screens the mute label is drawn on, and their staging. */
+const MUTED_SCREENS = [
+  ['title screen', (engine) => engine.renderTitleScreen, () => {}],
+  ['name entry screen', (engine) => engine.renderNameEntry, (game) => {
+    game.startGame();
+    game.state.score = 4321;
+    game.endGame();
+  }],
+  ['game over screen', (engine) => engine.renderGameOver, (game) => {
+    game.startGame();
+    game.state.score = 1234;
+    game.state.distance = 5678;
+    game.endGame();
+  }],
+];
+
+test('every menu screen a player can press M on says the page is muted', () => {
+  // M is answered in Game.update with no mode gate at all, so the key works on
+  // all five screens, and for a while only two reported it: the footer during a
+  // run and the title screen. The game over screen is the one that cost most -
+  // a player arrives there straight out of a run, so it is the likeliest screen
+  // to press M on - and the name entry screen sits between the two.
+  //
+  // The sibling of 'the mute indicator appears only when muted' above, which
+  // pins the same word in a run. 40 rows so the title screen's leaderboard has
+  // room to grow under the prompt without reaching the border the label sits
+  // on.
+  for (const [name, pick, setUp] of MUTED_SCREENS) {
+    const engine = loadBrowserEngine(fakeStorage());
+    const game = new engine.Game();
+    const screen = stage(engine, game, 80, 40);
+    setUp(game);
+    // The starfield is drawn from Math.random, so two renders of it never match
+    // and a buffer comparison would pass whatever the label did.
+    game.state.stars = [];
+    const render = pick(engine);
+
+    render(screen, game.state);
+    const quiet = screenCells(screen);
+    assert.doesNotMatch(screenText(screen), /MUTED/, `${name}: unmuted`);
+
+    game.state.muted = true;
+    render(screen, game.state);
+    assert.notDeepEqual(
+      changedCells(quiet, screenCells(screen)), [],
+      `${name}: the two screens should not be the same screen`,
+    );
+    assert.match(
+      rowText(screen, screen.height - 1), /MUTED/,
+      `${name}: on the bottom border, where the footer writes it in a run`,
+    );
+  }
+});
+
+test('the debug menu is left out of the mute label', () => {
+  // The one screen chosen against. It is reached only by ?debug, so it is a
+  // developer's screen rather than a session anybody is listening to, and
+  // test/menu-layout.test.mjs reads its bottom border back as exactly the
+  // border under 'the debug menu never draws on the border or past the buffer'.
+  // Pinned here so the exclusion is a decision on the record rather than an
+  // omission in the diff.
+  const engine = loadBrowserEngine(fakeStorage());
+  const game = new engine.Game();
+  const screen = stage(engine, game, 80, 40);
+  game.state.stars = [];
+  game.state.muted = true;
+
+  engine.renderDebugMenu(screen, game.state);
+  assert.doesNotMatch(screenText(screen), /MUTED/);
+  assert.equal(
+    rowText(screen, screen.height - 1), `╚${'═'.repeat(78)}╝`,
+    'and the border it would have been written into is still only a border',
+  );
+});
+
+test('every menu screen drops the mute label rather than writing over the border', () => {
+  // The title screen's gate, held on its two siblings: a label dropped onto a
+  // row too short to hold it overwrites the corner, and the corner is what says
+  // the frame is closed. No grid the game lays out is this narrow - MIN_WIDTH
+  // is 60 - so this is the guard holding rather than a width a player reaches.
+  for (const [name, pick, setUp] of MUTED_SCREENS) {
+    const engine = loadBrowserEngine(fakeStorage());
+    const game = new engine.Game();
+    const screen = stage(engine, game, 10, 20);
+    setUp(game);
+    game.state.stars = [];
+    game.state.muted = true;
+
+    pick(engine)(screen, game.state);
+    const border = rowText(screen, screen.height - 1);
+    assert.doesNotMatch(border, /MUTED/, `${name}: no room for the label`);
+    assert.ok(
+      border.endsWith('╝'),
+      `${name}: the corner should still close the frame: ${border}`,
+    );
+  }
+});
+
 test('the paused overlay is drawn only while paused', () => {
   const engine = loadBrowserEngine(fakeStorage());
   const game = new engine.Game();

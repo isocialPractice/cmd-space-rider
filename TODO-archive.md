@@ -3580,3 +3580,65 @@ still be found by name.
     would hold it, and `test/asteroid-field.test.mjs:51` can take the constant
     rather than its own copy.
   - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+
+## Archived 11-02-26
+
+- [x] Pin the three frame-loop call sites the suite cannot see
+  - **Issue**: two of this run's fixes are split across the
+    `// ===== Canvas Setup & Sizing =====` marker - a function above it, and
+    the call that reaches it below - and `test/versus.test.mjs` only reaches
+    the half above. `versusRematch` has three cases of its own; nothing checks
+    that `frame()` calls it. `VersusRound`'s `muted` argument has two; nothing
+    checks that either opening path hands it `game.state.muted`. Measured by
+    reverting the one line at `index.html:5503` to the
+    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it
+    replaced: `node --test test/versus.test.mjs test/parity.test.mjs
+    test/browser-shell.test.mjs` still reports 122 of 122 passing, while the
+    same page driven in chromium opens the rematch with pilot 2 holding six to
+    eight bullet cells against pilot 1's none, and a shot cue on the frame. So
+    the defect comes back in full with the suite green. Nothing is broken
+    today - this is the wiring being unguarded rather than wrong, the same
+    shape as `The debug-mode allow-list is written five times and compared
+    nowhere`, which this run closed for the other below-marker handler.
+  - **Goal**: Assert the three call sites as the text of `index.html`, in
+    `test/browser-shell.test.mjs` - it already reads the file at module level
+    and is written for "the seam where the arithmetic stops and the DOM
+    starts". The matches are `versus=versusRematch(versus,justPressed)` in the
+    frame loop and `new VersusRound(versusSeed(),layout,game.state.muted)` at
+    both the `V` branch and the `?versus` branch, which is the same technique
+    `test/parity.test.mjs` now uses for `DEBUG_MODES.includes(explicitMode)`
+    and for the reason it states there, that neither handler is reachable from
+    the suite. Worth a fourth assertion that `versus.rematch()` appears nowhere
+    in the loop, since the shape this defect would return in is the direct call
+    coming back beside the guarded one rather than replacing it. A source-text
+    case should say in its own comment that it pins the wiring as written and
+    not as behaving, and name where the behaviour was confirmed instead.
+  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
+- [x] The mute check tells two openings apart by line, so one line can hide an
+      unmuted round
+  - **Issue**: `test/browser-shell.test.mjs:1089` subtracts the openings that
+    read `game.state.muted` from the openings found, but both sides are the
+    `index.html:<line>` strings `wiringAt` returns, so two openings sharing a
+    source line are one entry as far as `includes` is concerned. Measured by
+    collapsing a second, unmuted opening onto `index.html:5178` beside the
+    `?versus` one -
+    `...layout,game.state.muted);else if(params.has('v2'))versus=new VersusRound(versusSeed(),layout,false);`
+    - and removing the `V` key's so the count still reads 2: `muted` comes back
+    holding `index.html:5178`, `opens.filter((at) => !muted.includes(at))` comes
+    back empty, and 'browser: both openings hand the round the page's mute'
+    reports a tick with `layout,false)` standing in the file. That is the one
+    thing the case exists to refuse, and its own comment at 1076 says so:
+    "counted rather than matched branch by branch, so a third way into a round
+    is a failure here instead of a silently unmuted one". Nothing is wrong in
+    `index.html` today - the two openings are at 5178 and 5490, a line apart in
+    the only arrangement the file has had - and the sibling case 'the V key and
+    the ?versus link are the two openings' did fail on the arrangement above by
+    its own route, so what is blind is this assertion rather than the suite.
+  - **Goal**: Give each match an identity the source line does not decide. Have
+    `wiringAt` return the match offset alongside the line - the
+    `index.html:<line>` string for the failure text, `m.index` for the
+    comparison - so the subtraction is exact while the messages read as they do
+    now. Then rebuild the collapsed-line arrangement above and confirm the mute
+    case is what fails, since today it is the only one of the four that does
+    not.
+  - From: Code Review Override - the versus wiring cases

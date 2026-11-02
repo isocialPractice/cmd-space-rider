@@ -265,6 +265,9 @@ export function renderNameEntry(screen: ScreenBuffer, state: GameState): void {
   const pulse = sin(state.time * 3) * 0.5 + 0.5;
   screen.putStringCenter(hintY, nameEntryHint(w),
     pulse > 0.3 ? C.BRIGHT_GREEN : C.GREEN, C.BLACK);
+
+  // The page's mute, in the bottom border. See drawMuteLabel.
+  drawMuteLabel(screen, state);
 }
 
 export function renderTitleScreen(screen: ScreenBuffer, state: GameState): void {
@@ -328,27 +331,8 @@ export function renderTitleScreen(screen: ScreenBuffer, state: GameState): void 
   // The top scores, in whatever room is left under the prompt.
   drawLeaderboard(screen, state, promptY);
 
-  // The page's mute, reported where drawFooter reports it in a run: ' MUTED '
-  // set into the bottom border two columns off the right edge.
-  //
-  // M works on this screen and nothing on it used to say so, and the setting
-  // outlives the screen, so a player who pressed M once too often had no way to
-  // read the state until they launched a run and saw the footer.
-  //
-  // The browser build carries the same line, in its own renderTitleScreen:
-  // mute is a setting the engine reads, so it is not one build's. The split
-  // screen's label shares this border there and is drawn outside the function
-  // for the opposite reason - test/parity.test.mjs reads the two title screens
-  // against each other, and the terminal has no round to label.
-  //
-  // Gated on the width, so a grid too narrow to hold the label drops it rather
-  // than writing over the corner.
-  if (state.muted) {
-    const mute = ' MUTED ';
-    if (mute.length <= w - 4) {
-      screen.putString(w - mute.length - 2, h - 1, mute, C.BRIGHT_YELLOW, C.BLACK);
-    }
-  }
+  // The page's mute, in the bottom border. See drawMuteLabel.
+  drawMuteLabel(screen, state);
 }
 
 export function renderDebugMenu(screen: ScreenBuffer, state: GameState): void {
@@ -456,6 +440,48 @@ export function renderGameOver(screen: ScreenBuffer, state: GameState): void {
   const pulse = sin(state.time * 3) * 0.5 + 0.5;
   screen.putStringCenter(promptY, '[ PRESS ENTER TO RELAUNCH ]',
     pulse > 0.3 ? C.BRIGHT_GREEN : C.GREEN, C.BLACK);
+
+  // The page's mute, in the bottom border. See drawMuteLabel. This is the
+  // screen that most wants it: a player arrives here straight out of a run, so
+  // it is the likeliest screen to press M on.
+  drawMuteLabel(screen, state);
+}
+
+/**
+ * The mute setting, reported where drawFooter reports it in a run: ' MUTED '
+ * set into the bottom border two columns off the right edge.
+ *
+ * M is answered in Game.update with no mode gate at all, so the key works on
+ * every screen, and the setting outlives the screen it was pressed on - a run
+ * launched afterwards starts muted and plays no cue. A player who pressed M
+ * once too often on a menu had no way to read the state until they launched
+ * that run and saw the footer. That is the reason the title screen grew the
+ * label, and it holds word for word for the game over screen, which is where a
+ * player arrives straight out of a run and so the likeliest screen to press M
+ * on, and for the name entry screen between them.
+ *
+ * The debug menu is the one screen deliberately left without it. It is reached
+ * only by `--debug`, so it is a developer's screen rather than a session
+ * anybody is listening to, and the repository already holds the opposite
+ * promise for it: test/menu-layout.test.mjs reads its bottom border back as
+ * exactly the border, under the heading 'the debug menu never draws on the
+ * border or past the buffer'.
+ *
+ * The browser build carries the same helper, in its own copy: mute is a setting
+ * the engine reads, so it is not one build's. The split screen's label shares
+ * this border there and is drawn outside renderTitleScreen for the opposite
+ * reason - test/parity.test.mjs reads the two title screens against each other,
+ * and the terminal has no round to label.
+ *
+ * Gated on the width, so a grid too narrow to hold the label drops it rather
+ * than writing over the corner.
+ */
+function drawMuteLabel(screen: ScreenBuffer, state: GameState): void {
+  if (!state.muted) return;
+  const mute = ' MUTED ';
+  if (mute.length > screen.width - 4) return;
+  screen.putString(screen.width - mute.length - 2, screen.height - 1, mute,
+    C.BRIGHT_YELLOW, C.BLACK);
 }
 
 function drawBorder(screen: ScreenBuffer, w: number, h: number): void {

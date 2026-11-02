@@ -611,6 +611,61 @@ test('both builds draw the same name entry screen and the same table', () => {
   );
 });
 
+test('both builds report the mute on the same menu screens, and drop it at the same width', () => {
+  // M is answered in Game.update with no mode gate at all, so the key works on
+  // every screen and the setting is the engine's rather than one build's. The
+  // label it is read by is therefore written twice, once per build, and a line
+  // added to one copy and not the other is exactly the drift this file exists
+  // for.
+  //
+  // Both widths matter, and for different reasons. 80 columns compares the
+  // labels; 10 compares the width gates, which the labels cannot - a grid wide
+  // enough for the label reads both gates as open whatever either one says, so
+  // the two could disagree about where the label is dropped and the roomy
+  // comparison would pass. No grid the game lays out is 10 wide - MIN_WIDTH is
+  // 60 - so the narrow pass is the guard holding rather than a width a player
+  // reaches.
+  const H = 40;
+  const screens = ['renderTitleScreen', 'renderNameEntry', 'renderGameOver'];
+
+  for (const W of [80, 10]) {
+    const drawn = [
+      { name: 'terminal', Game: TerminalGame, Screen: TerminalScreen, menu: terminalMenu },
+      { name: 'browser', Game: browser.Game, Screen: browser.ScreenBuffer, menu: browser },
+    ].map((build) => {
+      const game = new build.Game();
+      const s = game.state;
+      s.screenWidth = W;
+      s.screenHeight = H;
+      s.leaderboard = [];
+      game.startGame();
+      s.score = 4321;
+      s.distance = 5678;
+      game.endGame();
+      // The starfields are drawn from Math.random independently and never
+      // match, so they are cleared rather than compared.
+      s.stars = [];
+      s.uiTime = 0.5;
+      s.time = 0.5;
+      s.muted = true;
+
+      const screen = new build.Screen(W, H);
+      return screens.map((name) => {
+        build.menu[name](screen, s);
+        return screenCells(screen);
+      });
+    });
+
+    const [mine, theirs] = drawn;
+    for (let i = 0; i < screens.length; i++) {
+      assert.deepEqual(
+        changedCells(mine[i], theirs[i]), [],
+        `${screens[i]} at ${W} columns: the two builds drew different screens muted`,
+      );
+    }
+  }
+});
+
 test('both builds freeze the same cells while paused', () => {
   // The starfields are seeded from Math.random, so the two screens never match
   // cell for cell. What has to match is which cells move while paused: the
