@@ -1,5 +1,109 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.0] - 2026-11-02
+
+### Fixed
+
+- The mute label stopped at the title screen. `M` is answered in `Game.update`
+  with no mode gate at all - the line's own comment says so, "M is a global
+  setting toggle, so it works in every mode" - and the solo branch of the frame
+  loop calls `game.update` unconditionally every frame, so the key works on all
+  five screens. Two of them reported it: `drawFooter` writes `' MUTED '` during
+  a run, and 0.14.0 gave `renderTitleScreen` the same label in the bottom
+  border. `renderGameOver`, `renderNameEntry` and `renderDebugMenu` drew no
+  footer and took no reading of `state.muted` at all - the word occurred in
+  neither build outside those two places. The game over screen is the one that
+  cost most: a player arrives there straight out of a run, so it is the
+  likeliest screen in the game to press `M` on, and the reasoning the title
+  screen's label was added under applies to it word for word - the setting
+  outlives the screen, and there is no way to read it until another run is
+  launched.
+
+  The label now sits in one place per build rather than three. Three screens
+  writing the identical six lines is the point at which it wants a function, so
+  `drawMuteLabel(screen, state)` joins `drawBorder` and `drawMenuStars` among
+  the menu drawing helpers in `src/menu.ts`, with the browser copy beside the
+  same two above the `// ===== Canvas Setup & Sizing =====` marker so the suite
+  can reach it. It holds everything the title screen's copy held - `' MUTED '`
+  right aligned at `w - mute.length - 2` on `h - 1`, under the same
+  `mute.length <= w - 4` width gate, in `C.BRIGHT_YELLOW` on `C.BLACK` - and
+  the title screen's copy is folded into it, so none of the three states the
+  offset, the gate or the colours itself.
+
+  The debug menu is the one screen deliberately left without it, and the choice
+  is pinned by a case in each build rather than left to the diff. It is reached
+  only by `--debug` or `?debug`, so it is a developer's screen rather than a
+  session anybody is listening to, and the repository already holds the opposite
+  promise for it: `test/menu-layout.test.mjs` reads its bottom border back as
+  exactly `╚` plus the rule plus `╝` across 2 widths and 25 heights, under the
+  heading 'the debug menu never draws on the border or past the buffer'. Putting
+  the label there would have made that heading conditional on a flag.
+- The terminal build's title-screen mute gate had no case. The width gate was
+  written in both builds and exercised in one:
+  `test/browser-engine.test.mjs` held it at a 10-column grid, where the label is
+  dropped and the corner still closes the frame, and there was no terminal
+  sibling, so that build's `mute.length <= w - 4` could have been dropped or
+  written as `w - 2` with the suite staying green. `test/parity.test.mjs` did
+  not cover it either - it rendered both builds muted at one width wide enough
+  for the label, which compares the two labels rather than the two gates. The
+  footer's own indicator is checked on both sides
+  (`test/terminal-engine.test.mjs` beside `test/browser-engine.test.mjs`), which
+  is the convention this one departed from. Nothing failed at the time; the two
+  gates agreed.
+
+  Measured by writing the mutation the gap allowed: with `w - 4` changed to
+  `w - 2` in both builds, the terminal suite failed 1 case and the browser suite
+  2, where before the terminal side had nothing to fail. The 10-column pass in
+  `test/parity.test.mjs` below is not a third catch for this one: it reads the
+  two gates against each other, so a mutation written into both leaves them
+  agreeing and passes through it. Catching a gate that moved on one side only
+  is what that pass is for, and catching one that moved on both is why each
+  build wants its own narrow case.
+
+### Added
+
+- `test/terminal-engine.test.mjs` grows the menu-screen half of its mute
+  section, which is the sibling the browser build already had. It imports
+  `out/menu.js` for the first time and walks the title, name entry and game over
+  screens twice over: once at 80x40, where each screen must differ muted from
+  unmuted and carry the word on the bottom border, and once at a 10-column grid,
+  where each must drop the label and still close the frame with its corner. A
+  third case holds the debug menu muted and reads its bottom border back as
+  exactly the border, so the exclusion is a decision on the record. The
+  starfields are cleared in every case, because they are drawn from
+  `Math.random` and a buffer comparison over them would pass whatever the label
+  did. 40 rows is what gives the title screen's leaderboard room to grow under
+  the launch prompt without reaching the border the label sits on.
+- `test/browser-engine.test.mjs` carries the same three cases over its own three
+  screens, from the two it had for the title screen alone.
+- `test/parity.test.mjs` reads the three screens across both builds muted, at 80
+  columns and at 10. Both widths are wanted and for different reasons: 80
+  compares the labels, and 10 compares the width gates, which the labels cannot
+  - a grid wide enough for the label reads both gates as open whatever either
+  one says, so the two could disagree about where the label is dropped and the
+  roomy comparison would pass. Measured by drifting the browser label one column
+  left, to `screen.width - mute.length - 3`: this case fails on it, and so does
+  'both builds draw the same name entry screen and the same table' above, which
+  renders the muted title screen as well - while every single-build case passes
+  through, because those read the word anywhere along the border row and these
+  read the column it sits in. Dropping a build's call outright is the drift its
+  own build's case already catches.
+- The suite is 924 cases, up from 917, with nothing skipped.
+
+### Changed
+
+- `docs/usage.html` names the three screens the `MUTED` indicator now appears
+  on outside a run, says which of them matters most and why, and says that the
+  debug scenario menu is the one screen without it and on what grounds.
+
+### Notes
+
+- Sized as a minor rather than a patch. Two screens report a live setting that
+  they did not report before, which is behaviour a player can read rather than a
+  correction to what the code already did - the same class of change as the
+  title screen's own label, which shipped inside 0.14.0 - and the patches either
+  side of it (0.12.1, 0.11.4) are turns where no behaviour moved at all.
+
 ## [1.0.0-alpha.0.14.0] - 2026-11-01
 
 ### Fixed
