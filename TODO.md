@@ -8,70 +8,30 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the mute label's missing screens
+### UI/UX Override - the mute label on the menu screens
 
 #### Found Issues
 
-- [ ] The mute label stops at the title screen
-  - **Issue**: `M` is answered in `Game.update` with no mode gate at all
-    (`src/game.ts:703`, `index.html:1731`), whose own comment says so - "M is a
-    global setting toggle, so it works in every mode" - and the solo branch of
-    the frame loop calls `game.update` unconditionally every frame
-    (`index.html:5674`, `src/index.ts:186`). So the key works on all five
-    screens. Only two report it. `drawFooter` writes `' MUTED '` during a run
-    (`src/render.ts:871`, `index.html:3420`) and `renderTitleScreen` now writes
-    the same label into the title screen's bottom border (`src/menu.ts:347`,
-    `index.html:3780`), but `renderGameOver` (`src/menu.ts:421`,
-    `index.html:3830`), `renderNameEntry` (`src/menu.ts:221`) and
-    `renderDebugMenu` (`src/menu.ts:354`) draw no footer and take no reading of
-    `state.muted` - `MUTED` occurs in neither build outside the two places
-    above. The game over screen is the one that costs most: it is where a player
-    arrives straight out of a run, so it is the likeliest screen to press `M`
-    on, and the reasoning the title screen's label was added under applies to it
-    word for word - the setting outlives the screen and there is no way to read
-    it until another run is launched.
-  - **Goal**: Carry the label onto the screens that still do not report it,
-    reusing what `renderTitleScreen` already does rather than restating it: the
-    same `' MUTED '` right aligned at `w-mute.length-2` on `h-1`, under the same
-    `mute.length <= w - 4` width gate, in `C.BRIGHT_YELLOW` on `C.BLACK`. Three
-    screens now write the identical six lines, which is the point at which it
-    wants a helper of its own in each build - a `drawMuteLabel(screen, state)`
-    beside the other menu drawing helpers in `src/menu.ts`, with the browser
-    copy above the `// ===== Canvas Setup & Sizing =====` marker so the suite
-    can reach it - and the title screen's copy folded into it. Worth deciding
-    whether the debug menu wants it: a debug scenario is not a session a player
-    is listening to, so leaving that one out is defensible, but say which was
-    chosen rather than leaving it to the diff. Cases hold all of this without a
-    browser, the way the title screen's do
-    (`test/browser-engine.test.mjs:534`): both builds render these screens in
-    the suite already, and `test/parity.test.mjs:553` renders the name entry
-    screen beside the title screen, so it can compare them muted as well as
-    unmuted exactly as it now does for the title screen.
-  - From: Code Review Override - the mute label's missing screens
-
-- [ ] The terminal build's title-screen mute gate has no case
-  - **Issue**: the width gate on the new label is written in both builds
-    (`src/menu.ts:348`, `index.html:3781`) and exercised in one.
-    `test/browser-engine.test.mjs` holds it at a 10-column grid, where the label
-    is dropped and the corner still closes the frame, and there is no terminal
-    sibling - so the terminal build's `mute.length <= w - 4` could be dropped or
-    written as `w - 2` and the suite would stay green. `test/parity.test.mjs`
-    does not cover it either: it renders both builds muted at one width wide
-    enough for the label, so it compares the two labels rather than the two
-    gates. The repository tests the footer's indicator on both sides
-    (`test/terminal-engine.test.mjs:310` beside
-    `test/browser-engine.test.mjs:520`), which is the convention this one
-    departs from. Nothing fails today - the two gates agree - this is the
-    terminal gate being unguarded rather than wrong.
-  - **Goal**: Give the terminal build the sibling case, mirroring
-    'the title screen drops the mute label rather than writing over the border'
-    (`test/browser-engine.test.mjs:570`) - render the terminal title screen muted
-    at a grid narrower than the label needs, assert the bottom border does not
-    carry the word, and assert the corner is still drawn. `test/parity.test.mjs`
-    taking the narrow width as a second comparison would cover both gates at
-    once and may be the better home; either way it should be one of the two
-    rather than neither.
-  - From: Code Review Override - the mute label's missing screens
+- [ ] The repository's `.gitignore` is not in the repository
+  - **Issue**: `git ls-files --error-unmatch .gitignore` answers `did not match
+    any file(s) known to git` and `git status --short --ignored .gitignore`
+    answers `!! .gitignore`, so the file has never been committed. The global
+    excludes file hides every dotfile with a bare `.*`, which is the same trap
+    `.gitignore` itself already answers for two other files - it carries a `!`
+    line and a paragraph of reasoning for `.gitattributes` and another for
+    `.nojekyll` - and never answers for itself. What it costs is every rule in
+    it: a clone ignores nothing, so `out/`, `node_modules/` and
+    `test-results/ui-ux-tester.agent/` all read as untracked there, and the LF
+    pinning the `.gitattributes` note describes as settled "for every editor,
+    on every machine" is settled only on this one, because the file that
+    un-ignores `.gitattributes` is not in the clone either.
+  - **Goal**: Add a `!.gitignore` line beside the existing `!.gitattributes`
+    and `!.nojekyll` ones, with a comment in the same voice saying why a
+    dotfile needs un-ignoring here, then `git add -f .gitignore` once - the
+    `-f` is needed for the first add, since the global rule still hides it
+    until the file is tracked. Worth checking the same way afterwards: a
+    `git ls-files .gitignore` that prints the path is the whole confirmation.
+  - From: UI/UX Override - the mute label on the menu screens
 
 ## Quick Wins
 
@@ -117,67 +77,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 180 earlier items in `TODO-archive.md`, newest last.
+> 182 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Pin the three frame-loop call sites the suite cannot see
-  - **Issue**: two of this run's fixes are split across the
-    `// ===== Canvas Setup & Sizing =====` marker - a function above it, and
-    the call that reaches it below - and `test/versus.test.mjs` only reaches
-    the half above. `versusRematch` has three cases of its own; nothing checks
-    that `frame()` calls it. `VersusRound`'s `muted` argument has two; nothing
-    checks that either opening path hands it `game.state.muted`. Measured by
-    reverting the one line at `index.html:5503` to the
-    `if(versus.settled&&justPressed.ENTER)versus=versus.rematch();` it
-    replaced: `node --test test/versus.test.mjs test/parity.test.mjs
-    test/browser-shell.test.mjs` still reports 122 of 122 passing, while the
-    same page driven in chromium opens the rematch with pilot 2 holding six to
-    eight bullet cells against pilot 1's none, and a shot cue on the frame. So
-    the defect comes back in full with the suite green. Nothing is broken
-    today - this is the wiring being unguarded rather than wrong, the same
-    shape as `The debug-mode allow-list is written five times and compared
-    nowhere`, which this run closed for the other below-marker handler.
-  - **Goal**: Assert the three call sites as the text of `index.html`, in
-    `test/browser-shell.test.mjs` - it already reads the file at module level
-    and is written for "the seam where the arithmetic stops and the DOM
-    starts". The matches are `versus=versusRematch(versus,justPressed)` in the
-    frame loop and `new VersusRound(versusSeed(),layout,game.state.muted)` at
-    both the `V` branch and the `?versus` branch, which is the same technique
-    `test/parity.test.mjs` now uses for `DEBUG_MODES.includes(explicitMode)`
-    and for the reason it states there, that neither handler is reachable from
-    the suite. Worth a fourth assertion that `versus.rematch()` appears nowhere
-    in the loop, since the shape this defect would return in is the direct call
-    coming back beside the guarded one rather than replacing it. A source-text
-    case should say in its own comment that it pins the wiring as written and
-    not as behaving, and name where the behaviour was confirmed instead.
-  - From: UI/UX Override - the dying frame's score, and the HUD below the versus floor
-- [x] The mute check tells two openings apart by line, so one line can hide an
-      unmuted round
-  - **Issue**: `test/browser-shell.test.mjs:1089` subtracts the openings that
-    read `game.state.muted` from the openings found, but both sides are the
-    `index.html:<line>` strings `wiringAt` returns, so two openings sharing a
-    source line are one entry as far as `includes` is concerned. Measured by
-    collapsing a second, unmuted opening onto `index.html:5178` beside the
-    `?versus` one -
-    `...layout,game.state.muted);else if(params.has('v2'))versus=new VersusRound(versusSeed(),layout,false);`
-    - and removing the `V` key's so the count still reads 2: `muted` comes back
-    holding `index.html:5178`, `opens.filter((at) => !muted.includes(at))` comes
-    back empty, and 'browser: both openings hand the round the page's mute'
-    reports a tick with `layout,false)` standing in the file. That is the one
-    thing the case exists to refuse, and its own comment at 1076 says so:
-    "counted rather than matched branch by branch, so a third way into a round
-    is a failure here instead of a silently unmuted one". Nothing is wrong in
-    `index.html` today - the two openings are at 5178 and 5490, a line apart in
-    the only arrangement the file has had - and the sibling case 'the V key and
-    the ?versus link are the two openings' did fail on the arrangement above by
-    its own route, so what is blind is this assertion rather than the suite.
-  - **Goal**: Give each match an identity the source line does not decide. Have
-    `wiringAt` return the match offset alongside the line - the
-    `index.html:<line>` string for the failure text, `m.index` for the
-    comparison - so the subtraction is exact while the messages read as they do
-    now. Then rebuild the collapsed-line arrangement above and confirm the mute
-    case is what fails, since today it is the only one of the four that does
-    not.
-  - From: Code Review Override - the versus wiring cases
 - [x] The `wiring` docstring credits a `doesNotMatch` the block does not use
   - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
     the file rather than to `</script>` by saying the wider slice "leaves the
@@ -290,3 +191,62 @@ the roadmap section each one came from.
     `pollGamepads`, and it should say in its own comment that it pins the wiring
     as written and not as behaving.
   - From: UI/UX Override - the title screen's silent mute
+- [x] The mute label stops at the title screen
+  - **Issue**: `M` is answered in `Game.update` with no mode gate at all
+    (`src/game.ts:703`, `index.html:1731`), whose own comment says so - "M is a
+    global setting toggle, so it works in every mode" - and the solo branch of
+    the frame loop calls `game.update` unconditionally every frame
+    (`index.html:5674`, `src/index.ts:186`). So the key works on all five
+    screens. Only two report it. `drawFooter` writes `' MUTED '` during a run
+    (`src/render.ts:871`, `index.html:3420`) and `renderTitleScreen` now writes
+    the same label into the title screen's bottom border (`src/menu.ts:347`,
+    `index.html:3780`), but `renderGameOver` (`src/menu.ts:421`,
+    `index.html:3830`), `renderNameEntry` (`src/menu.ts:221`) and
+    `renderDebugMenu` (`src/menu.ts:354`) draw no footer and take no reading of
+    `state.muted` - `MUTED` occurs in neither build outside the two places
+    above. The game over screen is the one that costs most: it is where a player
+    arrives straight out of a run, so it is the likeliest screen to press `M`
+    on, and the reasoning the title screen's label was added under applies to it
+    word for word - the setting outlives the screen and there is no way to read
+    it until another run is launched.
+  - **Goal**: Carry the label onto the screens that still do not report it,
+    reusing what `renderTitleScreen` already does rather than restating it: the
+    same `' MUTED '` right aligned at `w-mute.length-2` on `h-1`, under the same
+    `mute.length <= w - 4` width gate, in `C.BRIGHT_YELLOW` on `C.BLACK`. Three
+    screens now write the identical six lines, which is the point at which it
+    wants a helper of its own in each build - a `drawMuteLabel(screen, state)`
+    beside the other menu drawing helpers in `src/menu.ts`, with the browser
+    copy above the `// ===== Canvas Setup & Sizing =====` marker so the suite
+    can reach it - and the title screen's copy folded into it. Worth deciding
+    whether the debug menu wants it: a debug scenario is not a session a player
+    is listening to, so leaving that one out is defensible, but say which was
+    chosen rather than leaving it to the diff. Cases hold all of this without a
+    browser, the way the title screen's do
+    (`test/browser-engine.test.mjs:534`): both builds render these screens in
+    the suite already, and `test/parity.test.mjs:553` renders the name entry
+    screen beside the title screen, so it can compare them muted as well as
+    unmuted exactly as it now does for the title screen.
+  - From: Code Review Override - the mute label's missing screens
+- [x] The terminal build's title-screen mute gate has no case
+  - **Issue**: the width gate on the new label is written in both builds
+    (`src/menu.ts:348`, `index.html:3781`) and exercised in one.
+    `test/browser-engine.test.mjs` holds it at a 10-column grid, where the label
+    is dropped and the corner still closes the frame, and there is no terminal
+    sibling - so the terminal build's `mute.length <= w - 4` could be dropped or
+    written as `w - 2` and the suite would stay green. `test/parity.test.mjs`
+    does not cover it either: it renders both builds muted at one width wide
+    enough for the label, so it compares the two labels rather than the two
+    gates. The repository tests the footer's indicator on both sides
+    (`test/terminal-engine.test.mjs:310` beside
+    `test/browser-engine.test.mjs:520`), which is the convention this one
+    departs from. Nothing fails today - the two gates agree - this is the
+    terminal gate being unguarded rather than wrong.
+  - **Goal**: Give the terminal build the sibling case, mirroring
+    'the title screen drops the mute label rather than writing over the border'
+    (`test/browser-engine.test.mjs:570`) - render the terminal title screen muted
+    at a grid narrower than the label needs, assert the bottom border does not
+    carry the word, and assert the corner is still drawn. `test/parity.test.mjs`
+    taking the narrow width as a second comparison would cover both gates at
+    once and may be the better home; either way it should be one of the two
+    rather than neither.
+  - From: Code Review Override - the mute label's missing screens
