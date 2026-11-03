@@ -3642,3 +3642,27 @@ still be found by name.
     case is what fails, since today it is the only one of the four that does
     not.
   - From: Code Review Override - the versus wiring cases
+
+## Archived 11-03-26
+
+- [x] The `wiring` docstring credits a `doesNotMatch` the block does not use
+  - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
+    the file rather than to `</script>` by saying the wider slice "leaves the
+    `doesNotMatch` below reading the larger region". No assertion in the file
+    reads `wiring` through `doesNotMatch`. The four the file holds are at 460,
+    929, 990 and 991, and every one reads `html` or a data URI, so none is
+    affected by where the slice ends. The case that would have been that
+    `doesNotMatch` is 'browser: nothing in the wiring opens a rematch directly'
+    at 1057, and it deliberately does the opposite - it collects locations and
+    asserts `deepEqual(at, [])` - for the reason the block comment gives at
+    1029: "a regex assertion over a 20,000-character slice prints the slice, and
+    a failure nobody can read is a failure nobody acts on". So the docstring
+    states the design the block was written to replace, 993 lines above the note
+    saying why it was replaced, and a reader taking it at its word would restore
+    the assertion form that note argues against.
+  - **Goal**: Rewrite the docstring's second paragraph around the reason that
+    still holds - nothing after `</script>` carries JavaScript, 26 characters of
+    `</body></html>`, so slicing to the end costs a case nothing and leaves the
+    marker as the only index the block needs - and drop the clause naming
+    `doesNotMatch`.
+  - From: Code Review Override - the versus wiring cases

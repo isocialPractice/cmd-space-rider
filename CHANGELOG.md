@@ -1,5 +1,84 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.1] - 2026-11-03
+
+### Fixed
+
+- The repository's own `.gitignore` had never been committed, so every rule in
+  it was true of this machine and of nowhere else. `git ls-files` returned no
+  path for it and `git status --short --ignored .gitignore` answered
+  `!! .gitignore`, which is the quiet half of the trap the file itself already
+  documents twice over: a global excludes file names the path three times - once
+  in a bare `.*` dotfile pattern and twice by name - and a bulk `git add .`
+  passes over an ignored path without a word, so the file was skipped by every
+  commit the repository has ever taken. The two dotfiles it rescues by name were
+  both in the index, `.gitattributes` and `.nojekyll`; the file doing the
+  rescuing was the one root dotfile this repository means to carry and did not.
+
+  What that cost was the rules rather than any one file. A clone ignored
+  nothing, so `out/`, `node_modules/` and `test-results/ui-ux-tester.agent/`
+  all read as untracked there - and `out/` is the build `npm test` runs first,
+  21 files from 7 modules, which means a fresh clone's first test run filled
+  `git status` with its own compiled output. The fix is the line the file was
+  missing: `!.gitignore`, carrying the same paragraph of reasoning as the two
+  beside it. `git check-ignore -v .gitignore` now answers
+  `.gitignore:28:!.gitignore` and `git status --short --ignored .gitignore`
+  answers `?? .gitignore` - untracked rather than ignored, which is the whole of
+  what the line has to do, because the ordinary bulk add carries it from there.
+
+### Added
+
+- `test/repo-files.test.mjs`, which reads the `!` lines out of `.gitignore` and
+  asks git whether the rules alone still rescue each path they name. Two checks,
+  and 926 tests in the suite from 924.
+
+  The `--no-index` in `git check-ignore --no-index -q` is what gives the first
+  one teeth, and it is the reason the check is worth running. Plain
+  `check-ignore` consults the index first and reports nothing for a path git
+  already tracks, so deleting `!.gitattributes` tomorrow would read as fine for
+  as long as that file stayed in the index, and would strand the next clone that
+  had to add it again. Asked without the index, the three negated dotfiles answer
+  "not excluded" while `.tmp`, `.support` and `out/` answer "excluded", so the
+  check discriminates rather than passing on everything handed to it.
+
+  The second check is the one the first cannot make: that `.gitignore` names
+  itself among its negations. The list is read off the file, so deleting
+  `!.gitignore` would leave two paths that both pass while the file holding them
+  went back to being invisible to every bulk add.
+
+### Changed
+
+- `docs/development.html` gives its Line Endings section a paragraph on the
+  repository's standing answer to the dotfile trap the section already
+  describes - the `!` line, the three files that carry one, and why the test
+  asks with `--no-index` - and `docs/project-structure.html` lists `.gitignore`
+  in the tree beside the other two root dotfiles, which it belongs in now that
+  git carries it.
+
+### Notes
+
+- Sized as a patch. Nothing a player can reach moved: the change is one line of
+  ignore rules, a test over them, and two pages of documentation. The version
+  moves at all because the suite does, a new test file being code that runs, and
+  a turn that had only reworded comments or pages would have moved nothing.
+
+- Two claims in the found issue that queued this are not right, and the work was
+  smaller than either. `git add -f` was not needed: a repository `.gitignore`
+  outranks a global excludes file whether or not the file is tracked, so the
+  negation alone took the path from `!!` to `??` and nothing had to be forced.
+  And the LF pinning was never at risk - `.gitattributes` has been in the index
+  throughout, and an ignore rule does not reach a file git already tracks, so the
+  endings held in every clone exactly as the documentation says. What the missing
+  line actually cost was every rule that names a path rather than a dotfile.
+
+- One pre-existing flake surfaced while this was being tested, and is queued
+  rather than touched. `the walls come back with the tunnel` in
+  `test/asteroid-field.test.mjs` failed once in 12 full-suite runs, reporting
+  two wall glyphs where the render before the section had six; the other 11 runs
+  were 926/926. The sequence it walks reaches `Math.random` through
+  `openAsteroidField`, and the test does not seed it, which is where the queued
+  item starts looking. Nothing in this version touches the engine.
+
 ## [1.0.0-alpha.0.15.0] - 2026-11-02
 
 ### Fixed
