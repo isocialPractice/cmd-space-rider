@@ -6,32 +6,102 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
+- [ ] Verify git tracks `.gitignore` once this run's commit has landed.
+  `git ls-files .gitignore` printing the path is the whole confirmation, and no
+  call that writes the rule can have it: the line takes the file from `!!` to
+  `??`, and the index only changes at the commit afterwards.
+  - From: version.control = null
+
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the mute label on the menu screens
+### Found Issue Override - the asteroid field's wall comparison
 
 #### Found Issues
 
-- [ ] The repository's `.gitignore` is not in the repository
-  - **Issue**: `git ls-files --error-unmatch .gitignore` answers `did not match
-    any file(s) known to git` and `git status --short --ignored .gitignore`
-    answers `!! .gitignore`, so the file has never been committed. The global
-    excludes file hides every dotfile with a bare `.*`, which is the same trap
-    `.gitignore` itself already answers for two other files - it carries a `!`
-    line and a paragraph of reasoning for `.gitattributes` and another for
-    `.nojekyll` - and never answers for itself. What it costs is every rule in
-    it: a clone ignores nothing, so `out/`, `node_modules/` and
-    `test-results/ui-ux-tester.agent/` all read as untracked there, and the LF
-    pinning the `.gitattributes` note describes as settled "for every editor,
-    on every machine" is settled only on this one, because the file that
-    un-ignores `.gitattributes` is not in the clone either.
-  - **Goal**: Add a `!.gitignore` line beside the existing `!.gitattributes`
-    and `!.nojekyll` ones, with a comment in the same voice saying why a
-    dotfile needs un-ignoring here, then `git add -f .gitignore` once - the
-    `-f` is needed for the first add, since the global rule still hides it
-    until the file is tracked. Worth checking the same way afterwards: a
-    `git ls-files .gitignore` that prints the path is the whole confirmation.
-  - From: UI/UX Override - the mute label on the menu screens
+- [ ] `the walls come back with the tunnel` fails about one run in twelve
+  - **Issue**: The per-build test at `test/asteroid-field.test.mjs:409` renders
+    a quiet run, opens and closes an asteroid section, and asserts the wall
+    glyphs afterwards are the set that was there before. On 11-03-26 it failed
+    once in 12 full-suite runs, and passed 926/926 on the other 11. The report
+    was `actual: ["█","▓"]` against `expected: ["╠","╣","█","░","▒","▓"]`, so
+    `before` held all six and the render after the section came back with two
+    of the four depth bands and neither ring end. Which build it was did not
+    survive the output, since both carry the same test name.
+
+    An unseeded draw is in the path it walks. `RNG.next` is `Math.random` by
+    default (`src/types.ts:356`), the two tests above this one seed and then
+    hand it back with `build.seedRng(null)` (lines 316 and 347), and this test
+    neither seeds nor is isolated from them - so it runs on real
+    `Math.random`. `openAsteroidField` draws once per rock through
+    `rand(20, RECYCLE_Z)` (`src/game.ts:975`), which is the only randomness the
+    sequence reaches.
+
+    Not from the turn that filed this. The only code 0.15.1 added is
+    `test/repo-files.test.mjs`, which reads `.gitignore` and shells out to
+    `git check-ignore`; it imports `REPO_ROOT` alone and touches no engine,
+    render or game state. The rate is the same order as the suite's age, so
+    this reads as long-standing rather than new.
+  - **Goal**: Find the draw first and decide second, because the two answers are
+    opposite. Walk the test under `seedRng` across a range of seeds until one
+    reproduces the two-glyph render, then read what that seed makes the section
+    do. If the walls genuinely do not come back for some draws, the defect is in
+    the engine and seeding the test would bury it; if the sequence is sound and
+    only the comparison is loose - a ring end that happens to be off screen two
+    frames later, say - then the test wants the seed the two above it already
+    use, and a note saying which. Do not reach for the seed before the
+    reproduction: a green suite is the thing this finding is warning about.
+  - From: Found Issue Override - the asteroid field's wall comparison
+
+### Code Review Override - the structure page's test census, and a git read with no answer
+
+#### Found Issues
+
+- [ ] `docs/project-structure.html` lists every test file but the one 0.15.1 added
+  - **Issue**: The page's own `<meta name="description">` is "Every file in the
+    CMD Space Rider repository and what it holds", and its `test/` listing
+    names 22 `.test.mjs` files with a comment each. The folder holds 23:
+    `repo-files.test.mjs` is the only one absent, and the same turn that added
+    it edited this page's root listing to add `.gitignore`. So a reader of the
+    tree counts a suite one file short of the one `npm test` runs, on the page
+    the site publishes as the file census. The omission is also the second of
+    its kind here - `docs/development.html`'s Tests paragraph enumerates what
+    the suite covers ("both builds, the agreement between them, the
+    documentation site, and the measurement rig") and the repository's own
+    ignore rules are now a fifth thing it covers, though that sentence claims
+    no exhaustiveness and so is the lesser half.
+  - **Goal**: Add the `repo-files.test.mjs` line to the `test/` listing beside
+    `parity.test.mjs`, aligned on the same comment column, saying what it
+    holds - the `!` lines in `.gitignore`, read against git's own answer. Then
+    close the gap that let it through: `test/docs-site.test.mjs` already reads
+    `test/probes/` off disk and holds it against the probe table the page
+    declares, so extend that pattern to the page's `test/` listing, which is
+    the one census in the file that nothing compares against the folder. A
+    sentence in the Tests paragraph naming the ignore rules is worth the same
+    edit while the file is open.
+  - From: Code Review Override - the structure page's test census, and a git read with no answer
+
+- [ ] `excludedByRules` reads a git it could not ask as a git that answered "no"
+  - **Issue**: `test/repo-files.test.mjs:66` guards with
+    `if (got.error || got.status > 1) return null`, and its docstring above says
+    the point of that line is that "anything above that is the failure to ask
+    rather than an answer, which is why the two are told apart here instead of
+    being read as 'not excluded'". One shape of failure-to-ask is not told
+    apart: `spawnSync` reports `status: null` with `signal` set when the child
+    is killed rather than exiting, `null > 1` is `false`, and the return falls
+    through to `got.status === 0`, which is `false` - so a git that never
+    answered is read as "this path is not excluded", which is the passing
+    answer for every path the check walks. A `check-ignore` killed mid-run
+    therefore turns both negations green instead of skipping the case, in a
+    file whose own header is an argument against a check that passes because
+    nothing looked.
+  - **Goal**: Guard on the status being a number before comparing it -
+    `if (got.error || typeof got.status !== 'number' || got.status > 1)` - so
+    `null` joins 128 in the branch the docstring describes and the caller skips
+    on it. Exercise it: the function is not exported, so either export it for
+    the test or pass the spawn in, and assert that a reading with no numeric
+    status skips rather than passes. A test that cannot distinguish the two is
+    the defect restated.
+  - From: Code Review Override - the structure page's test census, and a git read with no answer
 
 ## Quick Wins
 
@@ -77,29 +147,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 182 earlier items in `TODO-archive.md`, newest last.
+> 183 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The `wiring` docstring credits a `doesNotMatch` the block does not use
-  - **Issue**: `test/browser-shell.test.mjs:36` explains slicing to the end of
-    the file rather than to `</script>` by saying the wider slice "leaves the
-    `doesNotMatch` below reading the larger region". No assertion in the file
-    reads `wiring` through `doesNotMatch`. The four the file holds are at 460,
-    929, 990 and 991, and every one reads `html` or a data URI, so none is
-    affected by where the slice ends. The case that would have been that
-    `doesNotMatch` is 'browser: nothing in the wiring opens a rematch directly'
-    at 1057, and it deliberately does the opposite - it collects locations and
-    asserts `deepEqual(at, [])` - for the reason the block comment gives at
-    1029: "a regex assertion over a 20,000-character slice prints the slice, and
-    a failure nobody can read is a failure nobody acts on". So the docstring
-    states the design the block was written to replace, 993 lines above the note
-    saying why it was replaced, and a reader taking it at its word would restore
-    the assertion form that note argues against.
-  - **Goal**: Rewrite the docstring's second paragraph around the reason that
-    still holds - nothing after `</script>` carries JavaScript, 26 characters of
-    `</body></html>`, so slicing to the end costs a case nothing and leaves the
-    marker as the only index the block needs - and drop the clause naming
-    `doesNotMatch`.
-  - From: Code Review Override - the versus wiring cases
 - [x] The title screen never says the page is muted
   - **Issue**: `M` works on the title screen and nothing on that screen reports
     it. Driven in chromium at 1280x800 against `index.html` served over
@@ -250,3 +299,23 @@ the roadmap section each one came from.
     once and may be the better home; either way it should be one of the two
     rather than neither.
   - From: Code Review Override - the mute label's missing screens
+- [x] The repository's `.gitignore` is not in the repository
+  - **Issue**: `git ls-files --error-unmatch .gitignore` answers `did not match
+    any file(s) known to git` and `git status --short --ignored .gitignore`
+    answers `!! .gitignore`, so the file has never been committed. The global
+    excludes file hides every dotfile with a bare `.*`, which is the same trap
+    `.gitignore` itself already answers for two other files - it carries a `!`
+    line and a paragraph of reasoning for `.gitattributes` and another for
+    `.nojekyll` - and never answers for itself. What it costs is every rule in
+    it: a clone ignores nothing, so `out/`, `node_modules/` and
+    `test-results/ui-ux-tester.agent/` all read as untracked there, and the LF
+    pinning the `.gitattributes` note describes as settled "for every editor,
+    on every machine" is settled only on this one, because the file that
+    un-ignores `.gitattributes` is not in the clone either.
+  - **Goal**: Add a `!.gitignore` line beside the existing `!.gitattributes`
+    and `!.nojekyll` ones, with a comment in the same voice saying why a
+    dotfile needs un-ignoring here, then `git add -f .gitignore` once - the
+    `-f` is needed for the first add, since the global rule still hides it
+    until the file is tracked. Worth checking the same way afterwards: a
+    `git ls-files .gitignore` that prints the path is the whole confirmation.
+  - From: UI/UX Override - the mute label on the menu screens
