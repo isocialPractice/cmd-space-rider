@@ -103,14 +103,24 @@ const fieldRock = (z) => ({ x: 0, y: 1, z, rot: 0, rotSpeed: 0, scale: 1, field:
  * covers the wall columns. The ramp tests get away with walking from `gameTop`
  * because they render a run with no banner up; a section always has one. One
  * row of twenty-two is the cost, and it is the row with the thinnest wall on it.
+ *
+ * `shift` is the jolt the frame was rendered under, from `shakeShift` below.
+ * `tunnelSpan` names the columns the walls are *drawn* on, and the damage shake
+ * moves them afterwards, so a reading taken at the bare span while the play
+ * area is jolted looks one column into the corridor and finds it blank. That is
+ * not a wall the test can filter for later: at the twelve rows a jolt leaves
+ * one character thick the whole wall moves off the column being read, so the
+ * row contributes nothing and its depth band drops out of the set entirely.
  */
-function wallGlyphs(build, screen) {
+function wallGlyphs(build, screen, shift = 0) {
   const gameTop = HUD_ROWS;
   const gameBottom = screen.height - FOOTER_ROWS;
   const found = new Set();
   for (let row = gameTop + 1; row < gameBottom; row++) {
     const text = rowText(screen, row);
-    const { left, right } = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
+    const span = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
+    const left = span.left + shift;
+    const right = span.right + shift;
     for (const [from, stride] of [[left, -1], [right, 1]]) {
       for (let x = from; x >= 0 && x < screen.width; x += stride) {
         const char = text[x];
@@ -121,6 +131,22 @@ function wallGlyphs(build, screen) {
   }
   return found;
 }
+
+/**
+ * The columns `renderGame` has jolted the play area by, which is the whole of
+ * the terminal build's damage shake and none of the browser's.
+ *
+ * The two builds put the same jolt in different places, which is the reason
+ * this is asked of the build rather than read off the state. The terminal has
+ * no subpixel positioning, so `renderGame` shifts the drawn rows a whole cell
+ * (`src/render.ts:56`, through `shiftRows`, which leaves `new[x] = old[x-dx]`)
+ * and the walls land `dx` columns from the span they were drawn on. The browser
+ * offsets the canvas the grid is painted to instead, below the
+ * `// ===== Canvas Setup & Sizing =====` marker, so its grid is never shifted
+ * and it exports no `shakeColumns` at all - hence the zero, which is a reading
+ * of that build and not a fallback for a missing export.
+ */
+const shakeShift = (build, state) => (build.shakeColumns ? build.shakeColumns(state) : 0);
 
 /** The centre row of the HUD, where every banner competes for the line. */
 const bannerRow = (screen) => rowText(screen, HUD_ROWS);
@@ -387,17 +413,42 @@ for (const build of BUILDS) {
 
 // ----- The walls -----
 
+/**
+ * The seed the two cases below walk the section under, which is the one the
+ * placement cases above already use. A section's rocks are placed from the
+ * draw, so whether one of them reaches the ship is a draw as well, and an
+ * unseeded section leaves that to chance: this seed brings the rocks in without
+ * hitting anything, so the frame the walls are read off carries no jolt.
+ */
+const QUIET_SECTION_SEED = 20261014;
+
+/**
+ * A seed whose section does put a rock into the ship, so the frame is jolted.
+ *
+ * This is the draw that used to fail the case below, about four runs in a
+ * thousand of them. It is listed as its own constant rather than reached for
+ * by accident, because the jolted frame is the half of the render `wallGlyphs`
+ * had to be taught to read, and a case can only hold it by arriving there
+ * deliberately.
+ */
+const JOLTED_SECTION_SEED = 111;
+
 for (const build of BUILDS) {
   test(`${build.name}: an open section draws no walls at all`, () => {
     const game = quietRun(build);
     const before = wallGlyphs(build, frame(build, game));
     assert.ok(before.size > 0, 'the tunnel is drawn to begin with');
 
-    armSection(build, game);
-    step(game);
+    build.seedRng(QUIET_SECTION_SEED);
+    try {
+      armSection(build, game);
+      step(game);
+    } finally {
+      build.seedRng(null);
+    }
     clearTunnel(game);
 
-    const during = wallGlyphs(build, frame(build, game));
+    const during = wallGlyphs(build, frame(build, game), shakeShift(build, game.state));
     assert.deepEqual(
       [...during], [],
       'drawTunnel left ' + JSON.stringify([...during]) + ' on the wall columns during a section.'
@@ -411,15 +462,65 @@ for (const build of BUILDS) {
     const game = quietRun(build);
     const before = wallGlyphs(build, frame(build, game));
 
-    armSection(build, game);
-    step(game);
-    closeSection(game);
-    step(game);
+    build.seedRng(QUIET_SECTION_SEED);
+    try {
+      armSection(build, game);
+      step(game);
+      closeSection(game);
+      step(game);
+    } finally {
+      build.seedRng(null);
+    }
     clearTunnel(game);
 
+    assert.equal(game.state.shake, 0, 'this seed is the one whose section hits nothing');
     assert.deepEqual(
-      [...wallGlyphs(build, frame(build, game))].sort(), [...before].sort(),
+      [...wallGlyphs(build, frame(build, game), shakeShift(build, game.state))].sort(),
+      [...before].sort(),
       'the tunnel is drawn from what it was drawn from before the section'
+    );
+  });
+
+  test(`${build.name}: the walls come back with the tunnel through a jolt`, () => {
+    // The case above renders a section that hits nothing, which is all but four
+    // runs in a thousand of them. This is one of the four. Walked over 60,000
+    // unseeded runs of that sequence per build: the terminal build shook 237
+    // times and read the walls back wrong 237 times, and those are the same 237
+    // runs - none shook without misreading, and none misread without shaking.
+    // The browser build shook 258 times and read them back right every time.
+    //
+    // So the jolt is the whole of the difference, and the difference is between
+    // the two renders rather than between the two sections: both builds' state
+    // shakes here, and only the terminal build's renderGame moves the grid under
+    // it. At this seed the terminal build answers the bare span with the two
+    // near bands alone, off the six it was drawn from, which is the report the
+    // flake filed.
+    const game = quietRun(build);
+    const before = wallGlyphs(build, frame(build, game));
+
+    build.seedRng(JOLTED_SECTION_SEED);
+    try {
+      armSection(build, game);
+      step(game);
+      closeSection(game);
+      step(game);
+    } finally {
+      build.seedRng(null);
+    }
+    clearTunnel(game);
+
+    assert.ok(game.state.shake > 0, 'a rock reached the ship, or this case is the one above again');
+    assert.equal(
+      shakeShift(build, game.state), build.shakeColumns ? 1 : 0,
+      'the build that jolts its grid jolts it a column here, and the one that jolts its canvas'
+      + ' leaves the grid where it was drawn'
+    );
+    assert.deepEqual(
+      [...wallGlyphs(build, frame(build, game), shakeShift(build, game.state))].sort(),
+      [...before].sort(),
+      'the walls come back where the jolt leaves them, not where they were drawn. Read at the'
+      + ' bare span instead, a jolted frame answers with the two near depth bands alone: the'
+      + ' twelve rows whose wall is one character thick have moved off the column being read'
     );
   });
 }

@@ -1,5 +1,121 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.2] - 2026-11-04
+
+### Fixed
+
+- `the walls come back with the tunnel` in `test/asteroid-field.test.mjs` failed
+  about four runs in a thousand over where it read the walls, not over whether
+  they came back. `wallGlyphs` locates the wall columns from `tunnelSpan`, which
+  names the columns the walls are *drawn* on, and `renderGame` jolts the whole
+  play area a column sideways after drawing it - `src/render.ts:56`, through
+  `shiftRows`, which leaves `new[x] = old[x-dx]`. So a frame rendered while the
+  ship was still shaking from a hit put the walls one column from where the
+  check looked.
+
+  What that cost was not a glyph but twelve rows of them. Of the 18 rows the
+  check walks at 80x24, 12 carry a wall one character thick, and at those the
+  whole wall moves off the column being read: the walk breaks on the blank it
+  finds there, the row contributes nothing, and its depth band leaves the set
+  entirely. The 6 near rows are two characters thick and keep their inner
+  column, which is why the failure reported `actual: ["█","▓"]`, the
+  two near bands alone, against the six the render before the section was drawn
+  from. Zeroing `state.shake` and changing nothing else brings all six back,
+  which is the reading that says neither engine was ever involved.
+
+  Walked over 60,000 unseeded runs of that sequence per build: the terminal
+  build shook 237 times and misread the walls 237 times, and those are the same
+  237 runs - none shook without misreading and none misread without shaking, so
+  the jolt is the whole of the cause rather than a contributor to it. The
+  browser build shook at the same rate, 258 times, and misread nothing, because
+  its jolt is a canvas offset applied below the
+  `// ===== Canvas Setup & Sizing =====` marker instead of a shift of the grid.
+  The two builds put the same shake in different places, and `shakeColumns`
+  gives the reason in its own docstring: a terminal has no subpixel positioning,
+  so the jolt there has to be a whole cell of the grid.
+
+  `wallGlyphs` now reads the frame under the jolt it was rendered with, taken
+  from a `shakeShift` helper that asks the build rather than the state, and
+  every wall case hands it over. Seeding the case alone would have turned it
+  green and left the locator wrong for whoever read it next.
+
+- `excludedByRules` in `test/repo-files.test.mjs` read a git that never answered
+  as a git that answered "no". Its own docstring gave the `got.status > 1` guard
+  the purpose that "anything above that is the failure to ask rather than an
+  answer", and one shape of failure to ask was not told apart: `spawnSync`
+  reports `status: null` with `signal` set when the child is killed rather than
+  exiting, `null > 1` is `false`, so the reading fell through to
+  `got.status === 0`, came back `false`, and `false` here means "this path is
+  not excluded" - which is the answer every negation in the file asserts for. A
+  `check-ignore` killed mid-run therefore turned the file green instead of
+  skipping it, in a file whose own header is an argument against a check that
+  passes because nothing looked. The status is now required to be a number
+  before it is compared, so a killed child joins exit 128 in the branch the
+  docstring describes.
+
+### Added
+
+- `the walls come back with the tunnel through a jolt`, in both builds. The
+  jolted frame is the half of the render `wallGlyphs` had to be taught to read,
+  and at four runs in a thousand it was reached by accident or not at all, so it
+  is now reached on purpose: a named seed whose section does put a rock into the
+  ship, and an assertion that the terminal build's grid moved a column under it
+  while the browser build's did not. Reverting the locator fix fails this case
+  on the terminal build and leaves the browser build passing, which is that
+  parity difference written as a test rather than as a comment.
+
+- `docs: the published test tree names every test file the repository has`, in
+  `test/docs-site.test.mjs`. The `test/` listing was the one census in
+  `docs/project-structure.html` that nothing held against the folder, which is
+  how `repo-files.test.mjs` shipped in 0.15.1 absent from a page whose own
+  description is "Every file in the CMD Space Rider repository and what it
+  holds" - and absent from it in the same turn that edited the page's root
+  listing to name `.gitignore`. Read both directions, as the probe tree beside
+  it already is: a file on disk the page does not name, and a name the page
+  publishes for a file that is gone. It walks every `.mjs` rather than the
+  `.test.mjs` files alone, since the listing publishes the three shared rigs
+  beside the cases and a reader counting the folder counts all of them. The two
+  censuses now cover both levels of the folder.
+
+- `repo: a git that never answered is skipped, not read as a path nothing
+  excludes`, which executes the guard above. No arrangement of a real git
+  reaches a killed child on purpose, so `excludedByRules` takes its spawn as an
+  argument for that reason and no other; without it the guard is a line nothing
+  can run. The case also pins the answers git does give - 0, 1, 128, and a
+  machine with no git - so what the guard refuses is the reply that never came
+  rather than a category of replies.
+
+- 930 tests in the suite from 926.
+
+### Changed
+
+- `docs/project-structure.html` lists `repo-files.test.mjs` in the `test/` tree,
+  and `docs/development.html` adds the repository's own ignore rules to the
+  sentence naming what the suite covers.
+
+### Notes
+
+- Sized as a patch. Three defects and no new behaviour: two were in the suite's
+  own readings of a render and of a subprocess, and one was a page undercounting
+  a folder. Nothing a player can reach moved, and neither engine was edited.
+
+- The found issue that queued the flake left the engine open as a possibility
+  and warned that seeding the case would bury it. It would not have, because
+  there was no engine defect to bury - but seeding alone would have buried the
+  locator, which is why both were done rather than either. That issue also
+  described `openAsteroidField` as drawing once per rock. It draws six times:
+  the depth in `openAsteroidField`, the x and y in `placeObstacle`, and the
+  rotation, spin and scale in `spawnObstacle`, so a 70-rock section takes 420
+  draws rather than 70. Neither correction moves where the randomness enters,
+  which is where the issue pointed.
+
+- The flake is unreachable now rather than unlikely: all three wall cases run
+  under a named seed - the quiet one the placement cases above them already use
+  for the two that hit nothing, and a jolted one for the case that does. Twelve
+  consecutive full-suite runs after the change came back 930/930, against the
+  one failure in twelve that filed the issue, which was one draw of a rate this
+  entry puts nearer four in a thousand.
+
 ## [1.0.0-alpha.0.15.1] - 2026-11-03
 
 ### Fixed

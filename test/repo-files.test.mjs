@@ -54,25 +54,51 @@ function negations() {
 /**
  * Whether the ignore rules alone exclude a path, with the index left out of it.
  *
- * `null` where git cannot answer - no git on the machine, or no work tree to
- * ask about - and the caller skips on it. `check-ignore` answers in its exit
- * code: 0 is excluded, 1 is not, and anything above that is the failure to ask
- * rather than an answer, which is why the two are told apart here instead of
- * being read as "not excluded".
+ * `null` where git cannot answer - no git on the machine, no work tree to ask
+ * about, or a child killed before it could reply - and the caller skips on it.
+ * `check-ignore` answers in its exit code: 0 is excluded, 1 is not, and
+ * anything else is the failure to ask rather than an answer, which is why the
+ * two are told apart here instead of being read as "not excluded".
+ *
+ * The status is checked for being a number before it is compared, and that
+ * guard is the difference between skipping and passing rather than a tidiness.
+ * `spawnSync` reports `status: null` with `signal` set when the child is killed
+ * instead of exiting, and `null > 1` is false - so comparing alone falls
+ * through to `status === 0`, answers `false`, and `false` here means "this path
+ * is not excluded", which is the answer every path these checks walk wants. A
+ * `check-ignore` killed mid-run would turn every negation green instead of
+ * skipping them, in a file whose own header is an argument against a check that
+ * passes because nothing looked.
+ *
+ * `spawn` is injectable for that reason and no other: no arrangement of a real
+ * git reaches the killed branch on purpose, so without it the guard above is a
+ * line nothing can execute.
  */
-function excludedByRules(path) {
-  const got = spawnSync('git', ['check-ignore', '--no-index', '-q', '--', path],
+function excludedByRules(path, spawn = spawnSync) {
+  const got = spawn('git', ['check-ignore', '--no-index', '-q', '--', path],
     { cwd: REPO_ROOT, encoding: 'utf8' });
-  if (got.error || got.status > 1) return null;
+  if (got.error || typeof got.status !== 'number' || got.status > 1) return null;
   return got.status === 0;
 }
+
+/** Each path .gitignore negates, beside what the rules say about it. */
+const readings = (paths, spawn) => paths.map(
+  (path) => ({ path, excluded: excludedByRules(path, spawn) })
+);
+
+/**
+ * Whether any reading came back without an answer, which is what these checks
+ * skip on. Named rather than written twice, so the case below exercises the
+ * condition the case above actually takes rather than a copy of it.
+ */
+const unanswered = (read) => read.some((one) => one.excluded === null);
 
 test('repo: the rules un-ignore every path .gitignore negates', (t) => {
   const named = negations();
   assert.ok(named.length, '.gitignore un-ignores nothing, so this check reads no files');
 
-  const read = named.map((path) => ({ path, excluded: excludedByRules(path) }));
-  if (read.some((one) => one.excluded === null)) {
+  const read = readings(named, spawnSync);
+  if (unanswered(read)) {
     t.skip('no git to read the ignore rules with');
     return;
   }
@@ -87,6 +113,36 @@ test('repo: the rules un-ignore every path .gitignore negates', (t) => {
     `.gitignore names ${swallowed.length} path(s) its own \`!\` line does not `
     + `rescue, so a bulk \`git add\` passes over each:\n`
     + swallowed.map((path) => `  ${path}`).join('\n')
+  );
+});
+
+test('repo: a git that never answered is skipped, not read as a path nothing excludes', () => {
+  // The guard this exercises is one `typeof` in excludedByRules, and what earns
+  // it a case is which way it fails without it. A killed child reports
+  // `status: null`, `null > 1` is false, so the reading falls through to
+  // `status === 0` and answers `false` - and `false` is "not excluded", which is
+  // the answer every negation below is asserting for. So the one shape of
+  // failure-to-ask that is not an exit code would not skip these checks; it
+  // would pass them, on a tree nothing had looked at.
+  const killed = () => ({ status: null, signal: 'SIGKILL' });
+  const read = readings(negations(), killed);
+  assert.ok(read.length, '.gitignore un-ignores nothing, so this check reads no paths');
+  assert.ok(
+    unanswered(read), 'a killed check-ignore has to read as no answer, which is what skips'
+  );
+  assert.deepEqual(
+    read.filter((one) => one.excluded === false).map((one) => one.path), [],
+    'a killed check-ignore read as "not excluded" is this file passing because nothing looked'
+  );
+
+  // The answers git does give still read as themselves, so what the guard
+  // refuses is the reply that never came and not a category of replies.
+  assert.equal(excludedByRules('any', () => ({ status: 0 })), true, 'exit 0 is excluded');
+  assert.equal(excludedByRules('any', () => ({ status: 1 })), false, 'exit 1 is not excluded');
+  assert.equal(excludedByRules('any', () => ({ status: 128 })), null, 'exit 128 could not ask');
+  assert.equal(
+    excludedByRules('any', () => ({ status: null, error: new Error('spawn git ENOENT') })),
+    null, 'no git on the machine could not ask either'
   );
 });
 
