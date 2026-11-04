@@ -616,6 +616,74 @@ test('docs: the published probe tree names every probe the repository has', () =
   );
 });
 
+/**
+ * The `test/` listing out of the tree in `docs/project-structure.html`, as the
+ * file names it publishes.
+ *
+ * Read off the indent for the reason `publishedProbeTree` is, with one
+ * difference that the folder forces: `test/` holds `probes/`, whose own files
+ * are published a level deeper and censused by the test above. So this takes
+ * the immediate children alone - the depth of the first line under `test/` -
+ * which drops the probe files out of this reading and the wrapped second line
+ * of a long comment with them, since a continuation carries no filename at
+ * that depth. The folder's own line is matched bare rather than by a trailing
+ * comment, because unlike `probes/` it has none.
+ */
+function publishedTestTree() {
+  const lines = pageText('project-structure.html').split(/\r?\n/);
+  const at = lines.findIndex((line) => /^\s*test\/\s*$/.test(line));
+  assert.ok(at >= 0, 'project-structure.html publishes no test/ folder');
+
+  const depth = lines[at].search(/\S/);
+  const named = [];
+  let childDepth = null;
+  for (const line of lines.slice(at + 1)) {
+    if (!line.trim()) break;
+    const indent = line.search(/\S/);
+    if (indent <= depth) break;
+    if (childDepth === null) childDepth = indent;
+    if (indent !== childDepth) continue;
+    const file = line.trim().match(/^([\w.-]+\.mjs)\b/);
+    if (file) named.push(file[1]);
+  }
+  return named;
+}
+
+test('docs: the published test tree names every test file the repository has', () => {
+  // The page's own description is "Every file in the CMD Space Rider repository
+  // and what it holds", and its test/ listing was the one census in the file
+  // that nothing held against the folder - so 0.15.1 added
+  // test/repo-files.test.mjs, edited this page's root listing in the same turn
+  // to name .gitignore, and left the suite a file short on the page the site
+  // publishes as the file census. The probe tree above had already been caught
+  // the same way and fixed; this is the sibling reading, and the two now cover
+  // both levels of the folder.
+  //
+  // Walked over every .mjs rather than the .test.mjs files alone, since the
+  // listing publishes the three shared rigs beside the cases and a reader
+  // counting the folder counts all of them. Both directions, as the probe tree
+  // is compared: a name published for a file since deleted sends a reader to a
+  // test that is not there, which is the same fault from the other end.
+  const onDisk = readdirSync(join(REPO_ROOT, 'test'))
+    .filter((name) => name.endsWith('.mjs'))
+    .sort();
+  const published = publishedTestTree();
+  assert.ok(published.length, 'project-structure.html names no test files');
+
+  const missing = onDisk.filter((name) => !published.includes(name));
+  const stale = published.filter((name) => !onDisk.includes(name));
+  assert.deepEqual(
+    missing, [],
+    `test/ holds ${missing.length} file(s) project-structure.html does not`
+    + ` name: ${missing.join(', ')}`
+  );
+  assert.deepEqual(
+    stale, [],
+    `project-structure.html names ${stale.length} test file(s) test/ does`
+    + ` not hold: ${stale.join(', ')}`
+  );
+});
+
 /* ===== The nav's own geometry =====
    Everything below is decided by the stylesheet as text, so it runs without a
    browser - which is the point. A browser was the only thing that had ever
