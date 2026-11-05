@@ -85,6 +85,41 @@ its origin survives archiving into `## Complete`.
     note prose is fixed in place rather than queued - so leave them alone and do
     not re-open 0.15.2's entry over it.
   - From: Code Review Override - a debug mode the allow-list has never held
+- [ ] `overlayVars` publishes a negative `--playpx` on the grids `fitGrid`
+  refuses, and nothing reads that half of its domain
+  - **Issue**: `playBandPx` at `index.html:4030` is
+    `(grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH`, which goes negative whenever
+    a grid has fewer rows than the HUD and footer want. `fitGrid` hands back
+    exactly such a grid by design: when no font reaches the floor it returns the
+    notice grid, which needs only `NOTICE_ROWS` of 3. A 300x60 window gives
+    `{cols:30,rows:3,fits:false}` and `overlayVars(grid,60)` then answers
+    `{'--footerpx':'42px','--playpx':'-36px'}` - reproduced against the harness's
+    own `fitGrid` and `overlayVars`.
+
+    `handleResize` publishes the map unconditionally at `index.html:5268`,
+    before `frame()` ever reads `gridFits`, so the negative length reaches the
+    root element on any window in that band. What stops it costing a player
+    anything is circumstantial rather than intended: the overlay stays `hidden`
+    until a `touchstart`, and a viewport 60px tall shows the too-small notice.
+    `revealTouch` does not consult `gridFits`, so a touch arriving there would
+    size the controls against it.
+
+    The gap is the reason this is worth a line rather than the figure itself.
+    `overlayVars`' own docstring argues it exists above the DOM marker so the
+    pairing of the two properties is "where the suite can read it", and
+    `test/browser-shell.test.mjs:1016` reads it at fitting grids only - so the
+    half of its domain `fitGrid` is documented to produce is the half nothing
+    asks about.
+  - **Goal**: Decide which of the two this is, because they are different edits.
+    Either the band is a state the overlay should not be sized for at all, and
+    `handleResize` should skip the publish - or defer to `frame()` - when
+    `grid.fits` is false; or the figure should floor at 0, in `playBandPx` where
+    every caller gets it rather than at the one call site. Then cover it:
+    extend the `overlayVars` case to the grids `fitGrid` returns with
+    `fits:false`, which is the assertion that would have caught this, and assert
+    the property is a length a control can be sized against rather than only
+    that the two names are paired.
+  - From: Code Review Override - a debug mode the allow-list has never held
 
 ## Quick Wins
 
