@@ -6,7 +6,44 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
+- [ ] **A probe for how often a section's rocks reach the ship** - 0.15.2 quotes
+  a rate in `test/asteroid-field.test.mjs` and in the CHANGELOG that nothing in
+  the repository can rebuild: over 60,000 unseeded runs of the open-and-close
+  sequence, the terminal build shook 237 times and misread the walls the same
+  237 times, and the browser build shook 258 times and misread none. Those
+  figures came from a scratch script in `.tmp`, which is the thing this section
+  exists to replace. The reading is a natural probe - it walks a sequence many
+  times and reports a rate and a contingency rather than asserting one - and it
+  would also carry the figure that explains the pair, which is that a hit
+  jolts the terminal build's grid a whole column and the browser build's not at
+  all. Nothing is wrong today: the two cases it came from are seeded and
+  deterministic, so this is a figure needing a home rather than a defect.
+  - From: Measurement
+
 ### Create and Deploy GitHub Pages Override
+
+### UI/UX Override - the wiring below the canvas marker
+
+#### Found Issues
+
+- [ ] Nothing in the suite executes the page wiring below the canvas marker
+  - **Issue**: Not a defect. A browser pass on 11-05-26 drove that region and
+    found it sound: 128 assertions over the mute label on all three menu
+    screens, a muted round and two rematches, the on-screen FIRE and gamepad
+    seat, and the resize path at six window sizes, all passing, and every
+    figure reproduced on a second full run. What it showed instead is that it
+    was the first thing ever to run those lines.
+    `test/browser-shell.test.mjs` opens `index.html`, finds
+    `// ===== Canvas Setup & Sizing =====`, and asserts over the characters
+    after it, so the frame loop, the two `new VersusRound(...,game.state.muted)`
+    openings, the `versusRematch` call, the gamepad poll and `handleResize` are
+    covered by a reader and executed by nothing. The cost is already on the
+    record - `0.13.0`, `0.13.1` and `0.13.2` were all defects on that side of
+    the marker, and `0.13.2` was a defect in the cases written to pin it - and
+    the verification that just cleared the region leaves no check behind,
+    because it runs only when the agent runs.
+  - **Goal**: Resolve to [browser-wiring-regression-harness.prompt.md](.claude/prompts/browser-wiring-regression-harness.prompt.md)
+  - From: UI/UX Override - the wiring below the canvas marker
 
 ## Quick Wins
 
@@ -46,20 +83,6 @@ CHANGELOG. Each prints its method beside its numbers - grid, placement walk,
 ship heights, range band, frame rate - so a figure can be rebuilt from the
 repository alone instead of from scratch files in `.tmp`. Probes report; the
 assertions stay in `test/`.
-
-- [ ] **A probe for how often a section's rocks reach the ship** - 0.15.2 quotes
-  a rate in `test/asteroid-field.test.mjs` and in the CHANGELOG that nothing in
-  the repository can rebuild: over 60,000 unseeded runs of the open-and-close
-  sequence, the terminal build shook 237 times and misread the walls the same
-  237 times, and the browser build shook 258 times and misread none. Those
-  figures came from a scratch script in `.tmp`, which is the thing this section
-  exists to replace. The reading is a natural probe - it walks a sequence many
-  times and reports a rate and a contingency rather than asserting one - and it
-  would also carry the figure that explains the pair, which is that a hit
-  jolts the terminal build's grid a whole column and the browser build's not at
-  all. Nothing is wrong today: the two cases it came from are seeded and
-  deterministic, so this is a figure needing a home rather than a defect.
-  - From: Measurement
 
 ## Complete
 
