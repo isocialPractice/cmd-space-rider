@@ -45,6 +45,47 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [browser-wiring-regression-harness.prompt.md](.claude/prompts/browser-wiring-regression-harness.prompt.md)
   - From: UI/UX Override - the wiring below the canvas marker
 
+### Code Review Override - a debug mode the allow-list has never held
+
+#### Found Issues
+
+- [ ] Four comments illustrate the route-dependent mode with `?mode=tunnel`,
+  which `DEBUG_MODES` rejects
+  - **Issue**: `inputMode`'s docstring at `index.html:5000` and `index.html:5019`
+    argues that which seat a pad's A button landed in "depended on the route in,
+    since `?mode=tunnel&versus` leaves the solo game at `'playing'`", and
+    `test/browser-shell.test.mjs:722` and `:887` carry the same sentence beside
+    the cases that pin the behaviour. `tunnel` is not a debug mode and never has
+    been: `DEBUG_MODES` is `['mines','orbs','obstacleCollision','mineCollision','chaos']`
+    at `index.html:1283` and has held those five unchanged since `0.3.0-alpha`
+    (`git log -S"'tunnel'"` over `index.html` and `src/types.ts` is empty). The
+    page gates on `DEBUG_MODES.includes(explicitMode)` at `index.html:5313`, so
+    `?mode=tunnel` falls through to the title screen and leaves the solo game at
+    `'menu'` - confirmed by running the gate: `?mode=tunnel&versus` answers
+    `'menu'` and `?mode=chaos&versus` answers `'playing'`.
+
+    So the example inverts the point it is making. `'menu'` is the state these
+    passages contrast the route against, which makes `tunnel` the one value that
+    cannot demonstrate the contrast, and a reader who tries the link to see the
+    behaviour for themselves gets the title screen and no word about why. The
+    second cost is that four places in two files name `tunnel` as a mode a URL
+    can ask for, one of them a test file read as the record of what the wiring
+    below the canvas marker does.
+
+    Not a defect in `inputMode`. The reading it takes is right and the behaviour
+    it describes is real - a valid mode does leave the solo game at `'playing'`,
+    which is why it is the gate rather than `game.state.mode` that both call
+    sites now ask. Only the worked example is impossible.
+  - **Goal**: Substitute a mode the allow-list holds - `chaos` reproduces every
+    sentence as written, verified above - at all four sites: `index.html:5000`,
+    `index.html:5019`, `test/browser-shell.test.mjs:722` and
+    `test/browser-shell.test.mjs:887`. Nothing executes, so the suite staying at
+    930 of 930 is the whole check. The two copies in `CHANGELOG.md` at `:360`
+    and `:391` are already corrected and are not part of this item - release
+    note prose is fixed in place rather than queued - so leave them alone and do
+    not re-open 0.15.2's entry over it.
+  - From: Code Review Override - a debug mode the allow-list has never held
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine

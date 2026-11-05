@@ -1,5 +1,43 @@
 # Changelog
 
+## [Unreleased]
+
+### Notes
+
+- A review turn. `## Current` held no items when the run opened, which is
+  **Active TODO Items** case 1 - no override, nothing workable under the header -
+  so nothing was built, no version was applied, and the manifest was left at
+  `1.0.0-alpha.0.15.2`. The queue was empty for a mechanical reason rather than
+  because the roadmap ran out: the run before this one was an override run,
+  working the two findings the 0.15.1 review filed, and the refill step is
+  skipped on an override run. So the item the 0.15.2 review left in
+  `## Measurement` had been sitting in its roadmap section unpulled, and the
+  refill has now moved it into `## Current` for the next run - a probe that
+  rebuilds the 60,000-run figures the `through a jolt` case quotes in its own
+  comment. `## Current` holds two unchecked items and no paused ones.
+- The suite was run against the source as it stands: 930 of 930 passing, nothing
+  skipped, across 21 consecutive full runs, the last of them after this turn's
+  own edits. That is a statement that nothing is failing rather than a reading on
+  0.15.2's flake fix - the case that fix repaired failed about four runs in a
+  thousand, so 21 runs carried about one chance in twelve of reaching it at all.
+  The 60,000-run walk recorded under 0.15.2 is that fix's evidence, and the item
+  queued this run is what would let anybody rebuild it. `npm run probe` with no
+  probe name prints its usage table and the flags each probe reads, which is what
+  it is meant to do.
+- What the turn wrote, beyond this entry and the queue: two request flags under
+  `.claude/`, which this repository does not track, so the code review reads the
+  whole repository rather than an empty diff and an unattended browser pass
+  drives the page wiring below the `// ===== Canvas Setup & Sizing =====` marker
+  that no case in the suite can execute. The browser pass is scoped to the mute
+  label on the three menu screens, a split-screen round opened and rematched
+  while muted, and the gamepad and FIRE-button seat in a round - the first from
+  0.15.0 and verified so far only by buffer comparison, the other two from below
+  the marker.
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current` and stays dormant. `README.md` is 126 lines and 8,420 characters,
+  under both the 300-line and 30,000-character thresholds, so the over-long
+  README check decides nothing and the header is neither work nor a refusal.
+
 ## [1.0.0-alpha.0.15.2] - 2026-11-04
 
 ### Fixed
@@ -319,7 +357,7 @@
   the arrows to neither pilot. So one controller held pilot 1's boost and both
   rolls, pilot 2's gun, and nobody's steering, in the one mode whose premise is
   that the two fly the same thing - and which seat the trigger landed in
-  depended on the route in, since `?mode=tunnel&versus` leaves the solo game at
+  depended on the route in, since `?mode=chaos&versus` leaves the solo game at
   `'playing'` and the same button then fired pilot 1 instead.
 
   The answer taken is that the whole pad flies one pilot. A controller is one
@@ -350,7 +388,7 @@
   button is pilot 1's trigger for every frame of the flight and the panel's
   confirm key from the frame it settles. The panel answers `'menu'` outright
   rather than handing back the solo game's mode, so the route in does not decide
-  this either: read back, `?mode=tunnel&versus` would leave a panel reading
+  this either: read back, `?mode=chaos&versus` would leave a panel reading
   `'playing'` and answering A with a trigger that steps nobody, which is the
   same route-dependent answer the reading exists to remove arriving one screen
   later. The on-screen FIRE button comes back with it, on the same reading.
