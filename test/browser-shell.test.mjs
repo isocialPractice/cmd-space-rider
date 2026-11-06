@@ -719,7 +719,7 @@ test('the page polls the pad once a frame and releases only what it pressed', ()
 // So through a whole round one controller held pilot 1's boost and both rolls,
 // pilot 2's gun, and nobody's steering - the stick sent arrows, which
 // VERSUS_BINDINGS gives to neither pilot. Which seat the trigger landed in even
-// depended on the route in, since `?mode=tunnel&versus` leaves the solo game at
+// depended on the route in, since `?mode=chaos&versus` leaves the solo game at
 // 'playing' and the same button then fired pilot 1.
 //
 // A pad is one pair of hands, so the whole of it flies one pilot. What that
@@ -884,7 +884,7 @@ test('a settled round hands the pad back the key its panel waits on', () => {
   const r = settledRound();
 
   // Whatever the solo game behind it is doing, because the panel is a screen of
-  // the round's own: `?mode=tunnel&versus` leaves that game at 'playing', and a
+  // the round's own: `?mode=chaos&versus` leaves that game at 'playing', and a
   // panel reading its mode back would answer A with a trigger on that route and
   // the confirm key on the other. The route is not meant to decide this.
   for (const mode of ['menu', 'playing', 'dead', 'nameEntry']) {
@@ -1133,6 +1133,85 @@ test('browser: each band is published under the property name that belongs to it
     assert.equal(
       vp.playPx, shape.h - vp.footerPx - browser.HUD_ROWS * cellH,
       `${where}: --playpx is not what the HUD's rows and --footerpx leave of the viewport`
+    );
+  }
+});
+
+/**
+ * Viewports fitGrid refuses, which is the half of overlayVars' domain the
+ * SHAPES above never reach. Every case there reports `fits: true`, and the
+ * reason that mattered is that the two figures are published from a grid the
+ * fitter hands back either way: handleResize sets both properties on the root
+ * element before frame() has read `gridFits`, so the lengths reach the CSS on a
+ * window the game will not draw in.
+ *
+ * All three of fitGrid's exits are here, because they refuse on different
+ * grounds and leave different row counts behind:
+ *
+ * - The notice grid, returned when no font reaches MIN_WIDTH x MIN_HEIGHT. It
+ *   needs only NOTICE_ROWS of 3, so it is the exit that produces a grid with
+ *   fewer rows than the HUD's 3 and the footer's 2 want. 300x60 is the window
+ *   that published `--playpx: -36px`; 240x56 is the same shortfall settled at a
+ *   smaller font, so the figure is not a property of one cell height; 1180x80
+ *   is refused on height while having columns to spare.
+ * - The smallest grid there is, returned when nothing holds even the notice.
+ *   100x20 takes that exit with 2 rows, one short of the footer alone.
+ * - A refusal with room to spare below it. 300x110 and 348x159 are refused on
+ *   columns and have rows above the two bands, so they carry a real play band
+ *   while the game still will not draw - and 348x159 sits directly under
+ *   349x160, the fitting floor the SHAPES list ends on.
+ *
+ * 300x100 and 640x96 are the boundary itself: exactly HUD_ROWS + FOOTER_ROWS
+ * rows, where the band is 0 before any flooring.
+ */
+const REFUSED_SHAPES = [
+  { w: 300, h: 60 }, { w: 400, h: 80 }, { w: 240, h: 56 }, { w: 1180, h: 80 },
+  { w: 100, h: 20 },
+  { w: 300, h: 100 }, { w: 640, h: 96 },
+  { w: 300, h: 110 }, { w: 348, h: 159 }, { w: 160, h: 120 },
+];
+
+test('browser: the play band is a length a control can be sized against on every grid', () => {
+  // --playpx is what --ctl and --stick are solved out of, so what it has to be
+  // is not merely paired with --footerpx but usable: the controls are sized by
+  // `min()` against it, and a negative length makes that arithmetic answer with
+  // the negative. `playBandPx` subtracted the HUD's and the footer's rows from
+  // the grid's own, which is the right figure on every grid the game plays on
+  // and below zero on every grid fitGrid refuses for being too short - so this
+  // walks the refusals, which is where the sign could go.
+  //
+  // The assertion the pairing test makes about the partition is deliberately
+  // not repeated here. On a refused grid the HUD's rows and the footer's band
+  // already claim more than the viewport holds, so what is left of it is
+  // negative and the band is floored off that: the two figures stop being a
+  // partition at the point the grid stops being playable, and that is the
+  // behaviour rather than a gap in the check.
+  for (const shape of REFUSED_SHAPES) {
+    const vp = viewport(shape);
+    const { cellH } = vp.grid;
+    const where = `${shape.w}x${shape.h} (${vp.grid.cols}x${vp.grid.rows})`;
+    assert.equal(vp.grid.fits, false, `${where}: is a grid fitGrid refuses`);
+    assert.deepEqual(
+      Object.keys(vp.vars).sort(),
+      ['--footerpx', '--playpx'],
+      `${where}: the page publishes exactly the two properties the overlay rules read`
+    );
+    assert.ok(
+      vp.playPx >= 0,
+      `${where}: --playpx is ${vp.playPx}px, a length nothing can be sized against`
+    );
+    assert.equal(
+      vp.playPx % cellH, 0,
+      `${where}: --playpx is ${vp.playPx}px, not a whole number of ${cellH}px rows`
+    );
+    // Floored rather than clamped to something arbitrary: a grid with no rows
+    // between the two bands has no room for a control, and a grid with rows to
+    // spare keeps them. Pinning both sides is what stops the floor being
+    // written as a constant that happens to be non-negative.
+    const rowsLeft = vp.grid.rows - browser.HUD_ROWS - browser.FOOTER_ROWS;
+    assert.equal(
+      vp.playPx, Math.max(0, rowsLeft) * cellH,
+      `${where}: --playpx is ${vp.playPx}px, not the ${Math.max(0, rowsLeft)} rows left between the bands`
     );
   }
 });

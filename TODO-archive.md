@@ -3819,3 +3819,64 @@ still be found by name.
     once and may be the better home; either way it should be one of the two
     rather than neither.
   - From: Code Review Override - the mute label's missing screens
+
+## Archived 11-06-26
+
+- [x] The repository's `.gitignore` is not in the repository
+  - **Issue**: `git ls-files --error-unmatch .gitignore` answers `did not match
+    any file(s) known to git` and `git status --short --ignored .gitignore`
+    answers `!! .gitignore`, so the file has never been committed. The global
+    excludes file hides every dotfile with a bare `.*`, which is the same trap
+    `.gitignore` itself already answers for two other files - it carries a `!`
+    line and a paragraph of reasoning for `.gitattributes` and another for
+    `.nojekyll` - and never answers for itself. What it costs is every rule in
+    it: a clone ignores nothing, so `out/`, `node_modules/` and
+    `test-results/ui-ux-tester.agent/` all read as untracked there, and the LF
+    pinning the `.gitattributes` note describes as settled "for every editor,
+    on every machine" is settled only on this one, because the file that
+    un-ignores `.gitattributes` is not in the clone either.
+  - **Goal**: Add a `!.gitignore` line beside the existing `!.gitattributes`
+    and `!.nojekyll` ones, with a comment in the same voice saying why a
+    dotfile needs un-ignoring here, then `git add -f .gitignore` once - the
+    `-f` is needed for the first add, since the global rule still hides it
+    until the file is tracked. Worth checking the same way afterwards: a
+    `git ls-files .gitignore` that prints the path is the whole confirmation.
+  - From: UI/UX Override - the mute label on the menu screens
+- [x] Verify git tracks `.gitignore` once this run's commit has landed.
+  `git ls-files .gitignore` printing the path is the whole confirmation, and no
+  call that writes the rule can have it: the line takes the file from `!!` to
+  `??`, and the index only changes at the commit afterwards.
+  - From: version.control = null
+- [x] `the walls come back with the tunnel` fails about one run in twelve
+  - **Issue**: The per-build test at `test/asteroid-field.test.mjs:409` renders
+    a quiet run, opens and closes an asteroid section, and asserts the wall
+    glyphs afterwards are the set that was there before. On 11-03-26 it failed
+    once in 12 full-suite runs, and passed 926/926 on the other 11. The report
+    was `actual: ["█","▓"]` against `expected: ["╠","╣","█","░","▒","▓"]`, so
+    `before` held all six and the render after the section came back with two
+    of the four depth bands and neither ring end. Which build it was did not
+    survive the output, since both carry the same test name.
+
+    An unseeded draw is in the path it walks. `RNG.next` is `Math.random` by
+    default (`src/types.ts:356`), the two tests above this one seed and then
+    hand it back with `build.seedRng(null)` (lines 316 and 347), and this test
+    neither seeds nor is isolated from them - so it runs on real
+    `Math.random`. `openAsteroidField` draws once per rock through
+    `rand(20, RECYCLE_Z)` (`src/game.ts:975`), which is the only randomness the
+    sequence reaches.
+
+    Not from the turn that filed this. The only code 0.15.1 added is
+    `test/repo-files.test.mjs`, which reads `.gitignore` and shells out to
+    `git check-ignore`; it imports `REPO_ROOT` alone and touches no engine,
+    render or game state. The rate is the same order as the suite's age, so
+    this reads as long-standing rather than new.
+  - **Goal**: Find the draw first and decide second, because the two answers are
+    opposite. Walk the test under `seedRng` across a range of seeds until one
+    reproduces the two-glyph render, then read what that seed makes the section
+    do. If the walls genuinely do not come back for some draws, the defect is in
+    the engine and seeding the test would bury it; if the sequence is sound and
+    only the comparison is loose - a ring end that happens to be off screen two
+    frames later, say - then the test wants the seed the two above it already
+    use, and a note saying which. Do not reach for the seed before the
+    reproduction: a green suite is the thing this finding is warning about.
+  - From: Found Issue Override - the asteroid field's wall comparison

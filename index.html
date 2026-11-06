@@ -4025,9 +4025,21 @@ function footerBandPx(grid,viewportH){
  * neither: what a control costs is driven by how wide the viewport is, while
  * the room for it is driven by how tall the viewport is, so the two came apart
  * on anything short and wide.
+ *
+ * Floored at 0 because fitGrid hands back grids with fewer rows than the HUD
+ * and the footer want: when no font reaches the game's floor it returns the
+ * notice grid, which needs only NOTICE_ROWS of 3, and when nothing holds even
+ * the notice it returns the smallest grid there is. The subtraction goes
+ * negative on those, and a 300x60 window published `--playpx: -36px` to the
+ * root element on every resize - handleResize publishes the map before frame()
+ * ever reads `gridFits`, so the length reached the CSS whether or not the game
+ * was drawing. Nothing a control can be sized against is a negative length, and
+ * a grid with no rows between the two bands has no play band rather than a
+ * backwards one. Floored here rather than at the call site so every caller gets
+ * the same answer, which is the reason the figure is a function at all.
  */
 function playBandPx(grid){
-  return (grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH;
+  return max(0,(grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH);
 }
 
 /**
@@ -4997,7 +5009,7 @@ function padsKeys(pads,mode){
  * exactly where it stood. So a pad or a FIRE button read off `game.state.mode`
  * through a round sends ENTER, which is pilot 2's trigger in VERSUS_BINDINGS:
  * the A button fired the other player's gun for the whole round. Which seat it
- * landed in even depended on the route in, since `?mode=tunnel&versus` leaves
+ * landed in even depended on the route in, since `?mode=chaos&versus` leaves
  * the solo game at 'playing' and the same button then fired pilot 1.
  *
  * A round owns the frame outright, which is the reading every other call below
@@ -5016,7 +5028,7 @@ function padsKeys(pads,mode){
  * A settled round answers 'menu' outright rather than handing back the solo
  * game's mode, because the panel is a screen of the round's own and the game
  * behind it is not what the player is looking at. Handing the mode back would
- * leave `?mode=tunnel&versus` with a panel that reads 'playing', where A is a
+ * leave `?mode=chaos&versus` with a panel that reads 'playing', where A is a
  * trigger with nobody left to fire it - the same route-dependent answer this
  * reading exists to remove, arriving one screen later.
  */
