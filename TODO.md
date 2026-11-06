@@ -48,6 +48,39 @@ its origin survives archiving into `## Complete`.
   - **Goal**: Resolve to [touch-overlay-on-refused-grid.prompt.md](.claude/prompts/touch-overlay-on-refused-grid.prompt.md)
   - From: UI/UX Override - the overlay on a grid the fitter refuses
 
+### Code Review Override - the element count the stub DOM is described by
+
+- [ ] Two places describe the stub DOM as holding "the six elements the markup
+  declares", and the markup declares seven
+  - **Issue**: `stubDom`'s docstring at `test/helpers.mjs` says it hands back "a
+    document holding the six elements index.html declares", and
+    `docs/development.html` says the harness evaluates the script against "a
+    stub DOM - a window, the six elements the markup declares, a navigator, a
+    clock, and an animation frame queue". The markup declares seven ids:
+    `c`, `crt`, `touch`, `stick`, `nub`, `fire` and `boost`, at
+    `index.html:124-129`. Six is the number the page *fetches* -
+    `getElementById` is called for all of those but `crt`, which is a CSS layer
+    driven by a body class instead (`applyCrt` at `index.html:5307` toggles
+    `crt` on the body, and `body.crt #crt{opacity:1}` at `index.html:38` does
+    the rest), so it needs no handle and the stub rightly has none.
+
+    So the figure is right about the stub and wrong about where it comes from,
+    which costs the sentence the one interesting thing in it. A reader
+    extending the harness counts the markup, finds seven, and either adds a
+    `crt` stub nothing will ever ask for or concludes the six are incomplete -
+    and the actual reason there is no seventh handle, that the CRT overlay is
+    not driven through one, is what the sentence currently hides. The published
+    docs page is the half that matters most, being the one a stranger reads.
+  - **Goal**: Say what the six are counted from rather than changing the count -
+    "the six elements the page fetches by id" reads correctly in both places -
+    and in `test/helpers.mjs` add the clause that makes it worth knowing: that
+    `#crt` is declared but never fetched, because the overlay is toggled by a
+    class on the body. The release note's copy of the same phrase was corrected
+    in place on 11-06-26 and is not part of this item, so leave `CHANGELOG.md`
+    alone. Nothing executes either sentence, so the suite staying at 959 of 959
+    is the whole check.
+  - From: Code Review Override - the element count the stub DOM is described by
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine

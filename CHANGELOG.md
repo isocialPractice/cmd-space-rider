@@ -1,42 +1,178 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.15.3] - 2026-11-06
+
+### Added
+
+- `loadBrowserPage` in `test/helpers.mjs`, and `test/browser-wiring.test.mjs`
+  with 28 cases over it: the page wiring below the
+  `// ===== Canvas Setup & Sizing =====` marker now runs in the suite instead of
+  being read as text. `loadBrowserEngine` slices the inline script at that
+  marker, so the frame loop, the two `VersusRound` openings, the `versusRematch`
+  call, the gamepad poll, the touch wiring and `handleResize` were covered by a
+  reader and executed by nothing - and `0.13.0`, `0.13.1` and `0.13.2` were all
+  defects on that side of it, `0.13.2` in the cases written to pin it. A
+  browser pass on 11-05-26 drove the region and found it sound, which is what
+  identified the gap: the only thing that had ever run those lines was an agent
+  that runs once and leaves no check behind.
+
+  The route is a stub DOM in Node rather than a browser driver, because nothing
+  below the marker needs a rasterizer. The whole surface it reaches for is a
+  window, the six elements the page fetches by id, a navigator, a clock, and an
+  animation frame queue, and two of those carry the design: `measureText` is the
+  only reading that decides anything, answered from Courier New's
+  `1229/2048` em - the one measured input `test/probes/glyph-tuning.mjs`
+  establishes as safe to restate, being a property of the font file rather than
+  of a browser - so the grid is deterministic in Node; and
+  `requestAnimationFrame` is a manual pump, which is what makes it quick. The
+  browser pass took between thirty seconds and three minutes a round because
+  both pilots had to wreck in real time. The same rounds here are 28 cases in
+  185ms.
+
+  What it asserts: the ` MUTED ` label at `screen.width - 9` on the last row at
+  colour index 11 on index 0, on the title, name entry and game over screens and
+  deliberately not on the debug menu, with the run footer's own copy read on the
+  frame the key lands; a round opened with `V` from a muted title screen
+  carrying the mute into both pilots and opening no tone and writing no pitch
+  for its life, and the same of two consecutive rematches; `M` inside a round
+  moving both pilots together, with the sound following it out and back; the
+  on-screen `FIRE` button and a standard-layout pad's A button each reading
+  `SPACE` in a live round, `ENTER` on a settled one and `ENTER` on the title
+  screen, with `fireVolley` counted per pilot so "which ship fired" is a number
+  rather than a bullet array that moves between two reads; `ESCAPE` dropping a
+  round and cutting the hum with the title screen still standing behind it; the
+  solo game neither stepped nor handed a keypress nor fed a frame time while a
+  round runs; a round never jolted and a solo run jolted; and `handleResize`
+  re-seating both halves and both pilots' engine grids on `versusLayout`'s own
+  half, each half keeping its own top-left corner over an unbroken seam.
+
+  Silence is counted two ways, which is the trap the file states before its
+  assertions. The engine hum is opened once and held open and only its frequency
+  moves, so a count of oscillators alone reads a running hum as silence on every
+  frame after the first - and the counters are reset *before* the change being
+  measured, never after, since a reset placed after a round opens wipes the one
+  oscillator that round will ever start. That is not a hypothetical: the control
+  case here failed on exactly that, because the frame which reads `ENTER` is
+  also the frame which opens the hum. Every silence assertion has an unmuted
+  counterpart proving the instrument can still hear, and the recording context
+  reports `state: 'running'` on an advancing clock because `RetroAudio.live()`
+  drops everything scheduled against anything else.
+
+  Measured against 23 mutations of the wiring, which is the reading that says
+  the cases are checks rather than company for the lines: 17 fail the new file.
+  Of the six that do not, two are equivalent mutants - `versusRematch` replaced
+  by its own body inlined, and the `audio.engineOff()` on the `ESCAPE` branch,
+  which the next frame's `audio.frame` cuts anyway - two are already held by the
+  source-text cases in `test/browser-shell.test.mjs`, one was mis-specified
+  against the solo game's shake, which is `0` through a round, and the last is
+  the mute carried into a `?versus` round. That one cannot be caught by any run
+  of the page: nothing stores the setting across a load, so the argument is
+  always `false` and no behaviour distinguishes it from its absence. It is held
+  as text, by a case that counts the openings rather than matching them, and the
+  two kinds of check are not substitutes.
+
+- A case in `test/browser-shell.test.mjs` walking `overlayVars` over the grids
+  `fitGrid` refuses, which is the half of its domain the existing `SHAPES` list
+  never reached - every shape there reports `fits: true`. All three of
+  `fitGrid`'s exits are in it: the notice grid at `300x60`, `400x80`, `240x56`
+  and `1180x80`, which is the exit that returns fewer rows than the two bands
+  want; the smallest grid there is at `100x20`, two rows where the footer alone
+  wants two; and a refusal with room to spare at `300x110` and `348x159`, which
+  sits directly under the `349x160` the fitting floor ends on. `300x100` and
+  `640x96` are the boundary, at exactly `HUD_ROWS + FOOTER_ROWS` rows.
+
+### Fixed
+
+- `playBandPx` published a negative `--playpx` on every grid `fitGrid` refuses
+  for being too short. The figure is
+  `(grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH` and the fitter hands back grids
+  with fewer rows than those five by design: when no font reaches the game's
+  floor it returns the notice grid, which needs only `NOTICE_ROWS` of 3, and
+  when nothing holds even the notice it returns the smallest grid there is. A
+  `300x60` window gave `{cols:30,rows:3,fits:false}` and `overlayVars(grid,60)`
+  then answered `{'--footerpx':'42px','--playpx':'-36px'}`.
+
+  `handleResize` publishes the map unconditionally, before `frame()` has read
+  `gridFits`, so the negative length reached the root element on any window in
+  that band whether or not the game was drawing. What stopped it costing a
+  player anything was circumstantial: the overlay stays `hidden` until a
+  `touchstart`, and a viewport 60px tall shows the too-small notice instead of a
+  game - but `revealTouch` does not consult `gridFits`, so a touch arriving
+  there would size the controls against it.
+
+  Floored at 0, in `playBandPx` where every caller gets the same answer rather
+  than at the one call site. A grid with no rows between the two bands has no
+  play band rather than a backwards one, and `0px` is a length a control can be
+  sized against where `-36px` is not. Deferring the publish on a refused grid
+  was the other candidate and is the worse one: it leaves the properties holding
+  a positive length measured against a window that is gone, or never sets them
+  at all on a page opened in that band.
+
+- `loadBrowserPage`'s frame pump stepped nothing on its third call, against a
+  docstring promising "one stepped frame per call". `1000/30` has no binary
+  representation, so a clock advanced by it repeatedly handed the loop a gap an
+  ulp short of the `FRAME_MS` the page computes the same way, and `frame()`
+  returned at its own `accumulator<FRAME_MS` guard without stepping. Counted
+  against the solo game's `trackFrameRate`, 500 single pumps from a fresh page
+  produced 499 steps, the miss landing on call 3. Nothing asserted today was
+  wrong - the 28 new cases read end states over generous frame counts rather
+  than exact ones - but the rig is shared, and the next case to count frames
+  exactly would have been short one without saying so. The pump now advances a
+  frame plus a nanosecond, which clears the threshold every time and cannot step
+  twice: the loop subtracts one `FRAME_MS` per call and zeroes a runaway
+  accumulator itself. 500 pumps now give 500 steps.
+
+- Four comments illustrated the route-dependent pad reading with
+  `?mode=tunnel&versus`, which `DEBUG_MODES` rejects. `inputMode`'s docstring at
+  `index.html:5000` and `index.html:5019`, and `test/browser-shell.test.mjs:722`
+  and `:887` beside the cases that pin the behaviour, all argued that which seat
+  a pad's A button landed in depended on the route in, "since
+  `?mode=tunnel&versus` leaves the solo game at `'playing'`". `tunnel` is not a
+  debug mode and never has been: the allow-list is
+  `['mines','orbs','obstacleCollision','mineCollision','chaos']` and has held
+  exactly those five since the first commit - `git log -S"'tunnel'"` over
+  `index.html` and `src/types.ts` returns nothing at all. The page gates on
+  `DEBUG_MODES.includes(explicitMode)`, so `?mode=tunnel` falls through to the
+  title screen and leaves the solo game at `'menu'` - which is the state those
+  passages contrast the route against, making `tunnel` the one value that cannot
+  demonstrate the contrast. Confirmed by running the gate: `?mode=tunnel&versus`
+  answers `'menu'`, `?mode=chaos&versus` answers `'playing'`.
+
+  `chaos` substituted at all four sites, which reproduces every sentence as
+  written. Nothing about `inputMode` changed - the reading it takes is right and
+  the behaviour it describes is real, and only the worked example was impossible.
+  The two copies in this file were corrected in place on 11-05-26 and are not
+  touched again.
 
 ### Notes
 
-- A review turn. `## Current` held no items when the run opened, which is
-  **Active TODO Items** case 1 - no override, nothing workable under the header -
-  so nothing was built, no version was applied, and the manifest was left at
-  `1.0.0-alpha.0.15.2`. The queue was empty for a mechanical reason rather than
-  because the roadmap ran out: the run before this one was an override run,
-  working the two findings the 0.15.1 review filed, and the refill step is
-  skipped on an override run. So the item the 0.15.2 review left in
-  `## Measurement` had been sitting in its roadmap section unpulled, and the
-  refill has now moved it into `## Current` for the next run - a probe that
-  rebuilds the 60,000-run figures the `through a jolt` case quotes in its own
-  comment. `## Current` holds two unchecked items and no paused ones.
-- The suite was run against the source as it stands: 930 of 930 passing, nothing
-  skipped, across 21 consecutive full runs, the last of them after this turn's
-  own edits. That is a statement that nothing is failing rather than a reading on
-  0.15.2's flake fix - the case that fix repaired failed about four runs in a
-  thousand, so 21 runs carried about one chance in twelve of reaching it at all.
-  The 60,000-run walk recorded under 0.15.2 is that fix's evidence, and the item
-  queued this run is what would let anybody rebuild it. `npm run probe` with no
-  probe name prints its usage table and the flags each probe reads, which is what
-  it is meant to do.
-- What the turn wrote, beyond this entry and the queue: two request flags under
-  `.claude/`, which this repository does not track, so the code review reads the
-  whole repository rather than an empty diff and an unattended browser pass
-  drives the page wiring below the `// ===== Canvas Setup & Sizing =====` marker
-  that no case in the suite can execute. The browser pass is scoped to the mute
-  label on the three menu screens, a split-screen round opened and rematched
-  while muted, and the gamepad and FIRE-button seat in a round - the first from
-  0.15.0 and verified so far only by buffer comparison, the other two from below
-  the marker.
+- The suite is at 959 of 959, from 930: 28 cases in the new
+  `test/browser-wiring.test.mjs` and one in `test/browser-shell.test.mjs`, which
+  takes that file to 66. Four consecutive full runs came back green after this
+  turn's last edit, nothing skipped.
+- An override run, working three found issues: one the 11-05-26 browser pass
+  raised and two the code review of the same day raised. The regular `## Current`
+  item - the probe that would rebuild `0.15.2`'s 60,000-run figures - was left
+  unchecked and in place for the next run, which is what an override run does
+  with the queue it is standing in front of.
+- `0.15.3` carries the 11-05-26 review turn as well as this one. That turn built
+  nothing and applied no version: it verified the suite at 930 of 930 and wrote
+  the two request flags whose findings are the three items this release closes.
+- `docs/development.html` said of the region below the marker that "nothing in
+  the suite can run it", which was true until this release and is not now. The two
+  routes into the inline script are described there instead, with the two
+  readings the stub DOM cannot take - the painted pixels and real pointer
+  plumbing - named rather than faked, the way `glyph-tuning` names its
+  rasterizer half. `docs/project-structure.html` names the new test file in its
+  test tree, which `test/docs-site.test.mjs` holds it to.
 - `### Create and Deploy GitHub Pages Override` stays a bare header under
   `## Current` and stays dormant. `README.md` is 126 lines and 8,420 characters,
   under both the 300-line and 30,000-character thresholds, so the over-long
   README check decides nothing and the header is neither work nor a refusal.
+- Every file written this run went back LF. `git ls-files --eol` reports `w/lf`
+  for all 71 tracked text files carrying a line ending, with `.nojekyll` empty
+  and `hero.png` binary, and the one new file was written LF to match.
+  `git diff --numstat` shows line-scoped diffs rather than whole-file rewrites.
 
 ## [1.0.0-alpha.0.15.2] - 2026-11-04
 
