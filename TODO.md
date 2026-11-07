@@ -22,64 +22,40 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the overlay on a grid the fitter refuses
+### UI/UX Override - the label clip on a wide short window
 
 #### Found Issues
 
-- [ ] The touch overlay is still laid out on a window the game refuses to draw
-  - **Issue**: The floor on `playBandPx` works. A browser pass on 11-06-26 read
-    `--playpx` back off the root element at 36 refused viewports and it is
-    `0px` at every one of them, never the negative length 0.15.3 removed, and
-    `--ctl` genuinely collapses the control's content box to zero width there.
-    What the same pass found is a layer up. `revealTouch` sets
-    `touchLayer.hidden=false` on the first `touchstart` and nothing ever
-    consults `gridFits` again, so a window below the grid floor keeps a
-    laid-out overlay on a screen the notice owns. Eight of the 36 paint ink
-    either over the notice or off the window: at 320x140 and 300x140 - both
-    carrying `--playpx: 36px`, a positive length with the floor not engaged, so
-    this predates the floor and is not its to fix - the stick ring sits on
-    `Please resize your window.` with `FIRE` on the end of the same line. At
-    320x60 and 400x80 nothing reaches the notice glyphs, but the `FIRE` and
-    `BOOST` labels are still painted at full size, 31.2px and 39px wide,
-    spilling about 13.6px past each side of a 4px control, because a flex
-    container with a zero-width content box does not clip its text - `BOOST`
-    reaches x 321.5 on a 320px-wide window. Screenshots are beside the agent
-    log, prefixed `ui-ux-tester.overlay1106`.
-  - **Goal**: Resolve to [touch-overlay-on-refused-grid.prompt.md](.claude/prompts/touch-overlay-on-refused-grid.prompt.md)
-  - From: UI/UX Override - the overlay on a grid the fitter refuses
-
-### Code Review Override - the element count the stub DOM is described by
-
-- [ ] Two places describe the stub DOM as holding "the six elements the markup
-  declares", and the markup declares seven
-  - **Issue**: `stubDom`'s docstring at `test/helpers.mjs` says it hands back "a
-    document holding the six elements index.html declares", and
-    `docs/development.html` says the harness evaluates the script against "a
-    stub DOM - a window, the six elements the markup declares, a navigator, a
-    clock, and an animation frame queue". The markup declares seven ids:
-    `c`, `crt`, `touch`, `stick`, `nub`, `fire` and `boost`, at
-    `index.html:124-129`. Six is the number the page *fetches* -
-    `getElementById` is called for all of those but `crt`, which is a CSS layer
-    driven by a body class instead (`applyCrt` at `index.html:5307` toggles
-    `crt` on the body, and `body.crt #crt{opacity:1}` at `index.html:38` does
-    the rest), so it needs no handle and the stub rightly has none.
-
-    So the figure is right about the stub and wrong about where it comes from,
-    which costs the sentence the one interesting thing in it. A reader
-    extending the harness counts the markup, finds seven, and either adds a
-    `crt` stub nothing will ever ask for or concludes the six are incomplete -
-    and the actual reason there is no seventh handle, that the CRT overlay is
-    not driven through one, is what the sentence currently hides. The published
-    docs page is the half that matters most, being the one a stranger reads.
-  - **Goal**: Say what the six are counted from rather than changing the count -
-    "the six elements the page fetches by id" reads correctly in both places -
-    and in `test/helpers.mjs` add the clause that makes it worth knowing: that
-    `#crt` is declared but never fetched, because the overlay is toggled by a
-    class on the body. The release note's copy of the same phrase was corrected
-    in place on 11-06-26 and is not part of this item, so leave `CHANGELOG.md`
-    alone. Nothing executes either sentence, so the suite staying at 959 of 959
-    is the whole check.
-  - From: Code Review Override - the element count the stub DOM is described by
+- [ ] `overflow:hidden` shears the `BOOST` label on a fitted window wider than
+  about 1620px and shorter than about 190px
+  - **Issue**: Not the overlay change, which passes - `#touch` is `hidden` at
+    all 50 refused viewports swept from 300x60 to 1000x300, and the notice has
+    the screen to itself at every one. This is the other half of the same turn:
+    the `overflow:hidden` added to `#fire` and `#boost` at `index.html:117`. It
+    does clip, and on a refused grid that is the whole point - at 320x60 with
+    the overlay forced up, the bands either side of the two controls carry 0
+    cyan and 0 magenta pixels, against 30 and 74 with the one declaration
+    removed. On a window the game draws on it can clip the glyphs instead of a
+    stray edge. `--ctl` subtracts `2vw`, so a window of a given height gives a
+    smaller control the wider it gets: at 1920x160, a fitted grid of 480x20
+    publishing `--playpx: 120px`, `#fire` solves to 36px against a 39px `BOOST`
+    label, and the button reads `OOST` with the `B` and the `T` sheared off.
+    The band is bounded and extreme - about 1620px wide and up at 160-165px
+    tall, 2020px and up at 170-175px, 2360px and up at 180-185px, and nothing
+    at 150px or at 190px - but every window in it is one the game is drawing
+    on. Before this change those same windows painted the whole label about
+    1.5px past each side of the circle, onto the tunnel, which cost a player
+    nothing. The pair of screenshots is beside the agent log, as
+    `ui-ux-tester.overlay1107.9-fitted-1920x160-clipped.png` and
+    `ui-ux-tester.overlay1107.10-fitted-1920x160-unclipped.png`.
+  - **Goal**: A decision rather than a defect to chase, and cosmetic either
+    way. Accept it and say so where the rule is argued, since the comment
+    above `#fire,#boost` claims the declaration "costs one declaration and
+    holds at any size" without naming the sizes where what it costs is a
+    readable label; or solve the label's font size out of `--ctl` the way the
+    box already is, so the text shrinks with the circle instead of being cut
+    by it.
+  - From: UI/UX Override - the label clip on a wide short window
 
 ## Quick Wins
 
@@ -125,53 +101,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 190 earlier items in `TODO-archive.md`, newest last.
+> 192 earlier items in `TODO-archive.md`, newest last.
 
-- [x] `docs/project-structure.html` lists every test file but the one 0.15.1 added
-  - **Issue**: The page's own `<meta name="description">` is "Every file in the
-    CMD Space Rider repository and what it holds", and its `test/` listing
-    names 22 `.test.mjs` files with a comment each. The folder holds 23:
-    `repo-files.test.mjs` is the only one absent, and the same turn that added
-    it edited this page's root listing to add `.gitignore`. So a reader of the
-    tree counts a suite one file short of the one `npm test` runs, on the page
-    the site publishes as the file census. The omission is also the second of
-    its kind here - `docs/development.html`'s Tests paragraph enumerates what
-    the suite covers ("both builds, the agreement between them, the
-    documentation site, and the measurement rig") and the repository's own
-    ignore rules are now a fifth thing it covers, though that sentence claims
-    no exhaustiveness and so is the lesser half.
-  - **Goal**: Add the `repo-files.test.mjs` line to the `test/` listing beside
-    `parity.test.mjs`, aligned on the same comment column, saying what it
-    holds - the `!` lines in `.gitignore`, read against git's own answer. Then
-    close the gap that let it through: `test/docs-site.test.mjs` already reads
-    `test/probes/` off disk and holds it against the probe table the page
-    declares, so extend that pattern to the page's `test/` listing, which is
-    the one census in the file that nothing compares against the folder. A
-    sentence in the Tests paragraph naming the ignore rules is worth the same
-    edit while the file is open.
-  - From: Code Review Override - the structure page's test census, and a git read with no answer
-- [x] `excludedByRules` reads a git it could not ask as a git that answered "no"
-  - **Issue**: `test/repo-files.test.mjs:66` guards with
-    `if (got.error || got.status > 1) return null`, and its docstring above says
-    the point of that line is that "anything above that is the failure to ask
-    rather than an answer, which is why the two are told apart here instead of
-    being read as 'not excluded'". One shape of failure-to-ask is not told
-    apart: `spawnSync` reports `status: null` with `signal` set when the child
-    is killed rather than exiting, `null > 1` is `false`, and the return falls
-    through to `got.status === 0`, which is `false` - so a git that never
-    answered is read as "this path is not excluded", which is the passing
-    answer for every path the check walks. A `check-ignore` killed mid-run
-    therefore turns both negations green instead of skipping the case, in a
-    file whose own header is an argument against a check that passes because
-    nothing looked.
-  - **Goal**: Guard on the status being a number before comparing it -
-    `if (got.error || typeof got.status !== 'number' || got.status > 1)` - so
-    `null` joins 128 in the branch the docstring describes and the caller skips
-    on it. Exercise it: the function is not exported, so either export it for
-    the test or pass the spawn in, and assert that a reading with no numeric
-    status skips rather than passes. A test that cannot distinguish the two is
-    the defect restated.
-  - From: Code Review Override - the structure page's test census, and a git read with no answer
 - [x] Nothing in the suite executes the page wiring below the canvas marker
   - **Issue**: Not a defect. A browser pass on 11-05-26 drove that region and
     found it sound: 128 assertions over the mute label on all three menu
@@ -261,3 +192,54 @@ the roadmap section each one came from.
     the property is a length a control can be sized against rather than only
     that the two names are paired.
   - From: Code Review Override - a debug mode the allow-list has never held
+- [x] The touch overlay is still laid out on a window the game refuses to draw
+  - **Issue**: The floor on `playBandPx` works. A browser pass on 11-06-26 read
+    `--playpx` back off the root element at 36 refused viewports and it is
+    `0px` at every one of them, never the negative length 0.15.3 removed, and
+    `--ctl` genuinely collapses the control's content box to zero width there.
+    What the same pass found is a layer up. `revealTouch` sets
+    `touchLayer.hidden=false` on the first `touchstart` and nothing ever
+    consults `gridFits` again, so a window below the grid floor keeps a
+    laid-out overlay on a screen the notice owns. Eight of the 36 paint ink
+    either over the notice or off the window: at 320x140 and 300x140 - both
+    carrying `--playpx: 36px`, a positive length with the floor not engaged, so
+    this predates the floor and is not its to fix - the stick ring sits on
+    `Please resize your window.` with `FIRE` on the end of the same line. At
+    320x60 and 400x80 nothing reaches the notice glyphs, but the `FIRE` and
+    `BOOST` labels are still painted at full size, 31.2px and 39px wide,
+    spilling about 13.6px past each side of a 4px control, because a flex
+    container with a zero-width content box does not clip its text - `BOOST`
+    reaches x 321.5 on a 320px-wide window. Screenshots are beside the agent
+    log, prefixed `ui-ux-tester.overlay1106`.
+  - **Goal**: Resolve to [touch-overlay-on-refused-grid.prompt.md](.claude/prompts/touch-overlay-on-refused-grid.prompt.md)
+  - From: UI/UX Override - the overlay on a grid the fitter refuses
+- [x] Two places describe the stub DOM as holding "the six elements the markup
+  declares", and the markup declares seven
+  - **Issue**: `stubDom`'s docstring at `test/helpers.mjs` says it hands back "a
+    document holding the six elements index.html declares", and
+    `docs/development.html` says the harness evaluates the script against "a
+    stub DOM - a window, the six elements the markup declares, a navigator, a
+    clock, and an animation frame queue". The markup declares seven ids:
+    `c`, `crt`, `touch`, `stick`, `nub`, `fire` and `boost`, at
+    `index.html:124-129`. Six is the number the page *fetches* -
+    `getElementById` is called for all of those but `crt`, which is a CSS layer
+    driven by a body class instead (`applyCrt` at `index.html:5307` toggles
+    `crt` on the body, and `body.crt #crt{opacity:1}` at `index.html:38` does
+    the rest), so it needs no handle and the stub rightly has none.
+
+    So the figure is right about the stub and wrong about where it comes from,
+    which costs the sentence the one interesting thing in it. A reader
+    extending the harness counts the markup, finds seven, and either adds a
+    `crt` stub nothing will ever ask for or concludes the six are incomplete -
+    and the actual reason there is no seventh handle, that the CRT overlay is
+    not driven through one, is what the sentence currently hides. The published
+    docs page is the half that matters most, being the one a stranger reads.
+  - **Goal**: Say what the six are counted from rather than changing the count -
+    "the six elements the page fetches by id" reads correctly in both places -
+    and in `test/helpers.mjs` add the clause that makes it worth knowing: that
+    `#crt` is declared but never fetched, because the overlay is toggled by a
+    class on the body. The release note's copy of the same phrase was corrected
+    in place on 11-06-26 and is not part of this item, so leave `CHANGELOG.md`
+    alone. Nothing executes either sentence, so the suite staying at 959 of 959
+    is the whole check.
+  - From: Code Review Override - the element count the stub DOM is described by
