@@ -56,6 +56,73 @@ its origin survives archiving into `## Complete`.
     box already is, so the text shrinks with the circle instead of being cut
     by it.
   - From: UI/UX Override - the label clip on a wide short window
+- [ ] The `#touch` rule's comment still says the overlay is revealed once and
+  then left up
+  - **Issue**: `index.html:42-43` introduces the `#touch` rule with "The page
+    reveals them on the first touchstart and then leaves them up." That held
+    until this turn and is now the opposite of what the page does:
+    `syncTouchOverlay` at `index.html:5531` sits on a resize listener of its
+    own and writes `touchLayer.hidden=!touchOverlayUp(touchShown,gridFits)`, so
+    the overlay comes down on every window `fitGrid` refuses and back up on the
+    first one that holds the grid. What it costs is where the sentence sits. It
+    is the only account of the overlay's lifecycle in the stylesheet, about
+    5,490 lines above `touchOverlayUp`'s docstring at `index.html:4079`, which
+    now argues the opposite at length - so a reader working down the file from
+    the top, or one reading the CSS section on its own, takes the pre-0.15.4
+    behaviour as current and has nothing to tell them otherwise. The release
+    note, `docs/features.html` and `docs/how-it-works.html` were all brought up
+    to date on the same turn; this sentence was the one place that was not.
+  - **Goal**: Say what the page does now, naming the window rather than only
+    the touch: a touch is what reveals them, a window the fitter refuses is
+    what takes them down again, and the touch is remembered so the first window
+    that holds the grid brings them back. `touchOverlayUp`'s docstring already
+    carries the whole argument, so this wants a clause rather than a paragraph.
+    Nothing executes either sentence, so the suite staying at 964 of 964 is the
+    whole check.
+  - From: UI/UX Override - the label clip on a wide short window
+- [ ] Taking the overlay down does not let go of what a thumb is holding
+  - **Issue**: `syncTouchOverlay` at `index.html:5531` writes `hidden` and
+    nothing else. Until this turn the overlay could not go down once it was up,
+    so a control was only ever released by the pointer that pressed it; now an
+    orientation change from a window that fits to one the fitter refuses can
+    hide `#touch` while the stick, `#fire` or `#boost` is held, and the
+    `pointerup`, `pointercancel` and `pointerleave` listeners that call
+    `releaseStick` at `index.html:5549` and `holdButton`'s `release` at
+    `index.html:5603` are on elements that are `display:none` by then. If none
+    of the three fires, `keys.BOOST` - or `SPACE`, or a direction - stays
+    `true`, and it stays true for the whole of the notice: the branch at
+    `index.html:5695` deletes every `justPressed` key on each frame and never
+    touches `keys`, so the held key is still held on the window that brings the
+    overlay back.
+
+    Whether it does stick is a browser question rather than a Node one, and
+    nobody has observed it. Both the stick and `holdButton`'s element take
+    pointer capture, and what a browser does with a captured pointer whose
+    element becomes `display:none` decides all three outcomes: release the
+    capture and `pointerleave` fires at the old target and the key is let go;
+    keep it and the `pointerup` still lands on the hidden element and the key
+    is let go; release it with no boundary event and the key sticks. The
+    harness cannot answer any of them - `test/browser-wiring.test.mjs`'s own
+    header says real pointer plumbing is the browser's and that a stub proves
+    only that a handler was called with an id - which is why this is queued
+    rather than fixed.
+
+    The repository already reasons about this exact hazard one input layer
+    over. `pollGamepads()` is deliberately above the notice branch, at
+    `index.html:5682`, because "a pad that stopped reporting under the floor
+    would come back with keys still held from before the resize". The touch
+    path now has a way to reach that state and no answer for it.
+  - **Goal**: Settle it in a browser first - a thumb on `BOOST`, a resize onto
+    a refused grid, then back, reading `keys.BOOST` at each step. If the key
+    sticks, make taking the overlay down release the controls as well as hide
+    them: `releaseStick` is a hoisted function declaration `syncTouchOverlay`
+    can already call, while `holdButton`'s `release` is a closure and would
+    have to be handed back for the same to reach `#fire` and `#boost`, which is
+    why this is more than the one-line edit it reads as. If it does not stick,
+    the thing to leave behind is the reading that says so, in
+    `test/browser-wiring.test.mjs` beside the two cases this turn added, since
+    the answer is a browser's and the next browser may not give the same one.
+  - From: UI/UX Override - the label clip on a wide short window
 
 ## Quick Wins
 
