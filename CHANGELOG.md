@@ -1,5 +1,99 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.4] - 2026-11-07
+
+### Fixed
+
+- The touch overlay stayed laid out on every window `fitGrid` refuses. Nothing
+  in the overlay consulted `gridFits`: `revealTouch` set
+  `touchLayer.hidden=false` on the first `touchstart` and never looked again, so
+  a window below the grid floor carried three live controls on the screen the
+  too-small notice owns. A browser pass on 11-06-26 swept 36 refused viewports
+  from `300x60` to `1000x300` and found ink on eight of them. At `320x140` and
+  `300x140` the stick ring sits on `Please resize your window.` with `FIRE` on
+  the end of the same row; at `320x60` and `400x80` nothing reaches the notice
+  glyphs but the labels are still painted at full size, `BOOST` reaching x
+  `321.5` on a 320px-wide window.
+
+  Not the play band's doing, and the reason is in those four shapes: the two
+  that land on the notice carry `--playpx: 36px`, a positive length with
+  `0.15.3`'s floor not engaged at all, so this predates that change and would
+  have happened without it. What `--playpx` bounds is the box, and it does -
+  at `0px` the control's content box solves to zero width and the 4px left is
+  the 2px border on each side. What nothing bounded was whether the box is on
+  the screen in the first place.
+
+  `touchOverlayUp(touchSeen,gridFits)` is the reading, above the DOM marker
+  beside `playBandPx` and `overlayVars` and for the same reason: both halves are
+  arguments, so the answer is checkable without a browser. `touchShown` stays
+  the record of whether a touch has ever happened rather than of whether the
+  controls are up, so a player who has touched once and then resized gets them
+  back without touching again, and a first touch on a refused window reveals
+  nothing and then reveals on the first window that holds the grid.
+
+  The write is a resize listener of its own rather than a line inside
+  `handleResize`, which is where the rest of the resize reading lives. The
+  element handle is a `const` in the touch section, a long way below the
+  `handleResize()` call that lays the page out as the script runs, so a line up
+  there would read a binding that does not exist yet on the first resize.
+  Registering separately is ordered anyway: `handleResize`'s listener went on
+  first, so `gridFits` is this window's answer by the time the overlay is read.
+
+- `#fire` and `#boost` did not clip their labels. The controls are
+  `display:flex` and a flex container does not clip the text inside it, so once
+  `--ctl` solved the content box to zero width the two labels went on being
+  painted at 31.2px and 39px wide, about 13.6px past each side of a 4px control.
+  `overflow:hidden` closes it at any size rather than only on the screens the
+  fix above now hides. Deliberately not added to `#stick`: `driveStick`
+  translates the nub out to the ring edge and the nub is centred there, so half
+  of it is outside the ring at full deflection, and overflow on a
+  `border-radius:50%` box clips to the rounded edge - it would shear the nub
+  exactly when the stick is reporting the most, and there is no text in the
+  stick for it to buy anything.
+
+- Two places described the stub DOM as holding "the six elements the markup
+  declares", and the markup declares seven. `index.html` declares `c`, `crt`,
+  `touch`, `stick`, `nub`, `fire` and `boost`; six is the number the page
+  *fetches*, `#crt` being the one it never asks for because the CRT overlay is
+  driven by a class on the body - `applyCrt` toggles `crt` there and
+  `body.crt #crt{opacity:1}` does the rest. So the figure was right about the
+  stub and wrong about where it comes from, which cost the sentence the one
+  interesting thing in it: a reader extending the harness counts the markup,
+  finds seven, and either adds a seventh stub nothing will ever ask for or reads
+  the six as incomplete. Both `test/helpers.mjs` and `docs/development.html` now
+  say "the six elements the page fetches by id", and the docstring carries the
+  clause that makes the number worth knowing.
+
+### Notes
+
+- The suite is at 964 of 964, from 959: two cases in
+  `test/browser-wiring.test.mjs`, which takes that file to 30, and three in
+  `test/browser-shell.test.mjs`, which takes it to 69. The behaviour is executed
+  in the first - revealed, then a resize onto a refused grid, then back without
+  a second touch, and the opposite order through the same gate - and read as
+  source and as stylesheet in the second, where `touchOverlayUp`'s four answers
+  and the `overflow` declarations on `#fire` and `#boost` and its absence on
+  `#stick` are pinned. `test/probes/overlay-anchor.mjs` is unchanged and still
+  reports 0 of 682,500 fitted viewports misplacing a control.
+- An override run, working two found issues: one the 11-06-26 browser pass
+  raised and one the code review of the same day raised. The regular
+  `## Current` item - the probe that would rebuild `0.15.2`'s 60,000-run
+  figures - was left unchecked and in place for the next run, which is what an
+  override run does with the queue it is standing in front of.
+- `CHANGELOG.md` was left out of the stub-DOM correction on purpose. Its copy of
+  the same phrase was corrected in place on 11-06-26 and already reads "the six
+  elements the page fetches by id".
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current` and stays dormant. `README.md` is 126 lines and 8,420 characters,
+  under both the 300-line and 30,000-character thresholds, so the over-long
+  README check decides nothing and the header is neither work nor a refusal.
+- Every file written this run went back LF. `.gitattributes` declares
+  `text=auto eol=lf` and `git ls-files --eol` reports `w/lf` for every tracked
+  text file, with `.nojekyll` empty and `hero.png` binary. No file was added or
+  removed, and `git diff --numstat` is line-scoped on all eleven: `index.html`
+  is 64 lines added and 2 changed against 5,821, and the three docs pages are
+  one line each because that is how a paragraph is written there.
+
 ## [1.0.0-alpha.0.15.3] - 2026-11-06
 
 ### Added

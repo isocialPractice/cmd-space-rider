@@ -3880,3 +3880,51 @@ still be found by name.
     use, and a note saying which. Do not reach for the seed before the
     reproduction: a green suite is the thing this finding is warning about.
   - From: Found Issue Override - the asteroid field's wall comparison
+
+## Archived 11-07-26
+
+- [x] `docs/project-structure.html` lists every test file but the one 0.15.1 added
+  - **Issue**: The page's own `<meta name="description">` is "Every file in the
+    CMD Space Rider repository and what it holds", and its `test/` listing
+    names 22 `.test.mjs` files with a comment each. The folder holds 23:
+    `repo-files.test.mjs` is the only one absent, and the same turn that added
+    it edited this page's root listing to add `.gitignore`. So a reader of the
+    tree counts a suite one file short of the one `npm test` runs, on the page
+    the site publishes as the file census. The omission is also the second of
+    its kind here - `docs/development.html`'s Tests paragraph enumerates what
+    the suite covers ("both builds, the agreement between them, the
+    documentation site, and the measurement rig") and the repository's own
+    ignore rules are now a fifth thing it covers, though that sentence claims
+    no exhaustiveness and so is the lesser half.
+  - **Goal**: Add the `repo-files.test.mjs` line to the `test/` listing beside
+    `parity.test.mjs`, aligned on the same comment column, saying what it
+    holds - the `!` lines in `.gitignore`, read against git's own answer. Then
+    close the gap that let it through: `test/docs-site.test.mjs` already reads
+    `test/probes/` off disk and holds it against the probe table the page
+    declares, so extend that pattern to the page's `test/` listing, which is
+    the one census in the file that nothing compares against the folder. A
+    sentence in the Tests paragraph naming the ignore rules is worth the same
+    edit while the file is open.
+  - From: Code Review Override - the structure page's test census, and a git read with no answer
+- [x] `excludedByRules` reads a git it could not ask as a git that answered "no"
+  - **Issue**: `test/repo-files.test.mjs:66` guards with
+    `if (got.error || got.status > 1) return null`, and its docstring above says
+    the point of that line is that "anything above that is the failure to ask
+    rather than an answer, which is why the two are told apart here instead of
+    being read as 'not excluded'". One shape of failure-to-ask is not told
+    apart: `spawnSync` reports `status: null` with `signal` set when the child
+    is killed rather than exiting, `null > 1` is `false`, and the return falls
+    through to `got.status === 0`, which is `false` - so a git that never
+    answered is read as "this path is not excluded", which is the passing
+    answer for every path the check walks. A `check-ignore` killed mid-run
+    therefore turns both negations green instead of skipping the case, in a
+    file whose own header is an argument against a check that passes because
+    nothing looked.
+  - **Goal**: Guard on the status being a number before comparing it -
+    `if (got.error || typeof got.status !== 'number' || got.status > 1)` - so
+    `null` joins 128 in the branch the docstring describes and the caller skips
+    on it. Exercise it: the function is not exported, so either export it for
+    the test or pass the spawn in, and assert that a reading with no numeric
+    status skips rather than passes. A test that cannot distinguish the two is
+    the defect restated.
+  - From: Code Review Override - the structure page's test census, and a git read with no answer

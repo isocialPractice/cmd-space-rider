@@ -47,6 +47,7 @@ const EXPORTS = [
   'ROLL_TIME', 'ROLL_COOLDOWN', 'COMBO_TIME', 'COMBO_MAX',
   'SHOT_SLACK_COLS', 'SLACK_REF_WIDTH', 'shotSlackCols',
   'fitGrid', 'renderTooSmall', 'footerBandPx', 'playBandPx', 'overlayVars', 'seatGrid',
+  'touchOverlayUp',
   'glyphInset', 'tuneText',
   'MIN_WIDTH', 'MIN_HEIGHT', 'FONT_SIZE', 'MIN_FONT_SIZE', 'CELL_LEADING',
   'WARP_INTERVAL', 'WARP_FLASH_TIME', 'warpWallColor',
@@ -283,8 +284,16 @@ function stubElement(id, box) {
 
 /**
  * The browser surface the page wiring touches, as a stub: a window, a document
- * holding the six elements index.html declares, a navigator, a clock, and an
+ * holding the six elements the page fetches by id, a navigator, a clock, and an
  * animation frame queue the caller pumps by hand.
+ *
+ * Six rather than the seven index.html declares, and the difference is the
+ * interesting part. `#crt` is the one id the markup declares that the page never
+ * fetches: the CRT overlay is driven by a class on the body - `applyCrt` toggles
+ * `crt` there and `body.crt #crt{opacity:1}` does the rest - so the page holds no
+ * handle on it and this stub rightly has none either. Counting the markup instead
+ * is what makes a reader extending the harness either add a seventh stub nothing
+ * will ever ask for, or read the six as incomplete.
  *
  * Driving the page off a manual pump is what makes the harness fast as well as
  * deterministic. The 11-05-26 browser verification took between thirty seconds

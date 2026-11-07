@@ -466,6 +466,35 @@ test('a drag on the controls cannot scroll or zoom the page', () => {
   assert.match(html, /#stick,#fire,#boost\{[^}]*touch-action:none/s);
 });
 
+test('the overlay is up only when a touch has been seen and the grid fits', () => {
+  // Both halves, because for a long time only the first was asked. A window
+  // below the grid floor kept three laid-out controls on the screen the notice
+  // owns, and on eight of 36 refused viewports swept on 11-06-26 they painted
+  // over the notice glyphs or past the window's right edge.
+  assert.equal(browser.touchOverlayUp(true, true), true, 'touched, and the grid fits');
+  assert.equal(browser.touchOverlayUp(true, false), false, 'touched, and the notice owns the screen');
+  assert.equal(browser.touchOverlayUp(false, true), false, 'a fitted grid nobody has touched');
+  assert.equal(browser.touchOverlayUp(false, false), false, 'neither');
+});
+
+test('a resize is what brings the overlay back, not a second touch', () => {
+  // `touchShown` stays the record of whether a touch has ever happened, so the
+  // reveal is not spent by a resize that hid the controls. The behaviour itself
+  // is executed in test/browser-wiring.test.mjs; this is the reading of what is
+  // written, for a page region that reassigns nothing a test can read back.
+  assert.match(html, /function revealTouch\(\)\{[^}]*touchShown=true;\s*syncTouchOverlay\(\)/s);
+  assert.match(
+    html,
+    /addEventListener\('resize',syncTouchOverlay\)/,
+    'the overlay is re-read on every resize, not only on the first touch'
+  );
+  // One writer, and it answers out of touchOverlayUp rather than working the
+  // condition out again down here.
+  const writes = html.match(/touchLayer\.hidden=/g) ?? [];
+  assert.equal(writes.length, 1, 'exactly one line puts the overlay up or down');
+  assert.match(html, /touchLayer\.hidden=!touchOverlayUp\(touchShown,gridFits\)/);
+});
+
 // ----- The gamepad -----
 //
 // The third way into the two key maps, after the keyboard and the thumbstick,
@@ -1259,6 +1288,31 @@ test('browser: every control is sized against the band, not against the viewport
     style.declarationsFor('#boost').bottom,
     /var\(--ctl\)/,
     "BOOST's offset reads the same size FIRE is drawn at"
+  );
+});
+
+test('browser: a label cannot escape the control it is drawn in', () => {
+  // The band collapses FIRE's and BOOST's content box to zero width on a grid
+  // the fitter refuses, and a flex container does not clip the text inside it:
+  // the two labels went on being painted at 31.2px and 39px wide, about 13.6px
+  // past each side of a 4px control. The overlay is hidden outright on such a
+  // window now, so this is the second line of defence rather than the fix - it
+  // holds at any size, including one where the band is merely small.
+  for (const id of ['fire', 'boost']) {
+    assert.equal(
+      style.declarationsFor(`#${id}`).overflow,
+      'hidden',
+      `#${id} clips its label to the box the band sized`
+    );
+  }
+  // Deliberately not on the stick. driveStick translates the nub out to the
+  // ring edge and the nub is centred there, so half of it is outside the ring
+  // at full deflection - and overflow on a border-radius:50% box clips to the
+  // rounded edge, which would shear the nub exactly when it is reporting most.
+  assert.equal(
+    style.declarationsFor('#stick').overflow,
+    undefined,
+    'the stick does not clip, because the nub is drawn past its ring on purpose'
   );
 });
 

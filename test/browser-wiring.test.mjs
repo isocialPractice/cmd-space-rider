@@ -512,6 +512,55 @@ test('the overlay appears on the first touch and the stick steers once it has', 
   assert.equal(heldKeys(p), '', 'and lets go of every direction at once');
 });
 
+test('the overlay comes down on a grid the fitter refuses and back up when it fits', () => {
+  const p = page();
+  p.touch();
+  assert.equal(p.dom.elements.touch.hidden, false, 'a touch on a window the game draws on');
+
+  // The window the notice owns. Nothing in the overlay used to consult
+  // gridFits, so three controls stayed laid out over `Please resize your
+  // window.` - at 320x140 the stick ring sat on the notice row with FIRE on
+  // the end of the same line.
+  p.resize(300, 60);
+  p.pump(1);
+  assert.equal(p.gridFits, false, 'no font in the range gives this window the grid');
+  assert.equal(p.dom.elements.touch.hidden, true, 'so the notice has the screen to itself');
+
+  // The two viewports that landed on the notice glyphs carried a positive
+  // --playpx, which is why the floor on the play band is not what fixes this:
+  // the band was bounding the box correctly all along.
+  p.resize(320, 140);
+  p.pump(1);
+  assert.equal(p.gridFits, false);
+  assert.ok(Number.parseFloat(p.vars()['--playpx']) > 0, 'with the band floor not engaged');
+  assert.equal(p.dom.elements.touch.hidden, true, 'and the overlay down all the same');
+
+  // Back on a window the game draws on, without a second touch: `touchShown`
+  // is the record of whether a touch has ever happened, not of whether the
+  // controls happen to be up.
+  p.resize(1400, 800);
+  p.pump(1);
+  assert.equal(p.gridFits, true);
+  assert.equal(p.touchShown, true, 'the reveal was not spent by hiding the controls');
+  assert.equal(p.dom.elements.touch.hidden, false, 'so widening brings them back on its own');
+});
+
+test('a first touch on a refused grid reveals nothing, and widening then does', () => {
+  // The other order through the same gate. A player who opens the page on a
+  // window too small and taps it has touched, so the first half of the reading
+  // is satisfied and the second is not.
+  const p = page();
+  p.resize(300, 60);
+  p.pump(1);
+  p.touch();
+  assert.equal(p.touchShown, true, 'the touch is recorded');
+  assert.equal(p.dom.elements.touch.hidden, true, 'and the controls stay down');
+
+  p.resize(1400, 800);
+  p.pump(1);
+  assert.equal(p.dom.elements.touch.hidden, false, 'until the window holds the grid');
+});
+
 // ----- handleResize -----
 
 test('a resize re-seats both halves of a round on the new grid', () => {

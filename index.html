@@ -100,7 +100,21 @@ body.crt #crt{opacity:1}
   /* Centred by the flex parent, then offset by the live reading. */
   transform:translate(0,0);
 }
-#fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%}
+/* overflow:hidden is the belt to touchOverlayUp's braces. These two carry text
+   nodes - FIRE and BOOST - and a flex container does not clip the text inside
+   it, so once --ctl solves the content box to zero width the labels are still
+   painted at full size: 31.2px and 39px wide, about 13.6px past each side of a
+   4px control, which is BOOST reaching x 321.5 on a 320px window. The overlay
+   is hidden outright on a grid the fitter refuses now, so nothing above is
+   reachable; this costs one declaration and holds at any size.
+
+   Not on #stick, which is why that rule is left where it is. The nub is
+   translated out to the ring edge by driveStick and is centred there, so half
+   of it sits outside the ring at full deflection - and overflow on a
+   border-radius:50% box clips to the rounded edge, which would shear the nub
+   in half exactly when the stick is reporting the most. There is no text in
+   the stick to escape it, so there is nothing to buy either. */
+#fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%;overflow:hidden}
 #fire{bottom:calc(var(--footerpx,36px) + 1vh)}
 /* BOOST stands on FIRE's real height plus a 2vw gap - the same --ctl, not a
    restatement of it. The offset used to be 26vw, FIRE's width plus the gap,
@@ -4063,6 +4077,35 @@ function overlayVars(grid,viewportH){
 }
 
 /**
+ * Whether the touch overlay should be laid out at all: a touch has been seen,
+ * and the window holds the grid the game draws on.
+ *
+ * The second half is the one that was missing. Nothing in the overlay consulted
+ * `gridFits`: revealTouch set `hidden=false` on the first touchstart and never
+ * looked again, so a window below the grid floor kept three laid-out controls
+ * on a screen the notice owns. A browser pass on 11-06-26 swept 36 refused
+ * viewports and found ink on eight of them - at 320x140 the stick ring sits on
+ * `Please resize your window.` with FIRE on the end of the same line, and at
+ * 320x60 the BOOST label reaches x 321.5 on a 320px window, because a flex
+ * container whose content box the band has collapsed to zero width does not
+ * clip the text inside it.
+ *
+ * Not the play band's doing, and not --playpx's to fix: both of the viewports
+ * that land on the notice carry `--playpx: 36px`, a positive length with the
+ * floor playBandPx describes not engaged at all. The band bounds the box; what
+ * was unbounded is whether the box is on the screen in the first place.
+ *
+ * Both readings are arguments rather than globals so the answer can be checked
+ * without a browser, which is the reason playBandPx and overlayVars are
+ * functions too. `touchSeen` stays the record of whether a touch has ever
+ * happened, so a player who has touched once and then resized gets the controls
+ * back without touching again.
+ */
+function touchOverlayUp(touchSeen,gridFits){
+  return touchSeen&&gridFits;
+}
+
+/**
  * Re-seat the game on a fitted grid: the buffer the renderer writes into, the
  * starfield that is laid out in cells, and the grid the engine lays its own
  * screens out against. The new buffer comes back for the page to hold.
@@ -5471,12 +5514,31 @@ function setKey(k,down){
  * the answer to the right question, and it costs one frame of the first tap.
  */
 let touchShown=false;
+
+/**
+ * Put the overlay up or down from the one reading that decides it, which is
+ * touchOverlayUp above the DOM marker where the suite can execute it.
+ *
+ * The only writer of `touchLayer.hidden`, and on a resize listener of its own
+ * rather than a line inside handleResize. handleResize is called the moment it
+ * is defined, to lay the page out before anything else runs, and that is a long
+ * way above the `const touchLayer` this needs - so a line in there would read a
+ * binding that does not exist yet on the very first resize. Registering here
+ * instead costs nothing and is ordered: handleResize's own listener went on
+ * before this one, so `gridFits` is already this window's answer by the time
+ * this runs.
+ */
+function syncTouchOverlay(){
+  touchLayer.hidden=!touchOverlayUp(touchShown,gridFits);
+}
+
 function revealTouch(){
   if(touchShown)return;
   touchShown=true;
-  touchLayer.hidden=false;
+  syncTouchOverlay();
 }
 window.addEventListener('touchstart',revealTouch,{passive:true});
+window.addEventListener('resize',syncTouchOverlay);
 
 // The stick. One pointer owns it at a time, tracked by id so a thumb on the
 // stick and a thumb on FIRE do not take each other's events - which is most of
