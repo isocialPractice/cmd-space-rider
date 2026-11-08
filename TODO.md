@@ -46,6 +46,60 @@ its origin survives archiving into `## Complete`.
     grows.
   - **Goal**: Resolve to [overlay-label-floor.prompt.md](.claude/prompts/overlay-label-floor.prompt.md)
   - From: UI/UX Override - the label below the size a word can be read at
+- [ ] The new label case calls `3840x200` a viewport that was clear before the
+  fix, and it was the worst-sheared of the seven
+  - **Issue**: `CLIP_SHAPES`' docstring in `test/browser-shell.test.mjs` sorts
+    the seven viewports into five that sheared and two on "the far side" of the
+    band - "`1920x190` was always clear, and `3840x200` is the widest window
+    there is at a height that still holds a control" - and then says the
+    Chromium reading was "clipped at the first five and clear at the last two
+    beforehand". `3840x200` is not on the far side of that band and was not
+    clear. `fitGrid(3840,200)` reports `fits: true` on a grid of 768x20
+    publishing `--playpx: 150px`, `--ctl` solves to `31.60px`, the content box
+    the two `2px` borders leave is `27.60px`, and a `BOOST` fixed at `13px` is
+    `39.01px` - `11.41px` over, against `7.04px` at the worst of the five the
+    comment does call clipped (`1920x165`, `31.97px` of box). At 3840 wide the
+    band does not clear until about `231px` tall, where the content box reaches
+    `40.45px`. So the one viewport in the list chosen to stand for *not*
+    shearing is the strongest shearing case in it, and the probe beside it
+    already says so - it counts 21,540 sheared labels over the walk, and the
+    `TODO` item above puts them "all of them very wide and very short".
+  - **Goal**: Say what `3840x200` is - the far corner of the shearing band
+    rather than the far side of it, which is what makes it the strongest case
+    in the list - and leave the "clear beforehand" claim on `1920x190`, which
+    holds (`43.85px` of box against a `39.01px` label). The `after` half of the
+    sentence is right for all seven and wants no change. Nothing in the
+    docstring executes, so the suite staying at 967 of 967 is the whole check.
+  - From: UI/UX Override - the label below the size a word can be read at
+- [ ] The features page says the controls are not sized out of the window, and
+  on most devices they are
+  - **Issue**: `docs/features.html`'s touch bullet gained "All three are sized
+    out of the band between the HUD and the footer rather than out of the
+    window, in character rows no viewport unit can measure". Each size is a
+    `min()` of three terms, not one -
+    `--ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2))`
+    and `--stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px))` at
+    `index.html:84-85` - and the band term is not the one that binds on most of
+    the 16 device shapes `test/browser-shell.test.mjs` walks. For `--ctl` the
+    band wins on 8 of the 16; on the two portrait phones (`375x667`, `412x915`)
+    `24vw` wins, and on six more (`667x375` through `1180x820`) the `118px`
+    ceiling does. For `--stick` the band wins on 2 of the 16 - only `349x160`
+    and `400x180` - with `34vw` on the two portrait phones and `170px` on the
+    other twelve. The page's own comment above `:root` states the shape the
+    bullet flattens: "Three caps, because three different things bound a
+    control... And the room actually available, which is the one that was
+    missing." The cost is that the one published sentence describing how big
+    these controls are tells a phone user the window plays no part in it, when
+    on a phone in portrait the window's width is the only thing that decides
+    it.
+  - **Goal**: Keep the consequence, which is correct and is the half worth
+    publishing - a short wide window gets smaller controls instead of controls
+    over the shield bar - and say the band is the cap that was missing rather
+    than the only cap, so the bullet agrees with the `:root` comment it
+    describes. The clause about the `FIRE` and `BOOST` lettering shrinking with
+    the circle is accurate and wants no change. Nothing on the page executes,
+    so the suite staying at 967 of 967 is the whole check.
+  - From: UI/UX Override - the label below the size a word can be read at
 
 ## Quick Wins
 

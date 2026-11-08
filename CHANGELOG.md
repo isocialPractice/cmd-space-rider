@@ -1,5 +1,148 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.5] - 2026-11-08
+
+### Fixed
+
+- `overflow:hidden` sheared the `BOOST` label on a fitted window wider than
+  about 1620px and shorter than about 190px. `0.15.4` added the declaration to
+  `#fire` and `#boost` as the belt to hiding the overlay on a refused grid, and
+  on a refused grid clipping is the whole point - what it clips there is a label
+  painted at full size in a content box the band has solved to zero width. On a
+  window the game draws on it was clipping the glyphs instead. `--ctl` subtracts
+  `2vw`, so a window of a given height gives a *smaller* control the wider it
+  gets: at `1920x160` a fitted grid of 480x20 publishes `--playpx: 120px`,
+  `#fire` solves to 36px against a 39px `BOOST` label, and the button read
+  `OOST` with the `B` and the `T` sheared off. The band is bounded and extreme -
+  about 1620px and up at 160-165px tall, 2020px and up at 170-175px, 2360px and
+  up at 180-185px, nothing at 150px or at 190px - and every window in it is one
+  the game is drawing on. Before the declaration those same windows painted the
+  whole label about 1.5px past each side of the circle, onto the tunnel, which
+  cost a player nothing.
+
+  So the label is solved out of `--ctl` the way the box already is, and shrinks
+  with the circle instead of being cut by it:
+  `font-size:min(13px,calc((var(--ctl) - 4px) / 3.2))`. 13px is the size the
+  `#touch` rule sets and the ceiling here, so every control the band leaves room
+  for is lettered exactly as it was - every device shape the suite walks still
+  resolves to 13px. Under that, what has to fit is the content box, `--ctl` less
+  the 2px border each side, and the widest label is `BOOST`: five characters of
+  Courier New at `1229/2048` of an em each, so 3em of text, with the `3.2`
+  carrying clearance for the rounding.
+
+  Measured both ways in Chromium 151 rather than modelled. Before: `BOOST`
+  painted 39.0px wide in content boxes of 35px, 32px, 32px, 35px and 35px at
+  `1620x160`, `1920x160`, `1920x165`, `2020x170` and `2360x180`, and clear at
+  `1920x190` and at `1920x150`, where the fitter refuses the grid. After:
+  nothing clipped at any of them, at font sizes from 10px to 13px.
+
+- The `#touch` rule's comment still said the overlay is revealed once and then
+  left up. `index.html:42` introduced the rule with "The page reveals them on
+  the first touchstart and then leaves them up", which held until `0.15.4` and
+  is now the opposite of what the page does. What it cost is where the sentence
+  sits: it was the only account of the overlay's lifecycle in the stylesheet,
+  about 4,040 lines above `touchOverlayUp`'s docstring, which argues the
+  opposite at length - so a reader working down the file from the top, or one
+  reading the CSS section on its own, took the pre-`0.15.4` behaviour as current
+  and had nothing to tell them otherwise. The release note, `docs/features.html`
+  and `docs/how-it-works.html` were all brought up to date on that run; this
+  sentence was the one place that was not. It now names the window rather than
+  only the touch, and points at the docstring for the argument.
+
+### Added
+
+- A second reading in `test/probes/overlay-anchor.mjs`: how many of the fitted
+  viewports it already walks shear a label, and the tightest one. It resolved
+  `--ctl` per viewport already, so the cost is one more length and a label width
+  read off the markup, and the figure the release note above would otherwise
+  have quoted from a scratch file now comes out of the repository. Over 682,500
+  fitted viewports and both labels on each, a label fixed at 13px shears 21,540
+  of 1,365,000 and one solved out of `--ctl` shears none. The tightest viewport
+  is the same either way, `3837x167`, where the control is 16.8px across: the
+  fixed label wants 39.01px of a 12.80px box, 26.21px over, and the solved one
+  wants 12.00px, 0.80px under. Confirmed in the browser at that viewport to the
+  hundredth of a pixel. The historical `min(24vw,118px)` control is deliberately
+  not walked for the label - it is 48px at the narrowest viewport in the walk,
+  so the label always fitted, and the shearing arrived *with* the box being
+  bounded by the band.
+
+- Two cases in `test/browser-shell.test.mjs` over the label a control is drawn
+  with: the label fits the content box the border leaves at every device shape
+  and at the seven wide-short shapes the shearing was measured at, and a control
+  the band leaves room for is still lettered at the overlay's own size. Both
+  labels are read out of the markup and the border width and the font size out
+  of the stylesheet, so a label renamed longer than `BOOST`, a thicker border,
+  or a size written back as a constant fails here rather than being measured
+  against a figure the test remembers. Pinned by reverting the fix two ways: a
+  constant `13px` fails, and keeping `var(--ctl)` with the divisor at `2.5`
+  fails with `#boost's BOOST is painted 39.0px wide in a 35.0px box`.
+
+- One case in `test/browser-wiring.test.mjs` recording what happens to a control
+  held while the overlay goes down. `syncTouchOverlay` writes `hidden` and
+  nothing else, so a resize onto a refused grid can hide `#touch` while a thumb
+  is on `BOOST`, and the `pointerup`, `pointercancel` and `pointerleave`
+  listeners that would let the key go are on an element that is `display:none`
+  by then. Three outcomes were open, and which one a browser gives decides
+  whether this is a defect: the capture released with a boundary event, the
+  capture kept and the release delivered to the hidden element, or the capture
+  released silently and the key stuck.
+
+  Settled against Chromium 151.0.7922.34, driving real pointers through CDP, as
+  touch and again as mouse, with the thumb lifted both while the overlay was
+  down and after it was back up, and at a coordinate inside the old control and
+  at one outside the 300x60 window. Eight runs, one answer: Chromium keeps the
+  capture through `display:none` and delivers the release to the hidden element,
+  so the key went false on the lift every time. It stays held for the whole of
+  the notice while the thumb is still down, which costs nothing - the run is not
+  advancing, and a thumb still on the glass when the window comes back is a
+  thumb on a control that is back under it.
+
+  So the page is unchanged and the reading is what was left behind, because the
+  answer is one browser's and the next may not give the same one. The case
+  executes the half Node can - a thumb on `BOOST`, four frames of the notice
+  with the overlay down, the window back, and the release - and pins that hiding
+  the overlay lets go of nothing while the release lets go of everything. If an
+  engine ever releases the capture without a boundary event, the fix is for
+  `syncTouchOverlay` to release the controls as well as hide them:
+  `releaseStick` is a hoisted declaration it can already call, while
+  `holdButton`'s `release` is a closure that would have to be handed back.
+
+### Notes
+
+- The suite is at 967 of 967, from 964: two cases in
+  `test/browser-shell.test.mjs`, which takes that file to 71, and one in
+  `test/browser-wiring.test.mjs`, which takes it to 31.
+  `test/probes/overlay-anchor.mjs` still reports 0 of 682,500 fitted viewports
+  misplacing a control, with the smallest control drawn at 16.8px, and now
+  reports the label reading beside it.
+- `docs/development.html` gains a clause where it describes `overlay-anchor`,
+  since the probe now reads a second thing.
+- `docs/features.html` gains a clause on the touch bullet: the three controls
+  are sized out of the band between the HUD and the footer rather than out of
+  the window, and the lettering shrinks with the circle. It is the one published
+  page that describes the controls in that detail, and nothing else on the site
+  states a figure about them.
+- An override run, working the three found issues the 11-07-26 browser pass
+  raised. The regular `## Current` item - the probe that would rebuild
+  `0.15.2`'s 60,000-run figures - was left unchecked and in place for the next
+  run, which is what an override run does with the queue it is standing in
+  front of.
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current` and stays dormant. `README.md` is 126 lines and 8,420
+  characters, under both the 300-line and 30,000-character thresholds, so the
+  over-long README check decides nothing and the header is neither work nor a
+  refusal.
+- The agent note asking a review turn to confirm where its refill answer came
+  from was left untouched, with its attempt count unspent. Its own method says
+  only a review turn can answer it, and this was an override run with three
+  items to work.
+- Every file written this run went back LF. `.gitattributes` declares
+  `text=auto eol=lf` and `git ls-files --eol` reports `w/lf` for every tracked
+  text file. No file was added or removed, and `git diff --numstat` is
+  line-scoped on all ten: `index.html` is 30 added and 4 changed against
+  5,847, and the two docs pages are one line each because that is how a list
+  item and a paragraph are written there.
+
 ## [1.0.0-alpha.0.15.4] - 2026-11-07
 
 ### Fixed
