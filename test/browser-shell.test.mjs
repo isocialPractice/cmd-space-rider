@@ -22,7 +22,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT, loadBrowserEngine, fakeStorage, DOM_MARKER, FRAME } from './helpers.mjs';
+import {
+  REPO_ROOT, loadBrowserEngine, fakeStorage, DOM_MARKER, FRAME, EM_ADVANCE,
+} from './helpers.mjs';
 import { pageStyle } from './page-style.mjs';
 
 const browser = loadBrowserEngine(fakeStorage());
@@ -1291,13 +1293,48 @@ test('browser: every control is sized against the band, not against the viewport
   );
 });
 
+/**
+ * Viewports the labels were sheared at, which the SHAPES above never reach:
+ * wide enough that --ctl's 2vw term bites, and short enough that the band it
+ * is solved out of is only a few character rows. fitGrid reports `fits: true`
+ * at all of them - these are windows the game draws on, which is what made the
+ * clip cost something rather than being the point of it.
+ *
+ * --ctl subtracts 2vw, so a window of a given height gives a *smaller* control
+ * the wider it gets, and the first five are where that crossed the width of the
+ * label standing in it: at 1920x160 the control solves to 36px against a 39px
+ * BOOST, and the button read OOST. The band is bounded at both ends, so the
+ * last two are the far side of it - 1920x190 was always clear, and 3840x200 is
+ * the widest window there is at a height that still holds a control.
+ *
+ * Read back off Chromium 151 before and after the font-size went in: clipped at
+ * the first five and clear at the last two beforehand, clear at all seven after.
+ * The sweep over the whole viewport space is test/probes/overlay-anchor.mjs's,
+ * as it is for every other figure about where these three controls land.
+ */
+const CLIP_SHAPES = [
+  { w: 1620, h: 160 }, { w: 1920, h: 160 }, { w: 1920, h: 165 },
+  { w: 2020, h: 170 }, { w: 2360, h: 180 },
+  { w: 1920, h: 190 }, { w: 3840, h: 200 },
+];
+
+/** The text one control carries, read out of the markup rather than restated. */
+function labelOf(id) {
+  const found = html.match(new RegExp(`<div id="${id}">([^<]*)</div>`));
+  assert.ok(found, `#${id} carries a label in the markup`);
+  return found[1];
+}
+
 test('browser: a label cannot escape the control it is drawn in', () => {
   // The band collapses FIRE's and BOOST's content box to zero width on a grid
   // the fitter refuses, and a flex container does not clip the text inside it:
   // the two labels went on being painted at 31.2px and 39px wide, about 13.6px
   // past each side of a 4px control. The overlay is hidden outright on such a
-  // window now, so this is the second line of defence rather than the fix - it
-  // holds at any size, including one where the band is merely small.
+  // window now, so this is the second line of defence rather than the fix.
+  //
+  // It is not the whole answer on a window the game draws on either, which is
+  // what the case below covers: clipping a label that does not fit shears the
+  // glyphs, so the size the label is drawn at has to fit the box first.
   for (const id of ['fire', 'boost']) {
     assert.equal(
       style.declarationsFor(`#${id}`).overflow,
@@ -1314,6 +1351,75 @@ test('browser: a label cannot escape the control it is drawn in', () => {
     undefined,
     'the stick does not clip, because the nub is drawn past its ring on purpose'
   );
+});
+
+test('browser: a label is drawn at a size the control it stands in can hold', () => {
+  // What overflow:hidden does on a window the game draws on. The box is solved
+  // out of the band and the label was a constant 13px, so a window wide enough
+  // for --ctl's 2vw term to bite gave a control narrower than its own label and
+  // the clip sheared the glyphs: at 1920x160, #fire solves to 36px against a
+  // 39px BOOST, and 32px of content box took the B and the T off it.
+  //
+  // So the size is solved out of --ctl as well, and this is the figure that
+  // check needs - the label painted at that size, against the content box the
+  // border leaves. Both labels and the border width are read off the page, so a
+  // label renamed longer than BOOST, or a border drawn thicker, fails here
+  // rather than being measured against a figure this file remembers.
+  const labels = { fire: labelOf('fire'), boost: labelOf('boost') };
+  assert.deepEqual(labels, { fire: 'FIRE', boost: 'BOOST' }, 'the markup still letters them');
+
+  for (const id of ['fire', 'boost']) {
+    assert.match(
+      style.declarationsFor(`#${id}`)['font-size'],
+      /var\(--ctl/,
+      `#${id}'s label is sized against the control rather than at its own constant`
+    );
+  }
+
+  for (const shape of [...SHAPES, ...CLIP_SHAPES]) {
+    const vp = viewport(shape);
+    const where = `${shape.w}x${shape.h} (${vp.grid.cols}x${vp.grid.rows})`;
+    assert.equal(vp.grid.fits, true, `${where}: is a window the game draws on`);
+
+    for (const id of ['fire', 'boost']) {
+      const d = style.declarationsFor(`#${id}`);
+      // box-sizing is border-box for everything on this page, so the width the
+      // rule declares is the border box and the label stands in what the two
+      // borders leave of it.
+      const border = style.lengthPx(d.border.split(/\s+/)[0], vp, `#${id}'s border`);
+      const content = style.lengthPx(d.width, vp, `#${id}`) - 2 * border;
+      const label = labels[id].length
+        * style.lengthPx(d['font-size'], vp, `#${id}'s label`)
+        * EM_ADVANCE;
+      assert.ok(
+        label <= content,
+        `${where}: #${id}'s ${labels[id]} is painted ${label.toFixed(1)}px wide `
+        + `in a ${content.toFixed(1)}px box, so the clip shears it`
+      );
+    }
+  }
+});
+
+test('browser: a control the band leaves room for is lettered at the full size', () => {
+  // The other half of solving the label out of --ctl: a size that shrinks with
+  // the box must not shrink on a box that never needed it. Every shape in the
+  // device list is a phone, a tablet or the short landscape band the overlay
+  // work was built for, and the label on all of them is the 13px the #touch
+  // rule sets - so the fix is confined to the windows that were shearing, and
+  // the figures the CHANGELOG quotes for those shapes still describe the page.
+  const base = /\b(\d+(?:\.\d+)?)px\b/.exec(style.declarationsFor('#touch').font);
+  assert.ok(base, '#touch declares the overlay font size the labels inherit');
+
+  for (const shape of SHAPES) {
+    const vp = viewport(shape);
+    for (const id of ['fire', 'boost']) {
+      assert.equal(
+        style.lengthPx(style.declarationsFor(`#${id}`)['font-size'], vp, `#${id}'s label`),
+        Number.parseFloat(base[1]),
+        `${shape.w}x${shape.h}: #${id} is lettered smaller than the overlay's own size`
+      );
+    }
+  }
 });
 
 test('browser: the controls are anchored to the grid, not to the viewport', () => {

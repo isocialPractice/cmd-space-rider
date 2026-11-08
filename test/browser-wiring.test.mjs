@@ -561,6 +561,64 @@ test('a first touch on a refused grid reveals nothing, and widening then does', 
   assert.equal(p.dom.elements.touch.hidden, false, 'until the window holds the grid');
 });
 
+test('a control held across the overlay going down is let go by the release, not by the hiding', () => {
+  // The hazard taking the overlay down introduced, and the reading that settles
+  // it. syncTouchOverlay writes `hidden` and nothing else, so a resize onto a
+  // refused grid can hide #touch while a thumb is on BOOST - and the
+  // pointerup, pointercancel and pointerleave listeners that would let the key
+  // go are on an element that is display:none by then. Nothing in the page
+  // recovers from that on its own: the notice branch deletes every justPressed
+  // key on each frame and never touches `keys`, which is the half this case can
+  // execute and does, below.
+  //
+  // Whether the release arrives at all is the browser's answer rather than
+  // Node's, for the reason this file's header gives: setPointerCapture is the
+  // browser's and a stub proves only that a handler was called with an id. All
+  // three outcomes were open - the capture released with a boundary event, the
+  // capture kept and the pointerup delivered to the hidden element, or the
+  // capture released silently and the key stuck.
+  //
+  // Measured on 11-08-26 against Chromium 151.0.7922.34, driving real pointers
+  // through CDP, as touch and again as mouse, with the thumb lifted both while
+  // the overlay was down and after it was back up, and at a coordinate inside
+  // the old control and at one outside the 300x60 window. Eight runs, one
+  // answer: Chromium keeps the capture through display:none and delivers the
+  // release to the hidden element, so `keys.F` went false on the lift in every
+  // one of them. It stays true for the whole of the notice while the thumb is
+  // still down, which is the row below, and that costs nothing - the engine is
+  // not advancing, and a thumb still on the glass when the window comes back is
+  // a thumb on a control that is back under it.
+  //
+  // So the page is left as it is and the reading is left here, because the
+  // answer is one browser's: an engine that released the capture without a
+  // boundary event would strand the key, and the fix if that ever turns up is
+  // for syncTouchOverlay to release the controls as well as hide them -
+  // releaseStick is a hoisted declaration it can already call, while
+  // holdButton's `release` is a closure that would have to be handed back.
+  const p = page();
+  p.touch();
+  p.press('boost');
+  assert.equal(heldKeys(p), 'F', 'a thumb on BOOST holds the boost key');
+
+  p.resize(300, 60);
+  p.pump(4);
+  assert.equal(p.dom.elements.touch.hidden, true, 'the overlay goes down under the thumb');
+  assert.equal(
+    heldKeys(p), 'F',
+    'and hiding it lets go of nothing - four frames of the notice leave the key held',
+  );
+
+  p.resize(1400, 800);
+  p.pump(1);
+  assert.equal(p.dom.elements.touch.hidden, false, 'the window comes back');
+  assert.equal(heldKeys(p), 'F', 'with the key still held, as the thumb still is');
+
+  // The release the browser was measured delivering, arriving at the element
+  // whatever the overlay did in between.
+  p.release('boost');
+  assert.equal(heldKeys(p), '', 'and the release is what lets it go');
+});
+
 // ----- handleResize -----
 
 test('a resize re-seats both halves of a round on the new grid', () => {

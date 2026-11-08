@@ -39,8 +39,11 @@ body.crt #crt{opacity:1}
 /* On-screen controls for a touch device. Hidden until a touch actually
    happens - a laptop with a touchscreen is nearly always being driven by its
    keyboard, and a thumbstick parked over the tunnel on every desktop is worse
-   than no thumbstick at all. The page reveals them on the first touchstart and
-   then leaves them up.
+   than no thumbstick at all. A touch is what reveals them and a window the
+   fitter refuses is what takes them down again, because the notice asking for
+   the window back is the whole of what that screen has to say; the touch is
+   remembered rather than spent, so the first window that holds the grid brings
+   them back without a second one. touchOverlayUp makes that argument in full.
 
    touch-action:none on the whole overlay is what stops a drag on the stick
    scrolling or zooming the page out from under the run. */
@@ -106,7 +109,29 @@ body.crt #crt{opacity:1}
    painted at full size: 31.2px and 39px wide, about 13.6px past each side of a
    4px control, which is BOOST reaching x 321.5 on a 320px window. The overlay
    is hidden outright on a grid the fitter refuses now, so nothing above is
-   reachable; this costs one declaration and holds at any size.
+   reachable; this costs one declaration and is a second line of defence rather
+   than the fix.
+
+   What it used to claim was that it holds at any size. It clips at every size,
+   which is what it is for, and on a window the game draws on what it was
+   clipping was the label rather than a stray edge. --ctl subtracts 2vw, so a
+   window of a given height gives a smaller control the wider it gets: at
+   1920x160 a fitted grid publishes --playpx: 120px, #fire solves to 36px
+   against a 39px BOOST label, and the button read OOST with the B and the T
+   sheared off. Read back off Chromium 151 at 1620x160, 1920x160, 1920x165,
+   2020x170 and 2360x180, and clear at 1920x190 and at 1920x150, where the
+   fitter refuses the grid and there is no overlay to read.
+
+   So the label is solved out of --ctl the way the box already is, and shrinks
+   with the circle instead of being cut by it. 13px is the #touch rule's own
+   size and the ceiling here, so every control the band leaves room for is
+   lettered exactly as it was. Under that, what has to fit is the content box -
+   --ctl less the 2px border each side - and the widest label is BOOST: five
+   characters of Courier New at 0.6em of advance each, so 3em of text, and the
+   3.2 is that with clearance for the rounding. A label longer than BOOST would
+   want the divisor raised with it, which is why the case in
+   test/browser-shell.test.mjs reads the two labels out of the markup and the
+   divisor out of this rule rather than restating either.
 
    Not on #stick, which is why that rule is left where it is. The nub is
    translated out to the ring edge by driveStick and is centred there, so half
@@ -114,7 +139,8 @@ body.crt #crt{opacity:1}
    border-radius:50% box clips to the rounded edge, which would shear the nub
    in half exactly when the stick is reporting the most. There is no text in
    the stick to escape it, so there is nothing to buy either. */
-#fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%;overflow:hidden}
+#fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%;overflow:hidden;
+  font-size:min(13px,calc((var(--ctl) - 4px) / 3.2))}
 #fire{bottom:calc(var(--footerpx,36px) + 1vh)}
 /* BOOST stands on FIRE's real height plus a 2vw gap - the same --ctl, not a
    restatement of it. The offset used to be 26vw, FIRE's width plus the gap,

@@ -3928,3 +3928,95 @@ still be found by name.
     status skips rather than passes. A test that cannot distinguish the two is
     the defect restated.
   - From: Code Review Override - the structure page's test census, and a git read with no answer
+
+## Archived 11-08-26
+
+- [x] Nothing in the suite executes the page wiring below the canvas marker
+  - **Issue**: Not a defect. A browser pass on 11-05-26 drove that region and
+    found it sound: 128 assertions over the mute label on all three menu
+    screens, a muted round and two rematches, the on-screen FIRE and gamepad
+    seat, and the resize path at six window sizes, all passing, and every
+    figure reproduced on a second full run. What it showed instead is that it
+    was the first thing ever to run those lines.
+    `test/browser-shell.test.mjs` opens `index.html`, finds
+    `// ===== Canvas Setup & Sizing =====`, and asserts over the characters
+    after it, so the frame loop, the two `new VersusRound(...,game.state.muted)`
+    openings, the `versusRematch` call, the gamepad poll and `handleResize` are
+    covered by a reader and executed by nothing. The cost is already on the
+    record - `0.13.0`, `0.13.1` and `0.13.2` were all defects on that side of
+    the marker, and `0.13.2` was a defect in the cases written to pin it - and
+    the verification that just cleared the region leaves no check behind,
+    because it runs only when the agent runs.
+  - **Goal**: Resolve to [browser-wiring-regression-harness.prompt.md](.claude/prompts/browser-wiring-regression-harness.prompt.md)
+  - From: UI/UX Override - the wiring below the canvas marker
+- [x] Four comments illustrate the route-dependent mode with `?mode=tunnel`,
+  which `DEBUG_MODES` rejects
+  - **Issue**: `inputMode`'s docstring at `index.html:5000` and `index.html:5019`
+    argues that which seat a pad's A button landed in "depended on the route in,
+    since `?mode=tunnel&versus` leaves the solo game at `'playing'`", and
+    `test/browser-shell.test.mjs:722` and `:887` carry the same sentence beside
+    the cases that pin the behaviour. `tunnel` is not a debug mode and never has
+    been: `DEBUG_MODES` is `['mines','orbs','obstacleCollision','mineCollision','chaos']`
+    at `index.html:1283` and has held those five unchanged since `0.3.0-alpha`
+    (`git log -S"'tunnel'"` over `index.html` and `src/types.ts` is empty). The
+    page gates on `DEBUG_MODES.includes(explicitMode)` at `index.html:5313`, so
+    `?mode=tunnel` falls through to the title screen and leaves the solo game at
+    `'menu'` - confirmed by running the gate: `?mode=tunnel&versus` answers
+    `'menu'` and `?mode=chaos&versus` answers `'playing'`.
+
+    So the example inverts the point it is making. `'menu'` is the state these
+    passages contrast the route against, which makes `tunnel` the one value that
+    cannot demonstrate the contrast, and a reader who tries the link to see the
+    behaviour for themselves gets the title screen and no word about why. The
+    second cost is that four places in two files name `tunnel` as a mode a URL
+    can ask for, one of them a test file read as the record of what the wiring
+    below the canvas marker does.
+
+    Not a defect in `inputMode`. The reading it takes is right and the behaviour
+    it describes is real - a valid mode does leave the solo game at `'playing'`,
+    which is why it is the gate rather than `game.state.mode` that both call
+    sites now ask. Only the worked example is impossible.
+  - **Goal**: Substitute a mode the allow-list holds - `chaos` reproduces every
+    sentence as written, verified above - at all four sites: `index.html:5000`,
+    `index.html:5019`, `test/browser-shell.test.mjs:722` and
+    `test/browser-shell.test.mjs:887`. Nothing executes, so the suite staying at
+    930 of 930 is the whole check. The two copies in `CHANGELOG.md` at `:360`
+    and `:391` are already corrected and are not part of this item - release
+    note prose is fixed in place rather than queued - so leave them alone and do
+    not re-open 0.15.2's entry over it.
+  - From: Code Review Override - a debug mode the allow-list has never held
+- [x] `overlayVars` publishes a negative `--playpx` on the grids `fitGrid`
+  refuses, and nothing reads that half of its domain
+  - **Issue**: `playBandPx` at `index.html:4030` is
+    `(grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH`, which goes negative whenever
+    a grid has fewer rows than the HUD and footer want. `fitGrid` hands back
+    exactly such a grid by design: when no font reaches the floor it returns the
+    notice grid, which needs only `NOTICE_ROWS` of 3. A 300x60 window gives
+    `{cols:30,rows:3,fits:false}` and `overlayVars(grid,60)` then answers
+    `{'--footerpx':'42px','--playpx':'-36px'}` - reproduced against the harness's
+    own `fitGrid` and `overlayVars`.
+
+    `handleResize` publishes the map unconditionally at `index.html:5268`,
+    before `frame()` ever reads `gridFits`, so the negative length reaches the
+    root element on any window in that band. What stops it costing a player
+    anything is circumstantial rather than intended: the overlay stays `hidden`
+    until a `touchstart`, and a viewport 60px tall shows the too-small notice.
+    `revealTouch` does not consult `gridFits`, so a touch arriving there would
+    size the controls against it.
+
+    The gap is the reason this is worth a line rather than the figure itself.
+    `overlayVars`' own docstring argues it exists above the DOM marker so the
+    pairing of the two properties is "where the suite can read it", and
+    `test/browser-shell.test.mjs:1016` reads it at fitting grids only - so the
+    half of its domain `fitGrid` is documented to produce is the half nothing
+    asks about.
+  - **Goal**: Decide which of the two this is, because they are different edits.
+    Either the band is a state the overlay should not be sized for at all, and
+    `handleResize` should skip the publish - or defer to `frame()` - when
+    `grid.fits` is false; or the figure should floor at 0, in `playBandPx` where
+    every caller gets it rather than at the one call site. Then cover it:
+    extend the `overlayVars` case to the grids `fitGrid` returns with
+    `fits:false`, which is the assertion that would have caught this, and assert
+    the property is a length a control can be sized against rather than only
+    that the two names are paired.
+  - From: Code Review Override - a debug mode the allow-list has never held
