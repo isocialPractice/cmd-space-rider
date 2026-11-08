@@ -22,107 +22,30 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the label clip on a wide short window
+### UI/UX Override - the label below the size a word can be read at
 
 #### Found Issues
 
-- [ ] `overflow:hidden` shears the `BOOST` label on a fitted window wider than
-  about 1620px and shorter than about 190px
-  - **Issue**: Not the overlay change, which passes - `#touch` is `hidden` at
-    all 50 refused viewports swept from 300x60 to 1000x300, and the notice has
-    the screen to itself at every one. This is the other half of the same turn:
-    the `overflow:hidden` added to `#fire` and `#boost` at `index.html:117`. It
-    does clip, and on a refused grid that is the whole point - at 320x60 with
-    the overlay forced up, the bands either side of the two controls carry 0
-    cyan and 0 magenta pixels, against 30 and 74 with the one declaration
-    removed. On a window the game draws on it can clip the glyphs instead of a
-    stray edge. `--ctl` subtracts `2vw`, so a window of a given height gives a
-    smaller control the wider it gets: at 1920x160, a fitted grid of 480x20
-    publishing `--playpx: 120px`, `#fire` solves to 36px against a 39px `BOOST`
-    label, and the button reads `OOST` with the `B` and the `T` sheared off.
-    The band is bounded and extreme - about 1620px wide and up at 160-165px
-    tall, 2020px and up at 170-175px, 2360px and up at 180-185px, and nothing
-    at 150px or at 190px - but every window in it is one the game is drawing
-    on. Before this change those same windows painted the whole label about
-    1.5px past each side of the circle, onto the tunnel, which cost a player
-    nothing. The pair of screenshots is beside the agent log, as
-    `ui-ux-tester.overlay1107.9-fitted-1920x160-clipped.png` and
-    `ui-ux-tester.overlay1107.10-fitted-1920x160-unclipped.png`.
-  - **Goal**: A decision rather than a defect to chase, and cosmetic either
-    way. Accept it and say so where the rule is argued, since the comment
-    above `#fire,#boost` claims the declaration "costs one declaration and
-    holds at any size" without naming the sizes where what it costs is a
-    readable label; or solve the label's font size out of `--ctl` the way the
-    box already is, so the text shrinks with the circle instead of being cut
-    by it.
-  - From: UI/UX Override - the label clip on a wide short window
-- [ ] The `#touch` rule's comment still says the overlay is revealed once and
-  then left up
-  - **Issue**: `index.html:42-43` introduces the `#touch` rule with "The page
-    reveals them on the first touchstart and then leaves them up." That held
-    until this turn and is now the opposite of what the page does:
-    `syncTouchOverlay` at `index.html:5531` sits on a resize listener of its
-    own and writes `touchLayer.hidden=!touchOverlayUp(touchShown,gridFits)`, so
-    the overlay comes down on every window `fitGrid` refuses and back up on the
-    first one that holds the grid. What it costs is where the sentence sits. It
-    is the only account of the overlay's lifecycle in the stylesheet, about
-    5,490 lines above `touchOverlayUp`'s docstring at `index.html:4079`, which
-    now argues the opposite at length - so a reader working down the file from
-    the top, or one reading the CSS section on its own, takes the pre-0.15.4
-    behaviour as current and has nothing to tell them otherwise. The release
-    note, `docs/features.html` and `docs/how-it-works.html` were all brought up
-    to date on the same turn; this sentence was the one place that was not.
-  - **Goal**: Say what the page does now, naming the window rather than only
-    the touch: a touch is what reveals them, a window the fitter refuses is
-    what takes them down again, and the touch is remembered so the first window
-    that holds the grid brings them back. `touchOverlayUp`'s docstring already
-    carries the whole argument, so this wants a clause rather than a paragraph.
-    Nothing executes either sentence, so the suite staying at 964 of 964 is the
-    whole check.
-  - From: UI/UX Override - the label clip on a wide short window
-- [ ] Taking the overlay down does not let go of what a thumb is holding
-  - **Issue**: `syncTouchOverlay` at `index.html:5531` writes `hidden` and
-    nothing else. Until this turn the overlay could not go down once it was up,
-    so a control was only ever released by the pointer that pressed it; now an
-    orientation change from a window that fits to one the fitter refuses can
-    hide `#touch` while the stick, `#fire` or `#boost` is held, and the
-    `pointerup`, `pointercancel` and `pointerleave` listeners that call
-    `releaseStick` at `index.html:5549` and `holdButton`'s `release` at
-    `index.html:5603` are on elements that are `display:none` by then. If none
-    of the three fires, `keys.BOOST` - or `SPACE`, or a direction - stays
-    `true`, and it stays true for the whole of the notice: the branch at
-    `index.html:5695` deletes every `justPressed` key on each frame and never
-    touches `keys`, so the held key is still held on the window that brings the
-    overlay back.
-
-    Whether it does stick is a browser question rather than a Node one, and
-    nobody has observed it. Both the stick and `holdButton`'s element take
-    pointer capture, and what a browser does with a captured pointer whose
-    element becomes `display:none` decides all three outcomes: release the
-    capture and `pointerleave` fires at the old target and the key is let go;
-    keep it and the `pointerup` still lands on the hidden element and the key
-    is let go; release it with no boundary event and the key sticks. The
-    harness cannot answer any of them - `test/browser-wiring.test.mjs`'s own
-    header says real pointer plumbing is the browser's and that a stub proves
-    only that a handler was called with an id - which is why this is queued
-    rather than fixed.
-
-    The repository already reasons about this exact hazard one input layer
-    over. `pollGamepads()` is deliberately above the notice branch, at
-    `index.html:5682`, because "a pad that stopped reporting under the floor
-    would come back with keys still held from before the resize". The touch
-    path now has a way to reach that state and no answer for it.
-  - **Goal**: Settle it in a browser first - a thumb on `BOOST`, a resize onto
-    a refused grid, then back, reading `keys.BOOST` at each step. If the key
-    sticks, make taking the overlay down release the controls as well as hide
-    them: `releaseStick` is a hoisted function declaration `syncTouchOverlay`
-    can already call, while `holdButton`'s `release` is a closure and would
-    have to be handed back for the same to reach `#fire` and `#boost`, which is
-    why this is more than the one-line edit it reads as. If it does not stick,
-    the thing to leave behind is the reading that says so, in
-    `test/browser-wiring.test.mjs` beside the two cases this turn added, since
-    the answer is a browser's and the next browser may not give the same one.
-  - From: UI/UX Override - the label clip on a wide short window
+- [ ] The overlay label keeps shrinking past the point it says anything
+  - **Issue**: `0.15.5` solves `#fire` and `#boost`'s label out of `--ctl`, and
+    that fixed the shearing it was written for - all five of the viewports the
+    change was sent to be verified at now letter `BOOST` and `FIRE` whole,
+    inside the circle, and legibly. What the rule does not answer is what the
+    label should do once the circle is smaller than any readable word. It goes
+    on shrinking. Read off Chromium 151 at `deviceScaleFactor: 1` from
+    magnified true-pixel crops: `8.00px` at `2560x161` is marginal and legible
+    mostly by expectation, `6.00px` at `3200x161` is an undifferentiated run of
+    blocks, and `3.99px` at `3840x167` is a smudge with no character
+    distinguishable. The `#crt` scanlines cross the glyphs and cost another
+    half step of contrast. Nothing escapes the circle and nothing shears at any
+    of them, so this is not the clip returning - it is the new rule correctly
+    solving to a size not worth drawing. Swept through the project's own
+    resolver over `fitGrid` and `overlayVars`, 1,276 of 188,421 fitted
+    viewports - 0.68% - letter below `8px`, all of them very wide and very
+    short, where `--ctl`'s `2vw` term eats the control faster than the band
+    grows.
+  - **Goal**: Resolve to [overlay-label-floor.prompt.md](.claude/prompts/overlay-label-floor.prompt.md)
+  - From: UI/UX Override - the label below the size a word can be read at
 
 ## Quick Wins
 
@@ -168,97 +91,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 192 earlier items in `TODO-archive.md`, newest last.
+> 195 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Nothing in the suite executes the page wiring below the canvas marker
-  - **Issue**: Not a defect. A browser pass on 11-05-26 drove that region and
-    found it sound: 128 assertions over the mute label on all three menu
-    screens, a muted round and two rematches, the on-screen FIRE and gamepad
-    seat, and the resize path at six window sizes, all passing, and every
-    figure reproduced on a second full run. What it showed instead is that it
-    was the first thing ever to run those lines.
-    `test/browser-shell.test.mjs` opens `index.html`, finds
-    `// ===== Canvas Setup & Sizing =====`, and asserts over the characters
-    after it, so the frame loop, the two `new VersusRound(...,game.state.muted)`
-    openings, the `versusRematch` call, the gamepad poll and `handleResize` are
-    covered by a reader and executed by nothing. The cost is already on the
-    record - `0.13.0`, `0.13.1` and `0.13.2` were all defects on that side of
-    the marker, and `0.13.2` was a defect in the cases written to pin it - and
-    the verification that just cleared the region leaves no check behind,
-    because it runs only when the agent runs.
-  - **Goal**: Resolve to [browser-wiring-regression-harness.prompt.md](.claude/prompts/browser-wiring-regression-harness.prompt.md)
-  - From: UI/UX Override - the wiring below the canvas marker
-- [x] Four comments illustrate the route-dependent mode with `?mode=tunnel`,
-  which `DEBUG_MODES` rejects
-  - **Issue**: `inputMode`'s docstring at `index.html:5000` and `index.html:5019`
-    argues that which seat a pad's A button landed in "depended on the route in,
-    since `?mode=tunnel&versus` leaves the solo game at `'playing'`", and
-    `test/browser-shell.test.mjs:722` and `:887` carry the same sentence beside
-    the cases that pin the behaviour. `tunnel` is not a debug mode and never has
-    been: `DEBUG_MODES` is `['mines','orbs','obstacleCollision','mineCollision','chaos']`
-    at `index.html:1283` and has held those five unchanged since `0.3.0-alpha`
-    (`git log -S"'tunnel'"` over `index.html` and `src/types.ts` is empty). The
-    page gates on `DEBUG_MODES.includes(explicitMode)` at `index.html:5313`, so
-    `?mode=tunnel` falls through to the title screen and leaves the solo game at
-    `'menu'` - confirmed by running the gate: `?mode=tunnel&versus` answers
-    `'menu'` and `?mode=chaos&versus` answers `'playing'`.
-
-    So the example inverts the point it is making. `'menu'` is the state these
-    passages contrast the route against, which makes `tunnel` the one value that
-    cannot demonstrate the contrast, and a reader who tries the link to see the
-    behaviour for themselves gets the title screen and no word about why. The
-    second cost is that four places in two files name `tunnel` as a mode a URL
-    can ask for, one of them a test file read as the record of what the wiring
-    below the canvas marker does.
-
-    Not a defect in `inputMode`. The reading it takes is right and the behaviour
-    it describes is real - a valid mode does leave the solo game at `'playing'`,
-    which is why it is the gate rather than `game.state.mode` that both call
-    sites now ask. Only the worked example is impossible.
-  - **Goal**: Substitute a mode the allow-list holds - `chaos` reproduces every
-    sentence as written, verified above - at all four sites: `index.html:5000`,
-    `index.html:5019`, `test/browser-shell.test.mjs:722` and
-    `test/browser-shell.test.mjs:887`. Nothing executes, so the suite staying at
-    930 of 930 is the whole check. The two copies in `CHANGELOG.md` at `:360`
-    and `:391` are already corrected and are not part of this item - release
-    note prose is fixed in place rather than queued - so leave them alone and do
-    not re-open 0.15.2's entry over it.
-  - From: Code Review Override - a debug mode the allow-list has never held
-- [x] `overlayVars` publishes a negative `--playpx` on the grids `fitGrid`
-  refuses, and nothing reads that half of its domain
-  - **Issue**: `playBandPx` at `index.html:4030` is
-    `(grid.rows-HUD_ROWS-FOOTER_ROWS)*grid.cellH`, which goes negative whenever
-    a grid has fewer rows than the HUD and footer want. `fitGrid` hands back
-    exactly such a grid by design: when no font reaches the floor it returns the
-    notice grid, which needs only `NOTICE_ROWS` of 3. A 300x60 window gives
-    `{cols:30,rows:3,fits:false}` and `overlayVars(grid,60)` then answers
-    `{'--footerpx':'42px','--playpx':'-36px'}` - reproduced against the harness's
-    own `fitGrid` and `overlayVars`.
-
-    `handleResize` publishes the map unconditionally at `index.html:5268`,
-    before `frame()` ever reads `gridFits`, so the negative length reaches the
-    root element on any window in that band. What stops it costing a player
-    anything is circumstantial rather than intended: the overlay stays `hidden`
-    until a `touchstart`, and a viewport 60px tall shows the too-small notice.
-    `revealTouch` does not consult `gridFits`, so a touch arriving there would
-    size the controls against it.
-
-    The gap is the reason this is worth a line rather than the figure itself.
-    `overlayVars`' own docstring argues it exists above the DOM marker so the
-    pairing of the two properties is "where the suite can read it", and
-    `test/browser-shell.test.mjs:1016` reads it at fitting grids only - so the
-    half of its domain `fitGrid` is documented to produce is the half nothing
-    asks about.
-  - **Goal**: Decide which of the two this is, because they are different edits.
-    Either the band is a state the overlay should not be sized for at all, and
-    `handleResize` should skip the publish - or defer to `frame()` - when
-    `grid.fits` is false; or the figure should floor at 0, in `playBandPx` where
-    every caller gets it rather than at the one call site. Then cover it:
-    extend the `overlayVars` case to the grids `fitGrid` returns with
-    `fits:false`, which is the assertion that would have caught this, and assert
-    the property is a length a control can be sized against rather than only
-    that the two names are paired.
-  - From: Code Review Override - a debug mode the allow-list has never held
 - [x] The touch overlay is still laid out on a window the game refuses to draw
   - **Issue**: The floor on `playBandPx` works. A browser pass on 11-06-26 read
     `--playpx` back off the root element at 36 refused viewports and it is
@@ -310,3 +144,100 @@ the roadmap section each one came from.
     alone. Nothing executes either sentence, so the suite staying at 959 of 959
     is the whole check.
   - From: Code Review Override - the element count the stub DOM is described by
+- [x] `overflow:hidden` shears the `BOOST` label on a fitted window wider than
+  about 1620px and shorter than about 190px
+  - **Issue**: Not the overlay change, which passes - `#touch` is `hidden` at
+    all 50 refused viewports swept from 300x60 to 1000x300, and the notice has
+    the screen to itself at every one. This is the other half of the same turn:
+    the `overflow:hidden` added to `#fire` and `#boost` at `index.html:117`. It
+    does clip, and on a refused grid that is the whole point - at 320x60 with
+    the overlay forced up, the bands either side of the two controls carry 0
+    cyan and 0 magenta pixels, against 30 and 74 with the one declaration
+    removed. On a window the game draws on it can clip the glyphs instead of a
+    stray edge. `--ctl` subtracts `2vw`, so a window of a given height gives a
+    smaller control the wider it gets: at 1920x160, a fitted grid of 480x20
+    publishing `--playpx: 120px`, `#fire` solves to 36px against a 39px `BOOST`
+    label, and the button reads `OOST` with the `B` and the `T` sheared off.
+    The band is bounded and extreme - about 1620px wide and up at 160-165px
+    tall, 2020px and up at 170-175px, 2360px and up at 180-185px, and nothing
+    at 150px or at 190px - but every window in it is one the game is drawing
+    on. Before this change those same windows painted the whole label about
+    1.5px past each side of the circle, onto the tunnel, which cost a player
+    nothing. The pair of screenshots is beside the agent log, as
+    `ui-ux-tester.overlay1107.9-fitted-1920x160-clipped.png` and
+    `ui-ux-tester.overlay1107.10-fitted-1920x160-unclipped.png`.
+  - **Goal**: A decision rather than a defect to chase, and cosmetic either
+    way. Accept it and say so where the rule is argued, since the comment
+    above `#fire,#boost` claims the declaration "costs one declaration and
+    holds at any size" without naming the sizes where what it costs is a
+    readable label; or solve the label's font size out of `--ctl` the way the
+    box already is, so the text shrinks with the circle instead of being cut
+    by it.
+  - From: UI/UX Override - the label clip on a wide short window
+- [x] The `#touch` rule's comment still says the overlay is revealed once and
+  then left up
+  - **Issue**: `index.html:42-43` introduces the `#touch` rule with "The page
+    reveals them on the first touchstart and then leaves them up." That held
+    until this turn and is now the opposite of what the page does:
+    `syncTouchOverlay` at `index.html:5531` sits on a resize listener of its
+    own and writes `touchLayer.hidden=!touchOverlayUp(touchShown,gridFits)`, so
+    the overlay comes down on every window `fitGrid` refuses and back up on the
+    first one that holds the grid. What it costs is where the sentence sits. It
+    is the only account of the overlay's lifecycle in the stylesheet, about
+    5,490 lines above `touchOverlayUp`'s docstring at `index.html:4079`, which
+    now argues the opposite at length - so a reader working down the file from
+    the top, or one reading the CSS section on its own, takes the pre-0.15.4
+    behaviour as current and has nothing to tell them otherwise. The release
+    note, `docs/features.html` and `docs/how-it-works.html` were all brought up
+    to date on the same turn; this sentence was the one place that was not.
+  - **Goal**: Say what the page does now, naming the window rather than only
+    the touch: a touch is what reveals them, a window the fitter refuses is
+    what takes them down again, and the touch is remembered so the first window
+    that holds the grid brings them back. `touchOverlayUp`'s docstring already
+    carries the whole argument, so this wants a clause rather than a paragraph.
+    Nothing executes either sentence, so the suite staying at 964 of 964 is the
+    whole check.
+  - From: UI/UX Override - the label clip on a wide short window
+- [x] Taking the overlay down does not let go of what a thumb is holding
+  - **Issue**: `syncTouchOverlay` at `index.html:5531` writes `hidden` and
+    nothing else. Until this turn the overlay could not go down once it was up,
+    so a control was only ever released by the pointer that pressed it; now an
+    orientation change from a window that fits to one the fitter refuses can
+    hide `#touch` while the stick, `#fire` or `#boost` is held, and the
+    `pointerup`, `pointercancel` and `pointerleave` listeners that call
+    `releaseStick` at `index.html:5549` and `holdButton`'s `release` at
+    `index.html:5603` are on elements that are `display:none` by then. If none
+    of the three fires, `keys.BOOST` - or `SPACE`, or a direction - stays
+    `true`, and it stays true for the whole of the notice: the branch at
+    `index.html:5695` deletes every `justPressed` key on each frame and never
+    touches `keys`, so the held key is still held on the window that brings the
+    overlay back.
+
+    Whether it does stick is a browser question rather than a Node one, and
+    nobody has observed it. Both the stick and `holdButton`'s element take
+    pointer capture, and what a browser does with a captured pointer whose
+    element becomes `display:none` decides all three outcomes: release the
+    capture and `pointerleave` fires at the old target and the key is let go;
+    keep it and the `pointerup` still lands on the hidden element and the key
+    is let go; release it with no boundary event and the key sticks. The
+    harness cannot answer any of them - `test/browser-wiring.test.mjs`'s own
+    header says real pointer plumbing is the browser's and that a stub proves
+    only that a handler was called with an id - which is why this is queued
+    rather than fixed.
+
+    The repository already reasons about this exact hazard one input layer
+    over. `pollGamepads()` is deliberately above the notice branch, at
+    `index.html:5682`, because "a pad that stopped reporting under the floor
+    would come back with keys still held from before the resize". The touch
+    path now has a way to reach that state and no answer for it.
+  - **Goal**: Settle it in a browser first - a thumb on `BOOST`, a resize onto
+    a refused grid, then back, reading `keys.BOOST` at each step. If the key
+    sticks, make taking the overlay down release the controls as well as hide
+    them: `releaseStick` is a hoisted function declaration `syncTouchOverlay`
+    can already call, while `holdButton`'s `release` is a closure and would
+    have to be handed back for the same to reach `#fire` and `#boost`, which is
+    why this is more than the one-line edit it reads as. If it does not stick,
+    the thing to leave behind is the reading that says so, in
+    `test/browser-wiring.test.mjs` beside the two cases this turn added, since
+    the answer is a browser's and the next browser may not give the same one.
+  - From: UI/UX Override - the label clip on a wide short window
