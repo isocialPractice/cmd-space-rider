@@ -22,84 +22,53 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the label below the size a word can be read at
+### UI/UX Override - two claims the label floor was justified with
 
 #### Found Issues
 
-- [ ] The overlay label keeps shrinking past the point it says anything
-  - **Issue**: `0.15.5` solves `#fire` and `#boost`'s label out of `--ctl`, and
-    that fixed the shearing it was written for - all five of the viewports the
-    change was sent to be verified at now letter `BOOST` and `FIRE` whole,
-    inside the circle, and legibly. What the rule does not answer is what the
-    label should do once the circle is smaller than any readable word. It goes
-    on shrinking. Read off Chromium 151 at `deviceScaleFactor: 1` from
-    magnified true-pixel crops: `8.00px` at `2560x161` is marginal and legible
-    mostly by expectation, `6.00px` at `3200x161` is an undifferentiated run of
-    blocks, and `3.99px` at `3840x167` is a smudge with no character
-    distinguishable. The `#crt` scanlines cross the glyphs and cost another
-    half step of contrast. Nothing escapes the circle and nothing shears at any
-    of them, so this is not the clip returning - it is the new rule correctly
-    solving to a size not worth drawing. Swept through the project's own
-    resolver over `fitGrid` and `overlayVars`, 1,276 of 188,421 fitted
-    viewports - 0.68% - letter below `8px`, all of them very wide and very
-    short, where `--ctl`'s `2vw` term eats the control faster than the band
-    grows.
-  - **Goal**: Resolve to [overlay-label-floor.prompt.md](.claude/prompts/overlay-label-floor.prompt.md)
-  - From: UI/UX Override - the label below the size a word can be read at
-- [ ] The new label case calls `3840x200` a viewport that was clear before the
-  fix, and it was the worst-sheared of the seven
-  - **Issue**: `CLIP_SHAPES`' docstring in `test/browser-shell.test.mjs` sorts
-    the seven viewports into five that sheared and two on "the far side" of the
-    band - "`1920x190` was always clear, and `3840x200` is the widest window
-    there is at a height that still holds a control" - and then says the
-    Chromium reading was "clipped at the first five and clear at the last two
-    beforehand". `3840x200` is not on the far side of that band and was not
-    clear. `fitGrid(3840,200)` reports `fits: true` on a grid of 768x20
-    publishing `--playpx: 150px`, `--ctl` solves to `31.60px`, the content box
-    the two `2px` borders leave is `27.60px`, and a `BOOST` fixed at `13px` is
-    `39.01px` - `11.41px` over, against `7.04px` at the worst of the five the
-    comment does call clipped (`1920x165`, `31.97px` of box). At 3840 wide the
-    band does not clear until about `231px` tall, where the content box reaches
-    `40.45px`. So the one viewport in the list chosen to stand for *not*
-    shearing is the strongest shearing case in it, and the probe beside it
-    already says so - it counts 21,540 sheared labels over the walk, and the
-    `TODO` item above puts them "all of them very wide and very short".
-  - **Goal**: Say what `3840x200` is - the far corner of the shearing band
-    rather than the far side of it, which is what makes it the strongest case
-    in the list - and leave the "clear beforehand" claim on `1920x190`, which
-    holds (`43.85px` of box against a `39.01px` label). The `after` half of the
-    sentence is right for all seven and wants no change. Nothing in the
-    docstring executes, so the suite staying at 967 of 967 is the whole check.
-  - From: UI/UX Override - the label below the size a word can be read at
-- [ ] The features page says the controls are not sized out of the window, and
-  on most devices they are
-  - **Issue**: `docs/features.html`'s touch bullet gained "All three are sized
-    out of the band between the HUD and the footer rather than out of the
-    window, in character rows no viewport unit can measure". Each size is a
-    `min()` of three terms, not one -
-    `--ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2))`
-    and `--stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px))` at
-    `index.html:84-85` - and the band term is not the one that binds on most of
-    the 16 device shapes `test/browser-shell.test.mjs` walks. For `--ctl` the
-    band wins on 8 of the 16; on the two portrait phones (`375x667`, `412x915`)
-    `24vw` wins, and on six more (`667x375` through `1180x820`) the `118px`
-    ceiling does. For `--stick` the band wins on 2 of the 16 - only `349x160`
-    and `400x180` - with `34vw` on the two portrait phones and `170px` on the
-    other twelve. The page's own comment above `:root` states the shape the
-    bullet flattens: "Three caps, because three different things bound a
-    control... And the room actually available, which is the one that was
-    missing." The cost is that the one published sentence describing how big
-    these controls are tells a phone user the window plays no part in it, when
-    on a phone in portrait the window's width is the only thing that decides
-    it.
-  - **Goal**: Keep the consequence, which is correct and is the half worth
-    publishing - a short wide window gets smaller controls instead of controls
-    over the shield bar - and say the band is the cap that was missing rather
-    than the only cap, so the bullet agrees with the `:root` comment it
-    describes. The clause about the `FIRE` and `BOOST` lettering shrinking with
-    the circle is accurate and wants no change. Nothing on the page executes,
-    so the suite staying at 967 of 967 is the whole check.
-  - From: UI/UX Override - the label below the size a word can be read at
+- [ ] The new sweep's docstring quotes a count from no sweep in the repository
+  - **Issue**: `test/browser-shell.test.mjs` carries `188,421` twice, and
+    nothing produces it. The docstring above `floorSweep` says "The whole space
+    is 188,421 fitted viewports and test/probes/overlay-anchor.mjs walks it,
+    which is where the figures the CHANGELOG quotes come from", and the comment
+    opening the case below it says "1,276 of the 188,421 fitted viewports letter
+    under 8px". Three readings disagree with that. `node test/probes/run.mjs
+    overlay-anchor` reports `3581 of 682500 viewports unlettered (0.52%)`, which
+    is what `index.html` and the `0.15.6` CHANGELOG entry both quote. The
+    `floorSweep` lattice itself - every 23rd width from 240 and every 11th
+    height from 120 - yields 14,915 fitted viewports, of which 123 letter under
+    `8px`; 14,915 is the figure the CHANGELOG's own **Added** entry uses for
+    this very case. And the CHANGELOG's **Notes** say of `1,276 of 188,421`
+    that it "came from the review's own sweep" and that "Nothing published
+    carries it" - which this file does, in the two places above. So the
+    docstring attributes the review's scratch lattice to the probe, and the case
+    comment describes a space it does not walk.
+  - **Goal**: Give each figure the sweep it belongs to. The docstring should
+    name what `floorSweep` actually produces - 14,915 fitted viewports, 123 of
+    them under the floor - and point at the probe for the 682,500 walk the
+    CHANGELOG quotes, rather than merging the two into one number. `188,421` and
+    `1,276` should leave the file, since nothing in the repository can rebuild
+    them.
+  - From: UI/UX Override - two claims the label floor was justified with
+- [ ] The floor's reading says the CRT crosses the glyphs, and it paints under them
+  - **Issue**: `index.html`'s comment on `#touch.unlettered #fire,#touch.unlettered
+    #boost`, and the `0.15.6` CHANGELOG entry in the same words, say "The `#crt`
+    scanline gradient crosses the glyphs and costs another half step of contrast
+    on all three, so those are the sizes as a player sees them rather than as
+    the font would draw them on a clean background". `#crt` and `#touch` are
+    both `position:fixed`, `grep -n "z-index" index.html` returns nothing, and
+    `#touch` is the later element in the body - so the label paints over the
+    gradient. Measured in Chromium `151.0.7922.34` at `deviceScaleFactor: 1`,
+    with the glyph's own pixels isolated by taking `BOOST` out of the markup and
+    the CRT toggled by the page's own `C` key: of 220 glyph pixels at `13px`, 0
+    change; of 106 at `7.99844px`, 1 changes by 0.7 of 255 a channel; of 26 at
+    `3.98906px`, 2 change by 1.7. The gradient is on - it changes 18,659 pixels
+    of the `1400x800` window - and it is not on the glyphs. What it does band is
+    the circle's own 35%-alpha fill, so the word is read against a striped
+    backdrop, which is the half of the claim that holds. The three sizes
+    themselves are exact and are not in question.
+  - **Goal**: Resolve to [crt-does-not-cross-the-glyphs.prompt.md](.claude/prompts/crt-does-not-cross-the-glyphs.prompt.md)
+  - From: UI/UX Override - two claims the label floor was justified with
 
 ## Quick Wins
 
@@ -145,89 +114,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 195 earlier items in `TODO-archive.md`, newest last.
+> 198 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The touch overlay is still laid out on a window the game refuses to draw
-  - **Issue**: The floor on `playBandPx` works. A browser pass on 11-06-26 read
-    `--playpx` back off the root element at 36 refused viewports and it is
-    `0px` at every one of them, never the negative length 0.15.3 removed, and
-    `--ctl` genuinely collapses the control's content box to zero width there.
-    What the same pass found is a layer up. `revealTouch` sets
-    `touchLayer.hidden=false` on the first `touchstart` and nothing ever
-    consults `gridFits` again, so a window below the grid floor keeps a
-    laid-out overlay on a screen the notice owns. Eight of the 36 paint ink
-    either over the notice or off the window: at 320x140 and 300x140 - both
-    carrying `--playpx: 36px`, a positive length with the floor not engaged, so
-    this predates the floor and is not its to fix - the stick ring sits on
-    `Please resize your window.` with `FIRE` on the end of the same line. At
-    320x60 and 400x80 nothing reaches the notice glyphs, but the `FIRE` and
-    `BOOST` labels are still painted at full size, 31.2px and 39px wide,
-    spilling about 13.6px past each side of a 4px control, because a flex
-    container with a zero-width content box does not clip its text - `BOOST`
-    reaches x 321.5 on a 320px-wide window. Screenshots are beside the agent
-    log, prefixed `ui-ux-tester.overlay1106`.
-  - **Goal**: Resolve to [touch-overlay-on-refused-grid.prompt.md](.claude/prompts/touch-overlay-on-refused-grid.prompt.md)
-  - From: UI/UX Override - the overlay on a grid the fitter refuses
-- [x] Two places describe the stub DOM as holding "the six elements the markup
-  declares", and the markup declares seven
-  - **Issue**: `stubDom`'s docstring at `test/helpers.mjs` says it hands back "a
-    document holding the six elements index.html declares", and
-    `docs/development.html` says the harness evaluates the script against "a
-    stub DOM - a window, the six elements the markup declares, a navigator, a
-    clock, and an animation frame queue". The markup declares seven ids:
-    `c`, `crt`, `touch`, `stick`, `nub`, `fire` and `boost`, at
-    `index.html:124-129`. Six is the number the page *fetches* -
-    `getElementById` is called for all of those but `crt`, which is a CSS layer
-    driven by a body class instead (`applyCrt` at `index.html:5307` toggles
-    `crt` on the body, and `body.crt #crt{opacity:1}` at `index.html:38` does
-    the rest), so it needs no handle and the stub rightly has none.
-
-    So the figure is right about the stub and wrong about where it comes from,
-    which costs the sentence the one interesting thing in it. A reader
-    extending the harness counts the markup, finds seven, and either adds a
-    `crt` stub nothing will ever ask for or concludes the six are incomplete -
-    and the actual reason there is no seventh handle, that the CRT overlay is
-    not driven through one, is what the sentence currently hides. The published
-    docs page is the half that matters most, being the one a stranger reads.
-  - **Goal**: Say what the six are counted from rather than changing the count -
-    "the six elements the page fetches by id" reads correctly in both places -
-    and in `test/helpers.mjs` add the clause that makes it worth knowing: that
-    `#crt` is declared but never fetched, because the overlay is toggled by a
-    class on the body. The release note's copy of the same phrase was corrected
-    in place on 11-06-26 and is not part of this item, so leave `CHANGELOG.md`
-    alone. Nothing executes either sentence, so the suite staying at 959 of 959
-    is the whole check.
-  - From: Code Review Override - the element count the stub DOM is described by
-- [x] `overflow:hidden` shears the `BOOST` label on a fitted window wider than
-  about 1620px and shorter than about 190px
-  - **Issue**: Not the overlay change, which passes - `#touch` is `hidden` at
-    all 50 refused viewports swept from 300x60 to 1000x300, and the notice has
-    the screen to itself at every one. This is the other half of the same turn:
-    the `overflow:hidden` added to `#fire` and `#boost` at `index.html:117`. It
-    does clip, and on a refused grid that is the whole point - at 320x60 with
-    the overlay forced up, the bands either side of the two controls carry 0
-    cyan and 0 magenta pixels, against 30 and 74 with the one declaration
-    removed. On a window the game draws on it can clip the glyphs instead of a
-    stray edge. `--ctl` subtracts `2vw`, so a window of a given height gives a
-    smaller control the wider it gets: at 1920x160, a fitted grid of 480x20
-    publishing `--playpx: 120px`, `#fire` solves to 36px against a 39px `BOOST`
-    label, and the button reads `OOST` with the `B` and the `T` sheared off.
-    The band is bounded and extreme - about 1620px wide and up at 160-165px
-    tall, 2020px and up at 170-175px, 2360px and up at 180-185px, and nothing
-    at 150px or at 190px - but every window in it is one the game is drawing
-    on. Before this change those same windows painted the whole label about
-    1.5px past each side of the circle, onto the tunnel, which cost a player
-    nothing. The pair of screenshots is beside the agent log, as
-    `ui-ux-tester.overlay1107.9-fitted-1920x160-clipped.png` and
-    `ui-ux-tester.overlay1107.10-fitted-1920x160-unclipped.png`.
-  - **Goal**: A decision rather than a defect to chase, and cosmetic either
-    way. Accept it and say so where the rule is argued, since the comment
-    above `#fire,#boost` claims the declaration "costs one declaration and
-    holds at any size" without naming the sizes where what it costs is a
-    readable label; or solve the label's font size out of `--ctl` the way the
-    box already is, so the text shrinks with the circle instead of being cut
-    by it.
-  - From: UI/UX Override - the label clip on a wide short window
 - [x] The `#touch` rule's comment still says the overlay is revealed once and
   then left up
   - **Issue**: `index.html:42-43` introduces the `#touch` rule with "The page
@@ -295,3 +183,77 @@ the roadmap section each one came from.
     `test/browser-wiring.test.mjs` beside the two cases this turn added, since
     the answer is a browser's and the next browser may not give the same one.
   - From: UI/UX Override - the label clip on a wide short window
+- [x] The overlay label keeps shrinking past the point it says anything
+  - **Issue**: `0.15.5` solves `#fire` and `#boost`'s label out of `--ctl`, and
+    that fixed the shearing it was written for - all five of the viewports the
+    change was sent to be verified at now letter `BOOST` and `FIRE` whole,
+    inside the circle, and legibly. What the rule does not answer is what the
+    label should do once the circle is smaller than any readable word. It goes
+    on shrinking. Read off Chromium 151 at `deviceScaleFactor: 1` from
+    magnified true-pixel crops: `8.00px` at `2560x161` is marginal and legible
+    mostly by expectation, `6.00px` at `3200x161` is an undifferentiated run of
+    blocks, and `3.99px` at `3840x167` is a smudge with no character
+    distinguishable. The `#crt` scanlines cross the glyphs and cost another
+    half step of contrast. Nothing escapes the circle and nothing shears at any
+    of them, so this is not the clip returning - it is the new rule correctly
+    solving to a size not worth drawing. Swept through the project's own
+    resolver over `fitGrid` and `overlayVars`, 1,276 of 188,421 fitted
+    viewports - 0.68% - letter below `8px`, all of them very wide and very
+    short, where `--ctl`'s `2vw` term eats the control faster than the band
+    grows.
+  - **Goal**: Resolve to [overlay-label-floor.prompt.md](.claude/prompts/overlay-label-floor.prompt.md)
+  - From: UI/UX Override - the label below the size a word can be read at
+- [x] The new label case calls `3840x200` a viewport that was clear before the
+  fix, and it was the worst-sheared of the seven
+  - **Issue**: `CLIP_SHAPES`' docstring in `test/browser-shell.test.mjs` sorts
+    the seven viewports into five that sheared and two on "the far side" of the
+    band - "`1920x190` was always clear, and `3840x200` is the widest window
+    there is at a height that still holds a control" - and then says the
+    Chromium reading was "clipped at the first five and clear at the last two
+    beforehand". `3840x200` is not on the far side of that band and was not
+    clear. `fitGrid(3840,200)` reports `fits: true` on a grid of 768x20
+    publishing `--playpx: 150px`, `--ctl` solves to `31.60px`, the content box
+    the two `2px` borders leave is `27.60px`, and a `BOOST` fixed at `13px` is
+    `39.01px` - `11.41px` over, against `7.04px` at the worst of the five the
+    comment does call clipped (`1920x165`, `31.97px` of box). At 3840 wide the
+    band does not clear until about `231px` tall, where the content box reaches
+    `40.45px`. So the one viewport in the list chosen to stand for *not*
+    shearing is the strongest shearing case in it, and the probe beside it
+    already says so - it counts 21,540 sheared labels over the walk, and the
+    `TODO` item above puts them "all of them very wide and very short".
+  - **Goal**: Say what `3840x200` is - the far corner of the shearing band
+    rather than the far side of it, which is what makes it the strongest case
+    in the list - and leave the "clear beforehand" claim on `1920x190`, which
+    holds (`43.85px` of box against a `39.01px` label). The `after` half of the
+    sentence is right for all seven and wants no change. Nothing in the
+    docstring executes, so the suite staying at 967 of 967 is the whole check.
+  - From: UI/UX Override - the label below the size a word can be read at
+- [x] The features page says the controls are not sized out of the window, and
+  on most devices they are
+  - **Issue**: `docs/features.html`'s touch bullet gained "All three are sized
+    out of the band between the HUD and the footer rather than out of the
+    window, in character rows no viewport unit can measure". Each size is a
+    `min()` of three terms, not one -
+    `--ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2))`
+    and `--stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px))` at
+    `index.html:84-85` - and the band term is not the one that binds on most of
+    the 16 device shapes `test/browser-shell.test.mjs` walks. For `--ctl` the
+    band wins on 8 of the 16; on the two portrait phones (`375x667`, `412x915`)
+    `24vw` wins, and on six more (`667x375` through `1180x820`) the `118px`
+    ceiling does. For `--stick` the band wins on 2 of the 16 - only `349x160`
+    and `400x180` - with `34vw` on the two portrait phones and `170px` on the
+    other twelve. The page's own comment above `:root` states the shape the
+    bullet flattens: "Three caps, because three different things bound a
+    control... And the room actually available, which is the one that was
+    missing." The cost is that the one published sentence describing how big
+    these controls are tells a phone user the window plays no part in it, when
+    on a phone in portrait the window's width is the only thing that decides
+    it.
+  - **Goal**: Keep the consequence, which is correct and is the half worth
+    publishing - a short wide window gets smaller controls instead of controls
+    over the shield bar - and say the band is the cap that was missing rather
+    than the only cap, so the bullet agrees with the `:root` comment it
+    describes. The clause about the `FIRE` and `BOOST` lettering shrinking with
+    the circle is accurate and wants no change. Nothing on the page executes,
+    so the suite staying at 967 of 967 is the whole check.
+  - From: UI/UX Override - the label below the size a word can be read at
