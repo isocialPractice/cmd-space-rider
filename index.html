@@ -141,6 +141,41 @@ body.crt #crt{opacity:1}
    the stick to escape it, so there is nothing to buy either. */
 #fire,#boost{right:5vw;width:var(--ctl);aspect-ratio:1;border-radius:50%;overflow:hidden;
   font-size:min(13px,calc((var(--ctl) - 4px) / 3.2))}
+/* Below a size no word can be read at, no word.
+
+   The rule above is correct all the way down to a smudge, which is the half it
+   does not answer: --ctl goes on solving smaller than any label is legible at,
+   and on a very wide, very short window the label reaches 3.99px. A circle with
+   no word in it still reads as a button - FIRE is the lower cyan one and BOOST
+   the upper magenta one, and position and colour are the whole of what the
+   label adds on a control a thumb covers anyway.
+
+   No @media query can express the condition. It is on the resolved value of
+   --ctl, which is a min() over --playpx - a length handleResize publishes from
+   a grid no viewport unit can measure - so the class is JavaScript's to put on,
+   and LABEL_FLOOR_PX above the DOM marker is the figure it is put on by.
+
+   8px, because that is where the Chromium 151 reading stops being a word. Read
+   off magnified true-pixel crops at deviceScaleFactor 1: BOOST at 8.00px on
+   2560x161 is legible mostly by expectation, with the two Os merged; 6.00px on
+   3200x161 is an undifferentiated run of blocks; 3.99px on 3840x167 is a smudge
+   with no character distinguishable in it. The #crt scanline gradient crosses
+   the glyphs and costs another half step of contrast on all three, so those are
+   the sizes as a player sees them rather than as the font would draw them on a
+   clean background.
+
+   What it costs is walked by test/probes/overlay-anchor.mjs, which reads this
+   figure out of LABEL_FLOOR_PX and the size out of the rule above rather than
+   restating either: 3,581 of its 682,500 fitted viewports - 0.52% - solve
+   below 8px, every one of them between 2563px and 3837px wide and 160px to
+   197px tall, and the smallest size still lettered is 8.00px. A floor of 9px
+   would take that to 5,491 and 10px to 7,766, and 10px would reach back to
+   1919px wide, where the label is a legible 10px. The probe prints a row per
+   candidate floor, so moving this figure is a reading rather than a guess.
+
+   font-size:0 rather than color:transparent, so the glyphs cost no layout and
+   overflow:hidden has nothing left to clip. */
+#touch.unlettered #fire,#touch.unlettered #boost{font-size:0}
 #fire{bottom:calc(var(--footerpx,36px) + 1vh)}
 /* BOOST stands on FIRE's real height plus a 2vw gap - the same --ctl, not a
    restatement of it. The offset used to be 26vw, FIRE's width plus the gap,
@@ -4132,6 +4167,44 @@ function touchOverlayUp(touchSeen,gridFits){
 }
 
 /**
+ * The smallest label worth painting, in pixels, and the class #touch carries
+ * while its controls are below it.
+ *
+ * The stylesheet solves the label out of --ctl, so it shrinks with the circle
+ * instead of being sheared by it - and goes on shrinking past any size a word
+ * can be read at, down to about 4px at the far corner of the space the game
+ * will draw on. What is painted there is ink without information.
+ *
+ * The reading the figure comes from, and why it is 8 and not 9 or 10, is in the
+ * comment on the rule it governs; it lives here because the rule cannot express
+ * a condition on a resolved value and JavaScript has to put the class on.
+ * test/probes/overlay-anchor.mjs reads it from here to count what each
+ * candidate floor would unletter, so the figure has one home and the count has
+ * another.
+ */
+const LABEL_FLOOR_PX=8;
+const UNLETTERED='unlettered';
+
+/**
+ * Whether a label solved to a given size says anything at that size.
+ *
+ * An argument rather than a reading of its own, for the reason touchOverlayUp
+ * gives: the size is the stylesheet's to solve, out of a --ctl this build has
+ * no second copy of, so the page asks the browser for the figure it is about to
+ * paint and this decides the one thing left. Which is also what makes the
+ * decision checkable without a browser - the suite resolves the same
+ * declaration through test/page-style.mjs and puts the answer to this.
+ *
+ * Written as a floor it has to fall under rather than a ceiling it has to
+ * reach, so a size the page could not read at all letters the control: a
+ * reading that came back as nothing is not a reason to take the word away, and
+ * `NaN<8` is false where `NaN>=8` would be too.
+ */
+function lettersFit(labelPx){
+  return !(labelPx<LABEL_FLOOR_PX);
+}
+
+/**
  * Re-seat the game on a fitted grid: the buffer the renderer writes into, the
  * starfield that is laid out in cells, and the grid the engine lays its own
  * screens out against. The new buffer comes back for the page to hold.
@@ -5543,19 +5616,35 @@ let touchShown=false;
 
 /**
  * Put the overlay up or down from the one reading that decides it, which is
- * touchOverlayUp above the DOM marker where the suite can execute it.
+ * touchOverlayUp above the DOM marker where the suite can execute it, and
+ * letter the two buttons or do not, from lettersFit beside it.
  *
- * The only writer of `touchLayer.hidden`, and on a resize listener of its own
- * rather than a line inside handleResize. handleResize is called the moment it
- * is defined, to lay the page out before anything else runs, and that is a long
- * way above the `const touchLayer` this needs - so a line in there would read a
- * binding that does not exist yet on the very first resize. Registering here
- * instead costs nothing and is ordered: handleResize's own listener went on
- * before this one, so `gridFits` is already this window's answer by the time
- * this runs.
+ * The only writer of `touchLayer.hidden` and of the UNLETTERED class, and on a
+ * resize listener of its own rather than a line inside handleResize.
+ * handleResize is called the moment it is defined, to lay the page out before
+ * anything else runs, and that is a long way above the `const touchLayer` this
+ * needs - so a line in there would read a binding that does not exist yet on
+ * the very first resize. Registering here instead costs nothing and is
+ * ordered: handleResize's own listener went on before this one, so `gridFits`
+ * and both published bands are already this window's answers by the time this
+ * runs - which is what makes the size read below this window's size rather
+ * than the last one's.
  */
 function syncTouchOverlay(){
   touchLayer.hidden=!touchOverlayUp(touchShown,gridFits);
+  // The label's size as the stylesheet actually solved it, which is the one
+  // figure here only a browser holds: --ctl is a min() over a band the page
+  // publishes, and a second copy of that arithmetic in this file is a copy that
+  // drifts from the rule it is about.
+  //
+  // The class comes off before the size is asked for. The rule it carries sets
+  // font-size:0, so asked for with the class still on, the answer is the 0 the
+  // class imposed - the control reads as unletterable because it is already
+  // unlettered, and the class never comes off again.
+  touchLayer.classList.remove(UNLETTERED);
+  if(!lettersFit(Number.parseFloat(window.getComputedStyle(fireEl).fontSize))){
+    touchLayer.classList.add(UNLETTERED);
+  }
 }
 
 function revealTouch(){

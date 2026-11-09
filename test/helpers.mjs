@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { pageStyle, specificity, compareSpecificity } from './page-style.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(HERE, '..');
 
@@ -47,7 +49,7 @@ const EXPORTS = [
   'ROLL_TIME', 'ROLL_COOLDOWN', 'COMBO_TIME', 'COMBO_MAX',
   'SHOT_SLACK_COLS', 'SLACK_REF_WIDTH', 'shotSlackCols',
   'fitGrid', 'renderTooSmall', 'footerBandPx', 'playBandPx', 'overlayVars', 'seatGrid',
-  'touchOverlayUp',
+  'touchOverlayUp', 'lettersFit', 'LABEL_FLOOR_PX', 'UNLETTERED',
   'glyphInset', 'tuneText',
   'MIN_WIDTH', 'MIN_HEIGHT', 'FONT_SIZE', 'MIN_FONT_SIZE', 'CELL_LEADING',
   'WARP_INTERVAL', 'WARP_FLASH_TIME', 'warpWallColor',
@@ -249,6 +251,67 @@ function stubContext() {
   return ctx;
 }
 
+
+/**
+ * The page's own stylesheet, parsed once for the stub below.
+ *
+ * Read rather than restated, for the reason test/page-style.mjs exists: the
+ * length the page asks the stub for is solved out of `--ctl`, and a stub that
+ * answered off its own copy of that figure would agree with itself rather than
+ * with the rule the page is about to paint by.
+ */
+const PAGE_SHEET = pageStyle(readFileSync(join(REPO_ROOT, 'index.html'), 'utf8'));
+
+/**
+ * `window.getComputedStyle(el).fontSize`, resolved the way a browser resolves
+ * it: the rules naming this element, folded by specificity with document order
+ * breaking a tie, against the viewport and whatever custom properties
+ * handleResize has published on the root element.
+ *
+ * It exists because the touch overlay reads one resolved length off the page -
+ * the size the stylesheet solved the label to, which is the one figure in that
+ * decision no copy in index.html could hold - and a stub that could not answer
+ * it would leave `syncTouchOverlay` unrunnable in Node, which is the half of
+ * the marker loadBrowserPage is for.
+ *
+ * Two rules reach `#fire` and `#boost`, and the second is the whole reason this
+ * models a cascade rather than returning one declaration: `#touch.unlettered
+ * #fire` sets `font-size:0`, so a page that asked for the size without taking
+ * the class off first would be told the 0 the class imposed. Modelling the
+ * class is what makes that latch fail a case rather than a window.
+ *
+ * What it models is a selector of the form `#id`, or `#touch.<class> #id` - the
+ * two shapes the overlay's rules are written in, and nothing wider. A selector
+ * it does not recognise is left out rather than guessed at, exactly as
+ * `declarationsFor` leaves out a rule inside an at-rule, so a rule added in
+ * some other shape reports as the rule going unread rather than as a plausible
+ * length.
+ */
+function resolvedStyle(el, dom) {
+  const classes = new Set(dom.elements.touch.classList.names());
+  const matching = PAGE_SHEET.rules.flatMap((rule, order) => rule.selectors
+    .filter((sel) => sel === `#${el.id}`
+      || /^#touch\.[\w-]+ #[\w-]+$/.test(sel) && sel.endsWith(` #${el.id}`)
+        && classes.has(sel.slice('#touch.'.length, sel.indexOf(' '))))
+    .map((sel) => ({ sel, order, rule })));
+  matching.sort((a, b) => compareSpecificity(specificity(a.sel), specificity(b.sel))
+    || a.order - b.order);
+
+  const vp = {
+    w: dom.window.innerWidth,
+    h: dom.window.innerHeight,
+    vars: dom.rootStyle.properties,
+  };
+  const declared = {};
+  for (const { rule } of matching) Object.assign(declared, rule.declarations);
+  return {
+    get fontSize() {
+      if (declared['font-size'] === undefined) return '';
+      return `${PAGE_SHEET.lengthPx(declared['font-size'], vp, `#${el.id}'s font-size`)}px`;
+    },
+  };
+}
+
 /** One element, carrying the members the page wiring reaches for. */
 function stubElement(id, box) {
   const classes = new Set();
@@ -365,6 +428,10 @@ export function stubDom({
       AudioContext: function AudioContext() { return audio; },
       webkitAudioContext: undefined,
       addEventListener(type, fn) { (windowListeners[type] ??= []).push(fn); },
+      // Resolved out of the page's own stylesheet rather than answered from a
+      // table here, so the one length the overlay reads back off the page is
+      // the length the rule solves. See resolvedStyle for what it models.
+      getComputedStyle: (el) => resolvedStyle(el, dom),
     },
     navigator: {
       getGamepads: () => dom.gamepads,

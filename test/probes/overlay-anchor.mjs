@@ -236,5 +236,59 @@ export async function run() {
       `${smallestFont.toFixed(1)}px`
     );
   }
+
+  // ----- What the floor takes away, over the same space -----
+  //
+  // The third reading, and the half solving the label out of --ctl left open:
+  // the rule is correct all the way down to a smudge. --ctl goes on solving
+  // smaller than any size a word can be read at, so the page unletters a
+  // control below LABEL_FLOOR_PX - and the figures that justify where that
+  // floor is, rather than one step either side of it, are a count over the
+  // whole viewport space rather than a reading at a shape somebody noticed.
+  //
+  // Both the floor and the label's size are read off the page: the figure out
+  // of the constant above the DOM marker, and the size out of the declaration
+  // it governs, so a change to either reports as the count it moves.
+  const FLOORS = [b.LABEL_FLOOR_PX - 1, b.LABEL_FLOOR_PX, b.LABEL_FLOOR_PX + 1, b.LABEL_FLOOR_PX + 2];
+  const counts = new Map(FLOORS.map((px) => [px, 0]));
+  const band = new Map(FLOORS.map((px) => [px, { w: [Infinity, -1], h: [Infinity, -1] }]));
+  let fitted = 0;
+  let lettered = Infinity;
+
+  for (const w of widths) {
+    for (const h of heights) {
+      const grid = b.fitGrid(w, h, cell);
+      if (!grid.fits) continue;
+      fitted++;
+
+      const vp = { w, h, vars: b.overlayVars(grid, h) };
+      const font = style.lengthPx(LABELS.fire.font, vp, 'the label size');
+      if (b.lettersFit(font)) lettered = Math.min(lettered, font);
+      for (const px of FLOORS) {
+        if (font >= px) continue;
+        counts.set(px, counts.get(px) + 1);
+        const reach = band.get(px);
+        reach.w = [Math.min(reach.w[0], w), Math.max(reach.w[1], w)];
+        reach.h = [Math.min(reach.h[0], h), Math.max(reach.h[1], h)];
+      }
+    }
+  }
+
+  console.log(
+    `  a label is unlettered when it solves below the floor; the page's own is ` +
+    `${b.LABEL_FLOOR_PX}px, and the smallest it letters is ${lettered.toFixed(2)}px`
+  );
+  for (const px of FLOORS) {
+    const n = counts.get(px);
+    const reach = band.get(px);
+    const where = n
+      ? `${reach.w[0]}-${reach.w[1]}px wide by ${reach.h[0]}-${reach.h[1]}px tall`
+      : 'nowhere';
+    console.log(
+      `  floor ${String(px).padStart(2)}px${px === b.LABEL_FLOOR_PX ? ' (the page)' : '           '}` +
+      `: ${String(n).padStart(5)} of ${fitted} viewports unlettered ` +
+      `(${(100 * n / fitted).toFixed(2)}%), ${where}`
+    );
+  }
   console.log('');
 }

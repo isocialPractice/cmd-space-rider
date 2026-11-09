@@ -561,12 +561,55 @@ test('a first touch on a refused grid reveals nothing, and widening then does', 
   assert.equal(p.dom.elements.touch.hidden, false, 'until the window holds the grid');
 });
 
+
+test('the labels come off a control too small to letter, and back on when it grows', () => {
+  // The half 0.15.5 left open, driven rather than read. The stylesheet solves
+  // the label out of --ctl, which goes on solving smaller than any size a word
+  // can be read at, so the page takes the word away below a floor - and the
+  // condition is on a resolved length no @media query can reach, which is why
+  // there is a class here at all.
+  //
+  // The size is the stub's own resolution of the page's rules, out of
+  // test/page-style.mjs, so these are the lengths the stylesheet solves rather
+  // than lengths this file remembers.
+  const p = page();
+  const labelPx = () => p.dom.window.getComputedStyle(p.dom.elements.fire).fontSize;
+  const unlettered = () => p.dom.elements.touch.classList.contains(p.UNLETTERED);
+
+  p.touch();
+  assert.equal(labelPx(), '13px', 'a window with room letters both controls at the full size');
+  assert.equal(unlettered(), false, 'and carries no class');
+
+  // 3840x167 is the bottom of the band: --ctl solves to 16.77px and the label
+  // to 3.99px, which is a smudge with no character distinguishable in it.
+  p.resize(3840, 167);
+  p.pump(1);
+  assert.equal(p.gridFits, true, 'a window the game draws on, which is what makes it cost something');
+  assert.equal(unlettered(), true, 'so the word comes off');
+  assert.equal(labelPx(), '0px', 'and the rule sizes it to nothing rather than inking it over');
+
+  // Another viewport in the same band, so the class is not one window's.
+  p.resize(3200, 161);
+  p.pump(1);
+  assert.equal(unlettered(), true, 'the next window in the band is unlettered too');
+
+  // Back on a window with room, and this is the reading the whole shape of
+  // syncTouchOverlay is for: the class sets font-size:0, so a page that asked
+  // the browser for the size without taking the class off first would be told
+  // the 0 the class imposed, read the control as unletterable because it was
+  // already unlettered, and never letter it again.
+  p.resize(1400, 800);
+  p.pump(1);
+  assert.equal(unlettered(), false, 'the class comes off rather than latching on the 0 it set');
+  assert.equal(labelPx(), '13px', 'and the label is back at the overlay\'s own size');
+});
+
 test('a control held across the overlay going down is let go by the release, not by the hiding', () => {
   // The hazard taking the overlay down introduced, and the reading that settles
-  // it. syncTouchOverlay writes `hidden` and nothing else, so a resize onto a
-  // refused grid can hide #touch while a thumb is on BOOST - and the
-  // pointerup, pointercancel and pointerleave listeners that would let the key
-  // go are on an element that is display:none by then. Nothing in the page
+  // it. syncTouchOverlay writes `hidden` and the label class and nothing else,
+  // so a resize onto a refused grid can hide #touch while a thumb is on BOOST -
+  // and the pointerup, pointercancel and pointerleave listeners that would let
+  // the key go are on an element that is display:none by then. Nothing in the page
   // recovers from that on its own: the notice branch deletes every justPressed
   // key on each frame and never touches `keys`, which is the half this case can
   // execute and does, below.

@@ -1303,14 +1303,28 @@ test('browser: every control is sized against the band, not against the viewport
  * --ctl subtracts 2vw, so a window of a given height gives a *smaller* control
  * the wider it gets, and the first five are where that crossed the width of the
  * label standing in it: at 1920x160 the control solves to 36px against a 39px
- * BOOST, and the button read OOST. The band is bounded at both ends, so the
- * last two are the far side of it - 1920x190 was always clear, and 3840x200 is
- * the widest window there is at a height that still holds a control.
+ * BOOST, and the button read OOST. 1920x190 is over the band's top edge and was
+ * always clear, which is what it is here for - 43.85px of content box against a
+ * 39.01px label, with 4.84px to spare.
+ *
+ * 3840x200 is the far corner of the band rather than the far side of it, and it
+ * is the strongest shearing case in the list. Height is what the band is solved
+ * out of and width is what --ctl's 2vw term takes away, so the widest window
+ * there is at a height that still holds a control is the tightest rather than
+ * the loosest: fitGrid reports `fits: true` on a grid of 768x20 publishing
+ * `--playpx: 150px`, --ctl solves to 31.60px, the two 2px borders leave a
+ * 27.60px content box, and a BOOST fixed at 13px is 39.01px - 11.41px over,
+ * against 7.04px at the worst of the five above it (1920x165, 31.97px of box).
+ * At 3840 wide the band does not clear until about 231px tall, where the
+ * content box reaches 40.45px.
  *
  * Read back off Chromium 151 before and after the font-size went in: clipped at
- * the first five and clear at the last two beforehand, clear at all seven after.
- * The sweep over the whole viewport space is test/probes/overlay-anchor.mjs's,
- * as it is for every other figure about where these three controls land.
+ * the first five and clear at 1920x190 beforehand, clear at all seven after.
+ * That 3840x200 sheared beforehand is the resolver's reading rather than a
+ * browser pass - the index.html comment names the five the before-pass covered -
+ * and it is the same reading test/probes/overlay-anchor.mjs makes over the whole
+ * viewport space, where the constant 13px shears 21,540 labels and bottoms out
+ * at 3837x167 with 26.21px of a 39.01px BOOST outside the box.
  */
 const CLIP_SHAPES = [
   { w: 1620, h: 160 }, { w: 1920, h: 160 }, { w: 1920, h: 165 },
@@ -1420,6 +1434,127 @@ test('browser: a control the band leaves room for is lettered at the full size',
       );
     }
   }
+});
+
+
+/**
+ * The fitted viewport space, coarsely: every 23rd width and every 11th height
+ * over the range a window can hold the grid in. Neither step shares a factor
+ * with any cell the fitter produces, so the lattice cannot step over the band
+ * the floor is about - it is 2560px to 3840px wide and 160px to 197px tall, and
+ * both steps land inside it.
+ *
+ * Coarse because this is a case rather than a probe. The whole space is
+ * 188,421 fitted viewports and test/probes/overlay-anchor.mjs walks it, which
+ * is where the figures the CHANGELOG quotes come from; what a case needs is
+ * both halves of the rule reached, which the counts below assert rather than
+ * assume.
+ */
+function* floorSweep() {
+  for (let w = 240; w <= 3840; w += 23) {
+    for (let h = 120; h <= 1200; h += 11) {
+      const grid = browser.fitGrid(w, h, modelCell);
+      if (!grid.fits) continue;
+      yield { w, h, grid, vars: browser.overlayVars(grid, h) };
+    }
+  }
+}
+
+test('browser: a label below the size a word can be read at is not painted', () => {
+  // The half 0.15.5 left open. Solving the label out of --ctl stopped the clip
+  // shearing it, and --ctl goes on solving smaller than any size a word can be
+  // read at: 1,276 of the 188,421 fitted viewports letter under 8px, bottoming
+  // at 3.99px, which is ink without information rather than a word.
+  //
+  // The rule is a class, because no @media query can carry the condition - it
+  // is on the resolved value of a min() over a band the page publishes at
+  // runtime - and the class is named by the page's own constant, so a rename
+  // that reaches one of the two and not the other fails here.
+  const blanking = style.rules.filter((rule) => !rule.at.length
+    && rule.selectors.some((sel) => sel.startsWith(`#touch.${browser.UNLETTERED} `)));
+  assert.equal(blanking.length, 1, 'one rule blanks the labels, beside the one that sizes them');
+  for (const id of ['fire', 'boost']) {
+    assert.ok(
+      blanking[0].selectors.includes(`#touch.${browser.UNLETTERED} #${id}`),
+      `#${id} is blanked by the class the page's UNLETTERED names`
+    );
+  }
+  assert.equal(
+    blanking[0].declarations['font-size'], '0',
+    'the label is sized to nothing rather than inked transparent, so it costs no layout'
+  );
+
+  // One reading over the whole sweep: at every viewport the game draws on, the
+  // label is either at or above the floor, or the page does not paint it. That
+  // is both halves of the rule in one assertion, and it fails if a change to
+  // --ctl, to the 3.2 divisor or to the floor reopens the gap between them.
+  const floor = browser.LABEL_FLOOR_PX;
+  let lettered = 0;
+  let unlettered = 0;
+  for (const vp of floorSweep()) {
+    const size = style.lengthPx(
+      style.declarationsFor('#fire')['font-size'], vp, "#fire's label"
+    );
+    const fits = browser.lettersFit(size);
+    assert.ok(
+      size >= floor || !fits,
+      `${vp.w}x${vp.h}: the label solves to ${size.toFixed(2)}px, under the `
+      + `${floor}px floor, and the page letters it anyway`
+    );
+    assert.ok(
+      size < floor || fits,
+      `${vp.w}x${vp.h}: the label solves to ${size.toFixed(2)}px, at or over the `
+      + `${floor}px floor, and the page takes it away`
+    );
+    if (fits) lettered++; else unlettered++;
+  }
+  // Neither half is empty, or the assertion above holds for a sweep that never
+  // reached the band the floor exists for.
+  assert.ok(unlettered > 0, 'the sweep reaches viewports the floor takes the label from');
+  assert.ok(lettered > 100 * unlettered, 'and the floor is the exception rather than the rule');
+
+  // And it reaches none of the shapes already reading correctly. The device
+  // list is phones and tablets, and CLIP_SHAPES is the shearing band, which the
+  // font-size already solved - the floor is for the windows past it.
+  for (const shape of [...SHAPES, ...CLIP_SHAPES]) {
+    const vp = viewport(shape);
+    const size = style.lengthPx(style.declarationsFor('#fire')['font-size'], vp, 'the label');
+    assert.ok(
+      browser.lettersFit(size),
+      `${shape.w}x${shape.h}: letters at ${size.toFixed(2)}px and the floor takes it away`
+    );
+  }
+});
+
+test('browser: the floor is put to the size the stylesheet solved, not to a copy of it', () => {
+  // --ctl is a min() over --playpx, so the label's size is the stylesheet's to
+  // solve and the page has no second copy of the arithmetic to solve it from.
+  // The one thing only a browser holds is therefore read off the browser, and
+  // lettersFit above the marker decides the one thing left - which is what lets
+  // the sweep above put the page's own answer to 14,000 viewports without one.
+  assert.match(
+    wiring,
+    /lettersFit\(Number\.parseFloat\(window\.getComputedStyle\(fireEl\)\.fontSize\)\)/,
+    'the size comes off the control the rule sized, resolved'
+  );
+  // The blanking rule sets font-size:0, so a size read with the class still on
+  // is the 0 the class imposed. Left in, the control would read as
+  // unletterable because it was already unlettered and the class would latch.
+  const sync = /function syncTouchOverlay\(\)\{[\s\S]*?\n\}/.exec(wiring);
+  assert.ok(sync, 'syncTouchOverlay is in the page wiring');
+  assert.ok(
+    sync[0].indexOf('classList.remove(UNLETTERED)') < sync[0].indexOf('window.getComputedStyle'),
+    'the class comes off before the size is asked for, so the reading cannot latch'
+  );
+  assert.match(sync[0], /classList\.add\(UNLETTERED\)/, 'and goes back on from the reading');
+
+  // A floor to fall under rather than a bar to clear, so a reading the page
+  // could not take letters the control: NaN < 8 is false where NaN >= 8 would
+  // be too, and a size that came back as nothing is not a reason to take the
+  // word off a button that was reading correctly.
+  assert.equal(browser.lettersFit(browser.LABEL_FLOOR_PX), true, 'the floor itself letters');
+  assert.equal(browser.lettersFit(browser.LABEL_FLOOR_PX - 0.01), false, 'just under it does not');
+  assert.equal(browser.lettersFit(Number.NaN), true, 'and an unreadable size letters');
 });
 
 test('browser: the controls are anchored to the grid, not to the viewport', () => {
