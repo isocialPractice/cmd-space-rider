@@ -69,6 +69,49 @@ its origin survives archiving into `## Complete`.
     themselves are exact and are not in question.
   - **Goal**: Resolve to [crt-does-not-cross-the-glyphs.prompt.md](.claude/prompts/crt-does-not-cross-the-glyphs.prompt.md)
   - From: UI/UX Override - two claims the label floor was justified with
+- [ ] The new sweep's docstring justifies its height step with a factor it shares
+  - **Issue**: `floorSweep`'s docstring in `test/browser-shell.test.mjs` says
+    "Neither step shares a factor with any cell the fitter produces, so the
+    lattice cannot step over the band the floor is about". The height step is
+    11, and the fitter produces a `6x11` cell at font size 9 - the whole set it
+    can produce is `4x8`, `5x9`, `5x10`, `6x11`, `6x12`, `7x13`, `8x14`, `8x15`,
+    `9x16`, `9x17` and `10x18`, and the sweep itself settles on `6x11` at some
+    of its viewports - so the height step is exactly a cell height rather than
+    coprime to all of them. Nothing fails, and the sentence's own conclusion is
+    carried by the clause after it: heights 164, 175, 186 and 197 fall inside
+    the band and the sweep does find 123 viewports under the floor. A step equal
+    to the cell height also moves the row count by exactly one a sample, which
+    is full coverage rather than a gap. The width step 23 is prime and shares no
+    factor with any cell width, so that half is right. What is wrong is the
+    reason given for the step, which a reader changing either axis would trust.
+  - **Goal**: Either drop the coprimality claim and keep the reason that holds -
+    the band is 2563-3837px wide by 160-197px tall and both steps land inside it
+    - or say what is actually true of the height step. `axis`'s docstring in
+    `test/probes/overlay-anchor.mjs` makes the same claim of its coarse step of
+    7, and `7x13` is a cell the fitter produces, so a fix wants to cover both
+    rather than leave two sentences disagreeing about one fact.
+  - From: UI/UX Override - two claims the label floor was justified with
+- [ ] The stub's new style resolver folds rules a browser would have gated
+  - **Issue**: `resolvedStyle` in `test/helpers.mjs` walks `PAGE_SHEET.rules`
+    and never reads `rule.at`, so a declaration inside an `@media` or
+    `@supports` block is folded as though it were top level. Its own docstring
+    offers the opposite behaviour as the model - "left out rather than guessed
+    at, exactly as `declarationsFor` leaves out a rule inside an at-rule" - and
+    `declarationsFor` in `test/page-style.mjs` opens its loop with
+    `if (rule.at.length) continue;`. Nothing fails today: `@media` appears in
+    `index.html` only inside a comment, so the page declares no at-rule and the
+    two resolvers cannot disagree. The state that makes them disagree is the
+    first at-rule naming `#fire` or `#boost` - a narrow-screen or
+    `prefers-reduced-motion` override of the label's size - at which point
+    `window.getComputedStyle` on the stub answers with a length the browser only
+    uses under the query, and the label-floor cases pass or fail on a size no
+    player sees.
+  - **Goal**: Skip an at-rule's rules in `resolvedStyle` the way
+    `declarationsFor` does, so the docstring's claim is the code's behaviour,
+    and leave a conditional block to a caller that reads `rule.at` itself. A
+    case pinning it needs a sheet of its own, since `index.html` has no at-rule
+    to exercise.
+  - From: UI/UX Override - two claims the label floor was justified with
 
 ## Quick Wins
 

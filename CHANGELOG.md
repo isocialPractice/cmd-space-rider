@@ -1,5 +1,161 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.6] - 2026-11-09
+
+### Fixed
+
+- The overlay label kept shrinking past the point it said anything. `0.15.5`
+  solved `#fire` and `#boost`'s label out of `--ctl`, which stopped the clip
+  shearing it, and left open what the label should do once the circle is smaller
+  than any size a word can be read at. It went on shrinking. Read off Chromium
+  151 at `deviceScaleFactor: 1` from magnified true-pixel crops: `BOOST` at
+  `8.00px` on `2560x161` is legible mostly by expectation with the two `O`s
+  merged, `6.00px` on `3200x161` is an undifferentiated run of magenta blocks,
+  and `3.99px` on `3840x167` is a smudge with no character distinguishable in
+  it. The `#crt` scanline gradient does not reach the glyphs - `#touch` is the
+  later of the two `position:fixed` boxes and the page declares no `z-index` at
+  all, so the label paints over the gradient rather than under it. What the
+  gradient does band is the circle's own 35%-alpha fill, so the word is read
+  against a striped backdrop rather than a clean one.
+  Nothing escaped the circle and nothing sheared at any of them - this was the
+  new rule correctly solving to a size not worth drawing.
+
+  So below a floor, no label. `#touch.unlettered #fire,#touch.unlettered
+  #boost{font-size:0}` goes beside the rule that sizes them, and
+  `syncTouchOverlay` - already the only writer of `touchLayer.hidden` - puts the
+  class on from `lettersFit` above the DOM marker. A circle with no word in it
+  still reads as a button: `FIRE` is the lower cyan one and `BOOST` the upper
+  magenta one, and position and colour are the whole of what the label adds on a
+  control a thumb covers anyway. `font-size:0` rather than `color:transparent`,
+  so the glyphs cost no layout and `overflow:hidden` has nothing left to clip.
+
+  No `@media` query can carry the condition, because it is on the resolved value
+  of `--ctl` - a `min()` over `--playpx`, which the page publishes from
+  `handleResize`. That leaves the decision in JavaScript, and the one figure in
+  it that only a browser holds is read off the browser:
+  `window.getComputedStyle(fireEl).fontSize` is the size the stylesheet solved,
+  so this build carries no second copy of `--ctl`'s arithmetic to drift from the
+  rule it is about. The class comes off before the size is asked for - the rule
+  it carries sets `font-size:0`, so asked for with the class still on the answer
+  is the `0` the class imposed, the control reads as unletterable because it is
+  already unlettered, and the class never comes off again.
+
+  `LABEL_FLOOR_PX` is `8`, because that is where the reading above stops being a
+  word, and `lettersFit` is written as a floor to fall under rather than a bar
+  to clear so a size the page could not read at all letters the control:
+  `NaN < 8` is false where `NaN >= 8` would be too. Over the 682,500 fitted
+  viewports `test/probes/overlay-anchor.mjs` walks, `8px` unletters 3,581 of
+  them - 0.52% - every one between `2563px` and `3837px` wide and `160px` to
+  `197px` tall, and the smallest size still lettered is `8.00px`. A floor of
+  `9px` would take that to 5,491 and `10px` to 7,766, and `10px` would reach
+  back to `1919px` wide, where the label is a legible `10px`.
+
+- `CLIP_SHAPES`' docstring in `test/browser-shell.test.mjs` called `3840x200` a
+  viewport on "the far side" of the shearing band and clear before the fix, and
+  it was the worst-sheared of the seven. `fitGrid(3840,200)` reports
+  `fits: true` on a grid of 768x20 publishing `--playpx: 150px`, `--ctl` solves
+  to `31.60px`, the two `2px` borders leave a `27.60px` content box, and a
+  `BOOST` fixed at `13px` is `39.01px` - `11.41px` over, against `7.04px` at the
+  worst of the five the comment does call clipped (`1920x165`, `31.97px` of
+  box). Height is what the band is solved out of and width is what `--ctl`'s
+  `2vw` term takes away, so the widest window there is at a height that still
+  holds a control is the tightest in the list rather than the loosest. It is now
+  described as the far corner of the band, with the arithmetic that makes it the
+  strongest case and the figure for where `3840` wide does clear - about `231px`
+  tall, where the content box reaches `40.45px`. The "clear beforehand" claim
+  stays on `1920x190`, which holds at `43.85px` of box against a `39.01px`
+  label, and that `3840x200` sheared beforehand is named as the resolver's
+  reading rather than a browser pass, since the `index.html` comment lists the
+  five the before-pass covered.
+
+- `docs/features.html` said the three touch controls "are sized out of the band
+  between the HUD and the footer rather than out of the window", and on most
+  devices the window is exactly what sizes them. Each size is a `min()` of three
+  terms, not one, and the band is not the term that binds on most of the 16
+  device shapes `test/browser-shell.test.mjs` walks: for `--ctl` the band wins
+  on 8 of the 16, `24vw` on the two portrait phones and the `118px` ceiling on
+  the other six; for `--stick` the band wins on 2, with `34vw` on the two
+  portrait phones and `170px` on the other twelve. The bullet now says the
+  smallest of three caps wins and names the band as the cap that was *missing*,
+  which is what the `:root` comment it describes has always said, and keeps the
+  consequence that was the half worth publishing - a short wide window gets
+  smaller controls instead of controls over the shield bar. It also gains the
+  floor above, since it is the one published page that describes these controls
+  in that detail.
+
+### Added
+
+- A third reading in `test/probes/overlay-anchor.mjs`: what a floor under the
+  label would unletter, counted at the page's own figure, one step under it and
+  two over, over the same 682,500 fitted viewports it already walks. Both the
+  floor and the label's size are read off the page - the figure out of
+  `LABEL_FLOOR_PX` and the size out of the declaration it governs - so moving
+  either reports as the count it moves rather than as a figure this file
+  remembers. It prints the band each candidate floor reaches as well as the
+  count, which is what makes choosing one a reading instead of a guess.
+
+- `window.getComputedStyle` on the stub DOM in `test/helpers.mjs`, resolved out
+  of the page's own stylesheet through `test/page-style.mjs` rather than
+  answered from a table. Without it `syncTouchOverlay` could not run in Node at
+  all, which is the half of the marker `loadBrowserPage` exists for. It folds
+  the rules naming an element by specificity with document order breaking a tie,
+  and it models the two selector shapes the overlay's rules are written in -
+  `#id` and `#touch.<class> #id` - leaving anything else out rather than
+  guessing at it, so a rule added in some other shape reports as a rule going
+  unread rather than as a plausible length. Modelling the class is what makes
+  the latch above fail a case rather than a window.
+
+- Two cases in `test/browser-shell.test.mjs` and one in
+  `test/browser-wiring.test.mjs`. The first pins the blanking rule - one rule,
+  both controls, through the class the page's own `UNLETTERED` names, sizing the
+  label to nothing - and then sweeps 14,915 fitted viewports asserting that at
+  every one the label is either at or above the floor or not painted, with both
+  halves of that disjunction asserted non-empty so the sweep cannot pass by
+  never reaching the band. It also asserts the floor reaches none of the device
+  shapes or the seven shearing shapes, so the fix is confined to the windows
+  past them. The second pins how the size is read and that the class comes off
+  before it is asked for, and that an unreadable size letters the control. The
+  third drives the page: a touch on a window with room letters both controls at
+  `13px` with no class, `3840x167` and `3200x161` take the word off and resolve
+  the label to `0px`, and a window with room again takes the class back off -
+  which is the latch, executed rather than read.
+
+### Notes
+
+- The suite is at 970 of 970, from 967: two cases in
+  `test/browser-shell.test.mjs`, which takes that file to 73, and one in
+  `test/browser-wiring.test.mjs`, which takes it to 32.
+  `test/probes/overlay-anchor.mjs` still reports 0 of 682,500 fitted viewports
+  misplacing a control and 0 of 1,365,000 labels sheared, and now reports what
+  each candidate floor unletters beside them.
+- `docs/development.html` gains a clause where it describes `overlay-anchor`,
+  since the probe now reads a third thing.
+- The figure the found issue quoted for the floor - 1,276 of 188,421 fitted
+  viewports, 0.68% - came from the review's own sweep, at a different step over
+  the two axes. `index.html` and this entry quote the probe's walk instead,
+  3,581 of 682,500, which is the one the repository can rebuild - but the two
+  new comments in `test/browser-shell.test.mjs` went out still carrying the
+  review's pair, and the `11-09-26` browser pass queued taking them back out.
+  The two sweeps agree on the band, 2560-3840px wide by 160-197px tall.
+- An override run, working the three found issues the 11-08-26 browser pass
+  raised. The regular `## Current` item - the probe that would rebuild
+  `0.15.2`'s 60,000-run figures - was left unchecked and in place for the next
+  run, which is what an override run does with the queue it is standing in
+  front of.
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current` and stays dormant. `README.md` is 126 lines and 8,420
+  characters, under both the 300-line and 30,000-character thresholds, so the
+  over-long README check decides nothing and the header is neither work nor a
+  refusal.
+- The agent note asking a review turn to confirm where its refill answer came
+  from was left untouched, with its attempt count unspent. Its own method says
+  only a review turn can answer it, and this was an override run with three
+  items to work.
+- Every file written this run went back LF. `.gitattributes` declares
+  `text=auto eol=lf` and `git ls-files --eol` reports `w/lf` for every tracked
+  text file, which is the reading taken rather than a carriage-return grep that
+  returns 0 on a CRLF file as readily as on an LF one.
+
 ## [1.0.0-alpha.0.15.5] - 2026-11-08
 
 ### Fixed
