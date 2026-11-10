@@ -42,9 +42,20 @@ import { pageStyle } from '../page-style.mjs';
 
 /**
  * Viewports walked. Every integer width and height over the range a phone or a
- * small window actually occupies, then a coarser step out to 4K - 7px, which
- * shares no factor with any cell the fitter produces, so the sampling cannot
- * land on a lattice that steps over a failure.
+ * small window actually occupies, then a coarser step out to 4K.
+ *
+ * The step is 7px, and not because it is coprime to the cells the fitter
+ * produces - it is not. The whole set is 4x8, 5x9, 5x10, 6x11, 6x12, 7x13,
+ * 8x14, 8x15, 9x16, 9x17 and 10x18, so 7 is a cell width outright and divides
+ * 8x14's height. What keeps the coarse half off a blind spot is the size of
+ * what it is looking for: the readings below are bands hundreds of pixels
+ * across rather than isolated viewports, and the 8px floor's band - everything
+ * from 2563px to 3837px wide - is sampled 183 times by this axis.
+ *
+ * The tight half is exhaustive, so a band reaching down into a phone's range
+ * is walked integer by integer instead. The floor's own heights, 160px to
+ * 197px, sit entirely inside the tight height range and are stepped over by
+ * nothing.
  */
 function axis(tightFrom, tightTo, coarseTo, step = 7) {
   const out = [];

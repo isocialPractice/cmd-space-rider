@@ -282,18 +282,28 @@ const PAGE_SHEET = pageStyle(readFileSync(join(REPO_ROOT, 'index.html'), 'utf8')
  *
  * What it models is a selector of the form `#id`, or `#touch.<class> #id` - the
  * two shapes the overlay's rules are written in, and nothing wider. A selector
- * it does not recognise is left out rather than guessed at, exactly as
- * `declarationsFor` leaves out a rule inside an at-rule, so a rule added in
+ * it does not recognise is left out rather than guessed at, so a rule added in
  * some other shape reports as the rule going unread rather than as a plausible
  * length.
+ *
+ * A rule inside an at-rule is left out on the same bargain, and for the reason
+ * `declarationsFor` in test/page-style.mjs leaves one out: nothing running here
+ * has a viewport or a colour scheme to test a prelude against, so folding one
+ * would answer with a length the browser only uses under the query - and
+ * silently, since the value is a real value from the sheet. The label floor is
+ * exactly the decision that goes wrong on one. `index.html` declares no
+ * at-rule today, so the page cannot exercise that branch - `@media` appears in
+ * it only inside a comment - which is what the `sheet` parameter is for: a case
+ * brings a sheet that does. A caller wanting a conditional block walks `rules`
+ * and reads `at` itself, as test/docs-site.test.mjs already does.
  */
-function resolvedStyle(el, dom) {
+export function resolvedStyle(el, dom, sheet = PAGE_SHEET) {
   const classes = new Set(dom.elements.touch.classList.names());
-  const matching = PAGE_SHEET.rules.flatMap((rule, order) => rule.selectors
+  const matching = sheet.rules.flatMap((rule, order) => (rule.at.length ? [] : rule.selectors
     .filter((sel) => sel === `#${el.id}`
       || /^#touch\.[\w-]+ #[\w-]+$/.test(sel) && sel.endsWith(` #${el.id}`)
         && classes.has(sel.slice('#touch.'.length, sel.indexOf(' '))))
-    .map((sel) => ({ sel, order, rule })));
+    .map((sel) => ({ sel, order, rule }))));
   matching.sort((a, b) => compareSpecificity(specificity(a.sel), specificity(b.sel))
     || a.order - b.order);
 
@@ -307,7 +317,7 @@ function resolvedStyle(el, dom) {
   return {
     get fontSize() {
       if (declared['font-size'] === undefined) return '';
-      return `${PAGE_SHEET.lengthPx(declared['font-size'], vp, `#${el.id}'s font-size`)}px`;
+      return `${sheet.lengthPx(declared['font-size'], vp, `#${el.id}'s font-size`)}px`;
     },
   };
 }

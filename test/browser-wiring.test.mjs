@@ -38,7 +38,9 @@ import assert from 'node:assert/strict';
 
 import {
   loadBrowserPage, stubDom, recordingAudio, rowText, screenText, stageCollision,
+  resolvedStyle,
 } from './helpers.mjs';
+import { pageStyle } from './page-style.mjs';
 
 /** A window wide enough to open a round in: 140x44 cells. */
 const WIDE = { width: 1400, height: 800 };
@@ -602,6 +604,48 @@ test('the labels come off a control too small to letter, and back on when it gro
   p.pump(1);
   assert.equal(unlettered(), false, 'the class comes off rather than latching on the 0 it set');
   assert.equal(labelPx(), '13px', 'and the label is back at the overlay\'s own size');
+});
+
+test('a size the browser would gate behind a query is not the size the stub answers', () => {
+  // The stub resolves one length off the page - the size the stylesheet solved
+  // the label to - and that is the figure the floor above is decided on. What
+  // it must not do is fold a rule a browser would have gated. There is no
+  // viewport to test a prelude against here, so a declaration inside @media or
+  // @supports would come back as a plain length, and the case above would then
+  // pass or fail on a size no player sees.
+  //
+  // index.html declares no at-rule - @media appears in it only inside a comment
+  // - so the page cannot exercise this at all, and the branch would sit unread
+  // until the first narrow-screen or prefers-reduced-motion override of the
+  // label's size. Hence a sheet of its own: the same two rules the overlay
+  // really carries, plus a third inside a query that a browser would only use
+  // at a narrower window than the one asked about.
+  const sheet = pageStyle(`<style>
+    :root{--ctl:64px}
+    #touch{font:600 13px/1 monospace}
+    #fire{font-size:min(13px,calc((var(--ctl) - 4px) / 3.2))}
+    @media (max-width:600px){#fire{font-size:40px}}
+  </style>`);
+  const gated = sheet.rules.filter((rule) => rule.at.length);
+  assert.equal(gated.length, 1, 'the sheet carries one rule behind a query');
+  assert.deepEqual(gated[0].selectors, ['#fire'], 'and it names the element asked about');
+
+  // 1400px wide, so `max-width:600px` does not apply. The top-level rule solves
+  // min(13px, (64px - 4px) / 3.2) - min(13px, 18.75px) - to 13px, and the gated
+  // rule's 40px is the only thing in the sheet that could move it. Folded in it
+  // would, which is what makes this a reading rather than a restatement.
+  const dom = stubDom(WIDE);
+  assert.equal(
+    resolvedStyle(dom.elements.fire, dom, sheet).fontSize, '13px',
+    'the gated rule is left out, so the length is the one the top-level cascade solves'
+  );
+
+  // And left out rather than losing to specificity or order, which is what
+  // makes this a statement about `at` and not about the cascade: the gated rule
+  // is the later of the two and weighs the same, so folded in it would win.
+  const order = sheet.rules.findIndex((rule) => !rule.at.length
+    && rule.selectors.includes('#fire'));
+  assert.ok(order < sheet.rules.indexOf(gated[0]), 'the gated rule is the later of the two');
 });
 
 test('a control held across the overlay going down is let go by the release, not by the hiding', () => {

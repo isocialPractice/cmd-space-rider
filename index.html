@@ -159,10 +159,15 @@ body.crt #crt{opacity:1}
    off magnified true-pixel crops at deviceScaleFactor 1: BOOST at 8.00px on
    2560x161 is legible mostly by expectation, with the two Os merged; 6.00px on
    3200x161 is an undifferentiated run of blocks; 3.99px on 3840x167 is a smudge
-   with no character distinguishable in it. The #crt scanline gradient crosses
-   the glyphs and costs another half step of contrast on all three, so those are
-   the sizes as a player sees them rather than as the font would draw them on a
-   clean background.
+   with no character distinguishable in it. Those are the glyph's own pixels:
+   the #crt scanline gradient does not reach them. Both #crt and #touch are
+   position:fixed and neither carries a z-index, so they paint in document order
+   and #touch is the later of the two - the label goes over the gradient rather
+   than under it. What the gradient does band is the circle's own 35%-alpha
+   fill, so the word is read against a striped backdrop rather than a clean one.
+   test/browser-shell.test.mjs pins that painting order, so giving #crt a
+   z-index fails a case instead of quietly putting the scanlines back over the
+   word.
 
    What it costs is walked by test/probes/overlay-anchor.mjs, which reads this
    figure out of LABEL_FLOOR_PX and the size out of the rule above rather than

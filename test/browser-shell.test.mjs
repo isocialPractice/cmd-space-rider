@@ -1439,16 +1439,27 @@ test('browser: a control the band leaves room for is lettered at the full size',
 
 /**
  * The fitted viewport space, coarsely: every 23rd width and every 11th height
- * over the range a window can hold the grid in. Neither step shares a factor
- * with any cell the fitter produces, so the lattice cannot step over the band
- * the floor is about - it is 2560px to 3840px wide and 160px to 197px tall, and
- * both steps land inside it.
+ * over the range a window can hold the grid in. The band the floor is about is
+ * 2563px to 3837px wide and 160px to 197px tall, as
+ * test/probes/overlay-anchor.mjs reports it, and both steps land well inside
+ * it: 56 of the lattice's widths fall in that 1,274px span, and 164, 175, 186
+ * and 197 fall in the 37px one.
  *
- * Coarse because this is a case rather than a probe. The whole space is
- * 188,421 fitted viewports and test/probes/overlay-anchor.mjs walks it, which
- * is where the figures the CHANGELOG quotes come from; what a case needs is
- * both halves of the rule reached, which the counts below assert rather than
- * assume.
+ * Coprimality is not what makes that true, and these steps have none to offer.
+ * The fitter's whole set of cells is 4x8, 5x9, 5x10, 6x11, 6x12, 7x13, 8x14,
+ * 8x15, 9x16, 9x17 and 10x18: 23 is prime and shares no factor with any of
+ * those widths, but 11 is exactly 6x11's height, and this sweep settles on
+ * 6x11 at some of its viewports. That is lock-step rather than a gap - where
+ * the fitter is on an 11px cell, floor(h / 11) over a step of 11 moves the row
+ * count by exactly one a sample, so no row count is stepped over. What keeps
+ * the lattice off a blind spot is the band being far wider than either step.
+ *
+ * Coarse because this is a case rather than a probe. This lattice fits 14,915
+ * viewports and solves 123 of them under the floor. The walk the published
+ * figures come from is test/probes/overlay-anchor.mjs, which fits 682,500 and
+ * unletters 3,581 of those - the pair index.html and the CHANGELOG both quote.
+ * What a case needs is neither count, but both halves of the rule reached,
+ * which the assertions below check rather than assume.
  */
 function* floorSweep() {
   for (let w = 240; w <= 3840; w += 23) {
@@ -1463,8 +1474,9 @@ function* floorSweep() {
 test('browser: a label below the size a word can be read at is not painted', () => {
   // The half 0.15.5 left open. Solving the label out of --ctl stopped the clip
   // shearing it, and --ctl goes on solving smaller than any size a word can be
-  // read at: 1,276 of the 188,421 fitted viewports letter under 8px, bottoming
-  // at 3.99px, which is ink without information rather than a word.
+  // read at: of the 682,500 fitted viewports test/probes/overlay-anchor.mjs
+  // walks, 3,581 solve under 8px, bottoming at 3.99px, which is ink without
+  // information rather than a word.
   //
   // The rule is a class, because no @media query can carry the condition - it
   // is on the resolved value of a min() over a band the page publishes at
@@ -1555,6 +1567,50 @@ test('browser: the floor is put to the size the stylesheet solved, not to a copy
   assert.equal(browser.lettersFit(browser.LABEL_FLOOR_PX), true, 'the floor itself letters');
   assert.equal(browser.lettersFit(browser.LABEL_FLOOR_PX - 0.01), false, 'just under it does not');
   assert.equal(browser.lettersFit(Number.NaN), true, 'and an unreadable size letters');
+});
+
+test('browser: the label paints over the CRT gradient rather than under it', () => {
+  // The reading above is the glyph's own ink, and 0.15.6 first said it was not:
+  // that the #crt scanline gradient crossed the glyphs and cost another half
+  // step of contrast on all three sizes. A Chromium 151 pass on 11-09-26 read
+  // the glyph pixels with the CRT toggled by the page's own C key and found 0
+  // of 220 changed at 13px, 1 of 106 at 7.99844px and 2 of 26 at 3.98906px -
+  // against 18,659 pixels of the 1400x800 window the gradient does change. So
+  // the gradient is plainly on and plainly not on the glyphs. What it bands is
+  // the circle's own 35%-alpha fill, which is the half of that claim that held.
+  //
+  // Why the claim is wrong is arithmetic rather than a browser reading, which
+  // is the only reason it can be pinned here: two positioned boxes with
+  // z-index:auto paint in document order. So the two facts it rests on are
+  // asserted separately, and either one going the other way fails this rather
+  // than quietly making the sentence right again.
+  const body = html.slice(html.indexOf('<body>'));
+  const crt = body.indexOf('<div id="crt"');
+  const touch = body.indexOf('<div id="touch"');
+  assert.ok(crt >= 0, 'the body carries the CRT layer');
+  assert.ok(touch >= 0, 'the body carries the touch overlay');
+  assert.ok(
+    crt < touch,
+    'the CRT layer is the earlier element, so the controls and their labels paint last'
+  );
+
+  // Positioned, or document order would not be the question at all.
+  for (const sel of ['#crt', '#touch']) {
+    assert.equal(
+      style.declarationsFor(sel).position, 'fixed',
+      `${sel} is positioned, so a z-index on it would reorder the painting`
+    );
+  }
+
+  // And the whole sheet, at-rules included: one z-index anywhere is enough to
+  // make document order no longer the whole of the painting order.
+  assert.deepEqual(
+    style.rules
+      .filter((rule) => 'z-index' in rule.declarations)
+      .flatMap((rule) => rule.selectors),
+    [],
+    'no rule in the page declares a z-index, so document order is the painting order'
+  );
 });
 
 test('browser: the controls are anchored to the grid, not to the viewport', () => {
