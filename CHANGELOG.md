@@ -1,5 +1,114 @@
 # Changelog
 
+## [1.0.0-alpha.0.15.7] - 2026-11-10
+
+### Fixed
+
+- `resolvedStyle` in `test/helpers.mjs` - the stub's `window.getComputedStyle` -
+  walked every rule in the page's sheet and never read `rule.at`, so a
+  declaration inside an `@media` or `@supports` block was folded as though it
+  were top level. Its own docstring offered the opposite as the model, citing
+  `declarationsFor` in `test/page-style.mjs`, which opens its loop with
+  `if (rule.at.length) continue;` for the reason that module spells out about
+  itself: it has no viewport and no colour scheme to test a prelude against, so
+  a folded conditional block answers with a real value from the sheet for a
+  layout the caller never asked about. Nothing failed, because `index.html`
+  declares no at-rule at all - `@media` appears in it only inside a comment -
+  and the two resolvers therefore had nothing to disagree about. The state that
+  would have made them disagree is the first at-rule naming `#fire` or `#boost`,
+  a narrow-screen or `prefers-reduced-motion` override of the label's size, at
+  which point the stub answers with a length the browser only uses under the
+  query and the label-floor cases pass or fail on a size no player sees. It now
+  skips a rule inside an at-rule, and takes an optional sheet so a case can
+  bring one the page cannot supply.
+
+- `index.html`'s comment on the blanking rule said the `#crt` scanline gradient
+  crossed the label's glyphs and cost another half step of contrast on all
+  three of the sizes the floor is justified by. It does not reach them. `#crt`
+  and `#touch` are both `position:fixed`, the page declares no `z-index`
+  anywhere, and `#touch` is the later element in the body - so two boxes at
+  `z-index:auto` paint in document order and the label goes over the gradient.
+  The `11-09-26` browser pass read the glyphs' own pixels in Chromium
+  `151.0.7922.34` at `deviceScaleFactor: 1`, with `BOOST` taken out of the
+  markup to isolate them and the CRT toggled by the page's own `C` key: of 220
+  glyph pixels at `13px`, 0 change; of 106 at `7.99844px`, 1 changes by 0.7 of
+  255 a channel; of 26 at `3.98906px`, 2 change by 1.7. The gradient is plainly
+  on - it changes 18,659 pixels of the `1400x800` window - and plainly not on
+  the glyphs. What it does band is the circle's own 35%-alpha fill, so the word
+  is read against a striped backdrop rather than a clean one, which is the half
+  of the claim that held. The three sizes themselves are exact and were never in
+  question. The same sentence went into this file's `0.15.6` entry already
+  corrected, so only the page carried it.
+
+- The docstrings over `floorSweep` in `test/browser-shell.test.mjs` and `axis`
+  in `test/probes/overlay-anchor.mjs` each justified a sampling step by
+  coprimality with the cells `fitGrid` produces, and neither step has it to
+  offer. The fitter's whole set is `4x8`, `5x9`, `5x10`, `6x11`, `6x12`, `7x13`,
+  `8x14`, `8x15`, `9x16`, `9x17` and `10x18`. The sweep's height step of 11 is
+  exactly `6x11`'s height, and the sweep settles on `6x11` at some of its own
+  viewports; the probe's coarse step of 7 is a cell width outright and divides
+  `8x14`'s height. Nothing fails either way, and in the sweep's case a step
+  equal to a cell height is lock-step rather than a gap - where the fitter is on
+  an 11px cell, `floor(h / 11)` over a step of 11 moves the row count by exactly
+  one a sample. What was wrong was the reason given, which a reader changing
+  either axis would have trusted. Both now rest on the size of what they are
+  looking for: the floor's band is `2563px` to `3837px` wide and `160px` to
+  `197px` tall, the sweep puts 56 of its widths and the heights 164, 175, 186
+  and 197 inside it, and the probe samples that width span 183 times while
+  walking the band's heights integer by integer, since `160` to `197` falls
+  inside its tight range.
+
+- `test/browser-shell.test.mjs` carried `188,421` and `1,276` in two places and
+  nothing in the repository produces either. The `floorSweep` docstring
+  attributed the first to `test/probes/overlay-anchor.mjs`, and the comment on
+  the case below it said `1,276 of the 188,421 fitted viewports letter under
+  8px`; both figures came from the `11-08-26` review's own scratch lattice, as
+  this file's `0.15.6` notes already recorded. Three readings disagreed with
+  them. `node test/probes/run.mjs overlay-anchor` reports `3581 of 682500
+  viewports unlettered (0.52%)`, which is what `index.html` and the `0.15.6`
+  entry both quote; `floorSweep`'s own lattice - every 23rd width from 240 and
+  every 11th height from 120 - fits 14,915 viewports and solves 123 of them
+  under the floor, and 14,915 is the figure that entry's **Added** section uses
+  for this very case. Each figure now sits with the sweep that produces it.
+
+### Added
+
+- A case in `test/browser-shell.test.mjs` pinning the painting order the
+  corrected comment rests on, written as the two facts it rests on rather than
+  as the conclusion: `#crt` is the earlier of the two elements in the body, both
+  are `position:fixed`, and no rule in the whole sheet - at-rules included -
+  declares a `z-index`. It is arithmetic rather than a browser reading, which is
+  what lets it run in the rig at all, and it fails the day someone gives `#crt`
+  a `z-index` and makes the old sentence true.
+
+- A case in `test/browser-wiring.test.mjs` pinning the stub resolver's at-rule
+  gate, on a sheet of its own: the two rules the overlay really carries plus a
+  third behind `@media (max-width:600px)` that is the later rule and weighs the
+  same, so folded in it would win. Asked at `1400x800` the resolver answers the
+  `13px` the top-level cascade solves rather than the gated rule's `40px`. A
+  sheet of its own because `index.html` has no at-rule to exercise, which is
+  exactly why the branch went unread.
+
+### Notes
+
+- The suite is at 972 of 972, from 970: one case in
+  `test/browser-shell.test.mjs`, which takes that file to 74, and one in
+  `test/browser-wiring.test.mjs`, which takes it to 33.
+  `test/probes/overlay-anchor.mjs` reports what it reported before - only its
+  docstring moved - and still unletters 3,581 of 682,500 fitted viewports at the
+  page's own `8px`.
+- `docs/development.html` gains a clause where it describes the stub DOM, since
+  the at-rule gate is a constraint on `index.html` rather than on the harness:
+  add the page's first `@media` rule over a control's label and the stub reports
+  the rule going unread instead of a length a browser would gate.
+- An override run, working the four found issues the `11-09-26` browser pass
+  raised. The regular `## Current` item - the probe that would rebuild `0.15.2`'s
+  60,000-run figures - was left unchecked and in place for the next run, which is
+  what an override run does with the queue it is standing in front of.
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current`. `README.md` is 126 lines and 8,420 characters, under both
+  defaults, so the check that owns it decided nothing this run.
+
 ## [1.0.0-alpha.0.15.6] - 2026-11-09
 
 ### Fixed
