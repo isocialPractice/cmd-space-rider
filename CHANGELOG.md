@@ -1,5 +1,61 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- The reason written beside the stub resolver's at-rule gate did not hold in
+  the file it was written in. `resolvedStyle`'s docstring in
+  `test/helpers.mjs` justified skipping a rule inside an at-rule with "nothing
+  running here has a viewport or a colour scheme to test a prelude against",
+  which is `declarationsFor`'s reason in `test/page-style.mjs` - whose own
+  docstring says "**This module** has no viewport and no colour scheme",
+  speaking about itself - widened to the whole harness on the way across. The
+  stub has both. `resolvedStyle` builds its viewport out of
+  `dom.window.innerWidth` and `innerHeight`, which `lengthPx` resolves every
+  `vw` and `vh` in the sheet against, and `stubDom` carries a `schemeQuery`
+  exposed as `matchMedia` that the harness flips between schemes, so a stub
+  asked at `1400x800` with a light scheme holds exactly the two things the
+  sentence said nothing here had. What actually blocks the fold is that
+  neither resolver evaluates a prelude at all - `at` carries it as raw text
+  and no code in either reads it as a condition - so an `@media` or
+  `@supports` condition cannot be decided here whatever the stub happens to
+  hold. That is the reason a reader asking whether the stub could honour
+  `@media (max-width:600px)` needs, and it is the stronger of the two: it does
+  not go away when the stub gains a dimension. The gate itself and the `0.15.7`
+  fix behind it are unchanged.
+
+- The comment opening the case that pins that gate, in
+  `test/browser-wiring.test.mjs`, carried the same widened claim and
+  contradicted its own body with it: it said there was no viewport to test a
+  prelude against, and the case then resolves at `1400x800` and reasons from
+  that width that the sheet's `max-width:600px` rule does not apply. It now
+  names the missing evaluator, which is what the case is actually a statement
+  about.
+
+- `docs/development.html` published the widened form, as "nothing running in
+  Node has a viewport or a colour scheme to test a prelude against", so the
+  site stated it as well. Corrected in the same terms.
+
+### Notes
+
+- No version applied, and the manifest version is untouched. Every change in
+  the run is a comment or published prose - one docstring, one case comment,
+  one clause on the site - so there is nothing in the diff that executes. The
+  suite is at 972 of 972, unchanged, which is the whole check available for
+  sentences nothing runs.
+- The `0.15.7` entry below carried the same overreach and was corrected in
+  place during that turn, so it already reads as `test/page-style.mjs`
+  speaking about itself and wanted no further change here.
+- An override run, working the one found issue the `11-10-26` code review
+  raised. The regular `## Current` item - the probe that would rebuild
+  `0.15.2`'s 60,000-run figures - was left unchecked and in place for the next
+  run, which is what an override run does with the queue it stands in front
+  of.
+- `### Create and Deploy GitHub Pages Override` stays a bare header under
+  `## Current`. `README.md` is 126 lines and 8,420 characters, under both
+  defaults, so the check that owns it decided nothing this run.
+
 ## [1.0.0-alpha.0.15.7] - 2026-11-10
 
 ### Fixed

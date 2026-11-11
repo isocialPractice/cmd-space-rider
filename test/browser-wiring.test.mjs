@@ -609,10 +609,11 @@ test('the labels come off a control too small to letter, and back on when it gro
 test('a size the browser would gate behind a query is not the size the stub answers', () => {
   // The stub resolves one length off the page - the size the stylesheet solved
   // the label to - and that is the figure the floor above is decided on. What
-  // it must not do is fold a rule a browser would have gated. There is no
-  // viewport to test a prelude against here, so a declaration inside @media or
-  // @supports would come back as a plain length, and the case above would then
-  // pass or fail on a size no player sees.
+  // it must not do is fold a rule a browser would have gated. The stub has a
+  // viewport and a colour scheme both; what nothing here has is a prelude
+  // evaluator, so whether a declaration inside @media or @supports applies
+  // cannot be decided at all, and folded in it would come back as a plain
+  // length and the case above would pass or fail on a size no player sees.
   //
   // index.html declares no at-rule - @media appears in it only inside a comment
   // - so the page cannot exercise this at all, and the branch would sit unread

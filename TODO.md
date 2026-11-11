@@ -22,45 +22,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the at-rule gate's reason does not hold in its own file
-
-#### Resolve Issues
-
-- [ ] At-Rule Reason 1
-  - **Issue**: The gate itself is right and the fix is sound - what is wrong is
-    the reason written beside it, which is the same defect class the rest of
-    this override run was correcting. `test/helpers.mjs:289-291` justifies
-    skipping an at-rule with "nothing running here has a viewport or a colour
-    scheme to test a prelude against", and `resolvedStyle`'s own body
-    contradicts both halves below it: `test/helpers.mjs:310-314` builds
-    `vp` out of `dom.window.innerWidth` and `innerHeight`, which `lengthPx`
-    uses to resolve every `vw` and `vh` in the sheet, and `stubDom` carries a
-    `schemeQuery` at `test/helpers.mjs:387` exposed as `matchMedia` at
-    `:435` and flipped by the harness at `:613`. A stub asked at `1400x800`
-    with a light scheme has exactly the two things the sentence says nothing
-    here has. The claim is true of `test/page-style.mjs`, whose own docstring
-    says "**This module** has no viewport and no colour scheme", and it was
-    widened to the whole harness on the way across. What it costs is a reader
-    asking whether the stub could honour `@media (max-width:600px)`: the
-    docstring answers that there is nothing to test the prelude against, when
-    the actual blocker is that `pageStyle` never parses a prelude at all -
-    `rule.at` holds the prelude as raw text and no code in either resolver
-    evaluates it. `docs/development.html:42` publishes the same widened claim
-    as "nothing running in Node has a viewport or a colour scheme to test a
-    prelude against", so the site states it too.
-  - **Goal**: Give the gate the reason that holds for this module - the
-    resolver has no prelude evaluator, so an `@media` or `@supports` condition
-    cannot be decided here whatever the stub happens to hold - and stop
-    borrowing `page-style.mjs`'s "no viewport, no colour scheme", which is that
-    module speaking about itself. Correct both places: the docstring at
-    `test/helpers.mjs:289-291` and the published clause at
-    `docs/development.html:42`. The `0.15.7` CHANGELOG carried the same
-    overreach and was corrected in place this turn, so it now reads as
-    `page-style.mjs` speaking about itself and wants no further change.
-    Nothing executes any of these sentences, so the suite staying at 972 of 972
-    is the whole check.
-  - From: UI/UX Override - two claims the label floor was justified with
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -105,37 +66,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 202 earlier items in `TODO-archive.md`, newest last.
+> 203 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The features page says the controls are not sized out of the window, and
-  on most devices they are
-  - **Issue**: `docs/features.html`'s touch bullet gained "All three are sized
-    out of the band between the HUD and the footer rather than out of the
-    window, in character rows no viewport unit can measure". Each size is a
-    `min()` of three terms, not one -
-    `--ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2))`
-    and `--stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px))` at
-    `index.html:84-85` - and the band term is not the one that binds on most of
-    the 16 device shapes `test/browser-shell.test.mjs` walks. For `--ctl` the
-    band wins on 8 of the 16; on the two portrait phones (`375x667`, `412x915`)
-    `24vw` wins, and on six more (`667x375` through `1180x820`) the `118px`
-    ceiling does. For `--stick` the band wins on 2 of the 16 - only `349x160`
-    and `400x180` - with `34vw` on the two portrait phones and `170px` on the
-    other twelve. The page's own comment above `:root` states the shape the
-    bullet flattens: "Three caps, because three different things bound a
-    control... And the room actually available, which is the one that was
-    missing." The cost is that the one published sentence describing how big
-    these controls are tells a phone user the window plays no part in it, when
-    on a phone in portrait the window's width is the only thing that decides
-    it.
-  - **Goal**: Keep the consequence, which is correct and is the half worth
-    publishing - a short wide window gets smaller controls instead of controls
-    over the shield bar - and say the band is the cap that was missing rather
-    than the only cap, so the bullet agrees with the `:root` comment it
-    describes. The clause about the `FIRE` and `BOOST` lettering shrinking with
-    the circle is accurate and wants no change. Nothing on the page executes,
-    so the suite staying at 967 of 967 is the whole check.
-  - From: UI/UX Override - the label below the size a word can be read at
 - [x] The new sweep's docstring quotes a count from no sweep in the repository
   - **Issue**: `test/browser-shell.test.mjs` carries `188,421` twice, and
     nothing produces it. The docstring above `floorSweep` says "The whole space
@@ -222,4 +154,38 @@ the roadmap section each one came from.
     and leave a conditional block to a caller that reads `rule.at` itself. A
     case pinning it needs a sheet of its own, since `index.html` has no at-rule
     to exercise.
+  - From: UI/UX Override - two claims the label floor was justified with
+- [x] At-Rule Reason 1
+  - **Issue**: The gate itself is right and the fix is sound - what is wrong is
+    the reason written beside it, which is the same defect class the rest of
+    this override run was correcting. `test/helpers.mjs:289-291` justifies
+    skipping an at-rule with "nothing running here has a viewport or a colour
+    scheme to test a prelude against", and `resolvedStyle`'s own body
+    contradicts both halves below it: `test/helpers.mjs:310-314` builds
+    `vp` out of `dom.window.innerWidth` and `innerHeight`, which `lengthPx`
+    uses to resolve every `vw` and `vh` in the sheet, and `stubDom` carries a
+    `schemeQuery` at `test/helpers.mjs:387` exposed as `matchMedia` at
+    `:435` and flipped by the harness at `:613`. A stub asked at `1400x800`
+    with a light scheme has exactly the two things the sentence says nothing
+    here has. The claim is true of `test/page-style.mjs`, whose own docstring
+    says "**This module** has no viewport and no colour scheme", and it was
+    widened to the whole harness on the way across. What it costs is a reader
+    asking whether the stub could honour `@media (max-width:600px)`: the
+    docstring answers that there is nothing to test the prelude against, when
+    the actual blocker is that `pageStyle` never parses a prelude at all -
+    `rule.at` holds the prelude as raw text and no code in either resolver
+    evaluates it. `docs/development.html:42` publishes the same widened claim
+    as "nothing running in Node has a viewport or a colour scheme to test a
+    prelude against", so the site states it too.
+  - **Goal**: Give the gate the reason that holds for this module - the
+    resolver has no prelude evaluator, so an `@media` or `@supports` condition
+    cannot be decided here whatever the stub happens to hold - and stop
+    borrowing `page-style.mjs`'s "no viewport, no colour scheme", which is that
+    module speaking about itself. Correct both places: the docstring at
+    `test/helpers.mjs:289-291` and the published clause at
+    `docs/development.html:42`. The `0.15.7` CHANGELOG carried the same
+    overreach and was corrected in place this turn, so it now reads as
+    `page-style.mjs` speaking about itself and wants no further change.
+    Nothing executes any of these sentences, so the suite staying at 972 of 972
+    is the whole check.
   - From: UI/UX Override - two claims the label floor was justified with

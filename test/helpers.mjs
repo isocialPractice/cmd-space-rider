@@ -286,16 +286,25 @@ const PAGE_SHEET = pageStyle(readFileSync(join(REPO_ROOT, 'index.html'), 'utf8')
  * some other shape reports as the rule going unread rather than as a plausible
  * length.
  *
- * A rule inside an at-rule is left out on the same bargain, and for the reason
- * `declarationsFor` in test/page-style.mjs leaves one out: nothing running here
- * has a viewport or a colour scheme to test a prelude against, so folding one
- * would answer with a length the browser only uses under the query - and
- * silently, since the value is a real value from the sheet. The label floor is
- * exactly the decision that goes wrong on one. `index.html` declares no
- * at-rule today, so the page cannot exercise that branch - `@media` appears in
- * it only inside a comment - which is what the `sheet` parameter is for: a case
- * brings a sheet that does. A caller wanting a conditional block walks `rules`
- * and reads `at` itself, as test/docs-site.test.mjs already does.
+ * A rule inside an at-rule is left out on the same bargain, at the same point
+ * `declarationsFor` in test/page-style.mjs leaves one out, but not for that
+ * module's reason. What it says of itself is that it has no viewport and no
+ * colour scheme to test a prelude against, and this stub has both: `vp` below
+ * is built out of `dom.window.innerWidth` and `innerHeight`, which is what
+ * `lengthPx` resolves every `vw` and `vh` against, and `stubDom` carries a
+ * `schemeQuery` exposed as `matchMedia` that the harness flips between
+ * schemes. What is missing here is an evaluator. `at` holds the prelude as
+ * raw text and nothing in either resolver reads it as a condition, so whether
+ * an `@media (max-width:600px)` or an `@supports` block applies cannot be
+ * decided at all, whatever the stub happens to hold. Folding one anyway would
+ * answer with a length the browser only uses under the query - and silently,
+ * since the value is a real value from the sheet. The label floor is exactly
+ * the decision that goes wrong on one. `index.html` declares no at-rule
+ * today, so the page cannot exercise that branch - `@media` appears in it
+ * only inside a comment - which is what the `sheet` parameter is for: a case
+ * brings a sheet that does. A caller wanting a conditional block walks
+ * `rules` and decides the prelude in `at` itself, as test/docs-site.test.mjs
+ * already does.
  */
 export function resolvedStyle(el, dom, sheet = PAGE_SHEET) {
   const classes = new Set(dom.elements.touch.classList.names());

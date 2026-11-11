@@ -4219,3 +4219,35 @@ still be found by name.
     sentence is right for all seven and wants no change. Nothing in the
     docstring executes, so the suite staying at 967 of 967 is the whole check.
   - From: UI/UX Override - the label below the size a word can be read at
+
+## Archived 11-11-26
+
+- [x] The features page says the controls are not sized out of the window, and
+  on most devices they are
+  - **Issue**: `docs/features.html`'s touch bullet gained "All three are sized
+    out of the band between the HUD and the footer rather than out of the
+    window, in character rows no viewport unit can measure". Each size is a
+    `min()` of three terms, not one -
+    `--ctl:min(24vw,118px,calc((var(--playpx,9999px) - 1vh - 2vw - 8px) / 2))`
+    and `--stick:min(34vw,170px,calc(var(--playpx,9999px) - 1vh - 8px))` at
+    `index.html:84-85` - and the band term is not the one that binds on most of
+    the 16 device shapes `test/browser-shell.test.mjs` walks. For `--ctl` the
+    band wins on 8 of the 16; on the two portrait phones (`375x667`, `412x915`)
+    `24vw` wins, and on six more (`667x375` through `1180x820`) the `118px`
+    ceiling does. For `--stick` the band wins on 2 of the 16 - only `349x160`
+    and `400x180` - with `34vw` on the two portrait phones and `170px` on the
+    other twelve. The page's own comment above `:root` states the shape the
+    bullet flattens: "Three caps, because three different things bound a
+    control... And the room actually available, which is the one that was
+    missing." The cost is that the one published sentence describing how big
+    these controls are tells a phone user the window plays no part in it, when
+    on a phone in portrait the window's width is the only thing that decides
+    it.
+  - **Goal**: Keep the consequence, which is correct and is the half worth
+    publishing - a short wide window gets smaller controls instead of controls
+    over the shield bar - and say the band is the cap that was missing rather
+    than the only cap, so the bullet agrees with the `:root` comment it
+    describes. The clause about the `FIRE` and `BOOST` lettering shrinking with
+    the circle is accurate and wants no change. Nothing on the page executes,
+    so the suite staying at 967 of 967 is the whole check.
+  - From: UI/UX Override - the label below the size a word can be read at
