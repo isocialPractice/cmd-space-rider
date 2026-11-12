@@ -1,5 +1,5 @@
 // test/engagement.mjs — One pulse cannon engagement, flown at whatever grid the
-// caller names.
+// caller names, and the other engine sequences a test and a probe both walk.
 //
 // The tests and the probes fly the same flight out of this module. A figure a
 // probe prints and a floor a test pins have to come from the same code, or the
@@ -9,6 +9,13 @@
 // here too, because a probe prints them beside what it just measured and a
 // probe printing a floor the suite does not pin is the same drift by another
 // route.
+//
+// The pulse cannon engagement is what the module was opened for and is most of
+// what is in it. The asteroid field section at the foot of the file is here for
+// the same reason rather than for the same subject: `test/asteroid-field.test.mjs`
+// pins two seeds of that sequence and `test/probes/section-jolt.mjs` walks
+// thousands of them, and a sequence written out twice is a rate the probe
+// reports about a sequence the suite is not checking.
 //
 // The grid is a parameter rather than a constant because the hit test is not
 // size-neutral. Every figure this suite used to carry was taken at 80x24, and a
@@ -20,13 +27,15 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { REPO_ROOT, loadBrowserEngine, fakeStorage, FRAME } from './helpers.mjs';
+import { REPO_ROOT, loadBrowserEngine, fakeStorage, rowText, FRAME } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { Game: TerminalGame } = require(join(REPO_ROOT, 'out', 'game.js'));
 const { ScreenBuffer: TerminalScreen } = require(join(REPO_ROOT, 'out', 'screen.js'));
-const { renderGame: terminalRender, tunnelSpan: terminalTunnelSpan } =
-  require(join(REPO_ROOT, 'out', 'render.js'));
+const {
+  renderGame: terminalRender, tunnelSpan: terminalTunnelSpan,
+  shakeColumns: terminalShakeColumns,
+} = require(join(REPO_ROOT, 'out', 'render.js'));
 const terminalTypes = require(join(REPO_ROOT, 'out', 'types.js'));
 
 const browser = loadBrowserEngine(fakeStorage());
@@ -43,6 +52,13 @@ export const BUILDS = [
     seedRng: terminalTypes.seedRng,
     BULLET_SPEED: terminalTypes.BULLET_SPEED,
     BULLET_LIFE_SLACK: terminalTypes.BULLET_LIFE_SLACK,
+    ASTEROID_INTERVAL: terminalTypes.ASTEROID_INTERVAL,
+    // The jolt, which this build puts in the grid and the other one does not.
+    // Listed on this entry alone rather than as a `browser.shakeColumns` that
+    // resolves to undefined, because the browser build exports no such function:
+    // `shakeShift` reading zero for it is a reading of that build and not a
+    // fallback for a name that failed to load.
+    shakeColumns: terminalShakeColumns,
   },
   {
     name: 'browser', Game: browser.Game,
@@ -52,6 +68,7 @@ export const BUILDS = [
     seedRng: browser.seedRng,
     BULLET_SPEED: browser.BULLET_SPEED,
     BULLET_LIFE_SLACK: browser.BULLET_LIFE_SLACK,
+    ASTEROID_INTERVAL: browser.ASTEROID_INTERVAL,
   },
 ];
 
@@ -1626,4 +1643,185 @@ export function darkWalk(build, grid, { dt = 1 / 60 } = {}) {
     }
   }
   return out;
+}
+
+/* ===== The asteroid field section =====
+   Every ASTEROID_INTERVAL the tunnel walls come down for ASTEROID_TIME and the
+   rocks arrive across the whole screen, then the tunnel returns. The sequence
+   below is one open and one close of that, with the wall columns read off a
+   frame either side of it.
+
+   It is here rather than in test/asteroid-field.test.mjs because two callers
+   walk it. The suite pins it at two seeds - one whose rocks miss the ship and
+   one whose rocks reach it - and test/probes/section-jolt.mjs walks thousands
+   of seeded worlds to report how often each of those two happens. A rate
+   reported about a sequence written out a second time is a rate about nothing
+   the suite checks. */
+
+/**
+ * Wind the section timer to half a frame short of the interval, so the next
+ * frame crosses it. Written against the build's own constant rather than
+ * against 150, so a caller moves with the tuning instead of pinning it twice.
+ */
+export function armSection(build, game, dt = FRAME) {
+  game.state.asteroidTimer = build.ASTEROID_INTERVAL - dt / 2;
+}
+
+/** Wind an open section's clock to half a frame short of closing. */
+export function closeSection(game, dt = FRAME) {
+  game.state.asteroidTime = dt / 2;
+}
+
+/** Clear everything but the tunnel, so a rendered frame carries only the walls. */
+export function clearTunnel(game) {
+  game.state.obstacles = [];
+  game.state.orbs = [];
+  game.state.mines = [];
+  game.state.particles = [];
+  game.state.stars = [];
+}
+
+/** A rendered frame of a run as it stands, at the grid it is being flown at. */
+export function renderFrame(build, game, grid = GRIDS[0]) {
+  const screen = new build.ScreenBuffer(grid.w, grid.h);
+  build.renderGame(screen, game.state);
+  return screen;
+}
+
+/**
+ * The columns `renderGame` has jolted the play area by, which is the whole of
+ * the terminal build's damage shake and none of the browser's.
+ *
+ * The two builds put the same jolt in different places, which is the reason
+ * this is asked of the build rather than read off the state. The terminal has
+ * no subpixel positioning, so `renderGame` shifts the drawn rows a whole cell
+ * (`src/render.ts:56`, through `shiftRows`, which leaves `new[x] = old[x-dx]`)
+ * and the walls land `dx` columns from the span they were drawn on. The browser
+ * offsets the canvas the grid is painted to instead, below the
+ * `// ===== Canvas Setup & Sizing =====` marker, so its grid is never shifted
+ * and it exports no `shakeColumns` at all - hence the zero, which is a reading
+ * of that build and not a fallback for a missing export.
+ */
+export const shakeShift = (build, state) => (build.shakeColumns ? build.shakeColumns(state) : 0);
+
+/**
+ * The distinct glyphs standing on the wall columns of a rendered frame.
+ *
+ * Located from `tunnelSpan` and walked outward through the thickness until the
+ * row goes blank, which is how test/warp.test.mjs collects the ramp and for the
+ * same reason: a glyph this module does not know about arrives rather than
+ * being filtered away. The expected answer during a section is the empty set,
+ * and a character filter would make that unfalsifiable - it would quietly
+ * discard the very wall a caller is checking is absent.
+ *
+ * Started one row below the play area, as `wallCells` in test/warp.test.mjs is
+ * and for the same reason: the HUD banners are centred on `gameTop`, and at
+ * that row the span is only three columns either side of centre, so a banner
+ * covers the wall columns. The ramp tests get away with walking from `gameTop`
+ * because they render a run with no banner up; a section always has one. One
+ * row of the play area is the cost, and it is the row with the thinnest wall
+ * on it.
+ *
+ * `shift` is the jolt the frame was rendered under, from `shakeShift`.
+ * `tunnelSpan` names the columns the walls are *drawn* on, and the damage shake
+ * moves them afterwards, so a reading taken at the bare span while the play
+ * area is jolted looks one column into the corridor and finds it blank. That is
+ * not a wall a caller can filter for later: at the rows a jolt leaves one
+ * character thick the whole wall moves off the column being read, so the row
+ * contributes nothing and its depth band drops out of the set entirely.
+ */
+export function wallGlyphs(build, screen, shift = 0) {
+  const gameTop = HUD_ROWS;
+  const gameBottom = screen.height - FOOTER_ROWS;
+  const found = new Set();
+  for (let row = gameTop + 1; row < gameBottom; row++) {
+    const text = rowText(screen, row);
+    const span = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
+    const left = span.left + shift;
+    const right = span.right + shift;
+    for (const [from, stride] of [[left, -1], [right, 1]]) {
+      for (let x = from; x >= 0 && x < screen.width; x += stride) {
+        const char = text[x];
+        if (char === ' ' || char === undefined) break;
+        found.add(char);
+      }
+    }
+  }
+  return found;
+}
+
+/** Whether two glyph sets hold the same characters, whatever order they arrived in. */
+const sameGlyphs = (a, b) => a.size === b.size && [...a].every((char) => b.has(char));
+
+/**
+ * The seed the suite's two quiet wall cases walk the section under, which is
+ * the one its placement cases already use. A section's rocks are placed from
+ * the draw, so whether one of them reaches the ship is a draw as well, and an
+ * unseeded section leaves that to chance: this seed brings the rocks in without
+ * hitting anything, so the frame the walls are read off carries no jolt.
+ */
+export const QUIET_SECTION_SEED = 20261014;
+
+/**
+ * A seed whose section does put a rock into the ship, so the frame is jolted.
+ *
+ * This is the draw that used to fail the case the suite pins it in, about four
+ * runs in a thousand of them - `test/probes/section-jolt.mjs` is what measures
+ * the four, and it walks this seed on the way past. It is written down rather
+ * than reached for by accident, because the jolted frame is the half of the
+ * render `wallGlyphs` had to be taught to read, and a case can only hold it by
+ * arriving there deliberately.
+ */
+export const JOLTED_SECTION_SEED = 111;
+
+/**
+ * One section opened and closed again, and the readings that tell the two
+ * builds apart.
+ *
+ * The sequence is four steps of the run's own clock: the section timer wound to
+ * half a frame short of the interval, one frame to open it, its own clock wound
+ * to half a frame short of closing, one frame to close it. What the seed decides
+ * is where the section's rocks are placed, and so whether one of them reaches
+ * the ship on the frame the walls come back - which is the whole of what
+ * separates the two seeds the suite pins.
+ *
+ * Three readings come back rather than one, because the wall columns are read
+ * twice and the two readings disagree exactly when the grid has been jolted:
+ *
+ * - `drawn` is the set the tunnel was drawn from before the section opened.
+ * - `atSpan` is the set read at the span the jolt left the walls on, which is
+ *   what the suite asserts against `drawn`.
+ * - `bare` is the set read at the span they were drawn on, ignoring the jolt.
+ *   On an unjolted frame it is the same reading as `atSpan`; on a jolted one it
+ *   is the misreading, and counting it is how a probe reports the contingency
+ *   between a rock reaching the ship and the walls appearing to change.
+ *
+ * The seed is handed back to `Math.random` in a `finally`, so a caller walking
+ * thousands of worlds cannot leave the engine pinned behind it.
+ */
+export function openAndClose(build, grid, { seed = null, dt = FRAME } = {}) {
+  const game = emptyRun(build, grid);
+  const drawn = wallGlyphs(build, renderFrame(build, game, grid));
+
+  build.seedRng(seed);
+  try {
+    armSection(build, game, dt);
+    game.update(dt, {}, {});
+    closeSection(game, dt);
+    game.update(dt, {}, {});
+  } finally {
+    build.seedRng(null);
+  }
+  clearTunnel(game);
+
+  const shift = shakeShift(build, game.state);
+  const screen = renderFrame(build, game, grid);
+  const atSpan = wallGlyphs(build, screen, shift);
+  const bare = shift === 0 ? atSpan : wallGlyphs(build, screen, 0);
+
+  return {
+    shift, shake: game.state.shake, drawn, atSpan, bare,
+    spanWrong: !sameGlyphs(drawn, atSpan),
+    bareWrong: !sameGlyphs(drawn, bare),
+  };
 }

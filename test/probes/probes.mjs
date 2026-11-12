@@ -26,6 +26,7 @@ export const PROBES = {
   'free-flight': { load: () => import('./free-flight.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
   'drop-clip': { load: () => import('./drop-clip.mjs'), flags: ['grid', 'build', 'count', 'passes'] },
   'versus-half': { load: () => import('./versus-half.mjs'), flags: ['count'] },
+  'section-jolt': { load: () => import('./section-jolt.mjs'), flags: ['grid', 'build', 'passes'] },
   'overlay-anchor': { load: () => import('./overlay-anchor.mjs'), flags: [] },
   'glyph-tuning': { load: () => import('./glyph-tuning.mjs'), flags: [] },
 };

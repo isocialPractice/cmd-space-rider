@@ -4251,3 +4251,30 @@ still be found by name.
     the circle is accurate and wants no change. Nothing on the page executes,
     so the suite staying at 967 of 967 is the whole check.
   - From: UI/UX Override - the label below the size a word can be read at
+
+## Archived 11-12-26
+
+- [x] The new sweep's docstring quotes a count from no sweep in the repository
+  - **Issue**: `test/browser-shell.test.mjs` carries `188,421` twice, and
+    nothing produces it. The docstring above `floorSweep` says "The whole space
+    is 188,421 fitted viewports and test/probes/overlay-anchor.mjs walks it,
+    which is where the figures the CHANGELOG quotes come from", and the comment
+    opening the case below it says "1,276 of the 188,421 fitted viewports letter
+    under 8px". Three readings disagree with that. `node test/probes/run.mjs
+    overlay-anchor` reports `3581 of 682500 viewports unlettered (0.52%)`, which
+    is what `index.html` and the `0.15.6` CHANGELOG entry both quote. The
+    `floorSweep` lattice itself - every 23rd width from 240 and every 11th
+    height from 120 - yields 14,915 fitted viewports, of which 123 letter under
+    `8px`; 14,915 is the figure the CHANGELOG's own **Added** entry uses for
+    this very case. And the CHANGELOG's **Notes** say of `1,276 of 188,421`
+    that it "came from the review's own sweep" and that "Nothing published
+    carries it" - which this file does, in the two places above. So the
+    docstring attributes the review's scratch lattice to the probe, and the case
+    comment describes a space it does not walk.
+  - **Goal**: Give each figure the sweep it belongs to. The docstring should
+    name what `floorSweep` actually produces - 14,915 fitted viewports, 123 of
+    them under the floor - and point at the probe for the 682,500 walk the
+    CHANGELOG quotes, rather than merging the two into one number. `188,421` and
+    `1,276` should leave the file, since nothing in the repository can rebuild
+    them.
+  - From: UI/UX Override - two claims the label floor was justified with

@@ -23,6 +23,16 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 import { REPO_ROOT, loadBrowserEngine, fakeStorage, rowText, FRAME } from './helpers.mjs';
+// The section sequence itself lives in the shared harness, because
+// test/probes/section-jolt.mjs walks thousands of seeded worlds of it to report
+// how often the two seeds pinned below are the draw a run actually gets. A
+// sequence written out in both places is a rate reported about a sequence the
+// suite is not checking.
+import {
+  GRIDS, HUD_ROWS, FOOTER_ROWS, emptyRun, armSection, closeSection, clearTunnel,
+  renderFrame, shakeShift, wallGlyphs, openAndClose,
+  QUIET_SECTION_SEED, JOLTED_SECTION_SEED,
+} from './engagement.mjs';
 
 const require = createRequire(import.meta.url);
 const terminal = {
@@ -36,9 +46,6 @@ const browser = { name: 'browser', ...loadBrowserEngine(fakeStorage()) };
 
 const BUILDS = [terminal, browser];
 
-const HUD_ROWS = 3;
-const FOOTER_ROWS = 2;
-
 /** The band the run's own obstacles are held in, from `placeObstacle`. */
 const OWN_X = 4.5;
 const OWN_Y_LOW = 0.5;
@@ -47,39 +54,8 @@ const OWN_Y_HIGH = 4.5;
 /** The tunnel radius a run opens with, which the ship's reach is measured off. */
 const TUNNEL_RADIUS = 8;
 
-/** A run with nothing in the tunnel, so only the section under test moves. */
-function quietRun(build, width = 80, height = 24) {
-  const game = new build.Game();
-  game.startGame();
-  const s = game.state;
-  s.screenWidth = width;
-  s.screenHeight = height;
-  s.stars = [];
-  s.obstacles = [];
-  s.orbs = [];
-  s.mines = [];
-  s.bullets = [];
-  s.particles = [];
-  s.powerups = [];
-  return game;
-}
-
 /** One frame of a live run, through the same entry point a shell calls. */
 const step = (game, dt = FRAME) => game.update(dt, {}, {});
-
-/**
- * Wind the section timer to half a frame short of the interval, so the next
- * frame crosses it. Written against the build's own constant rather than
- * against 150, so the test moves with the tuning instead of pinning it twice.
- */
-function armSection(build, game, dt = FRAME) {
-  game.state.asteroidTimer = build.ASTEROID_INTERVAL - dt / 2;
-}
-
-/** Wind an open section's clock to half a frame short of closing. */
-function closeSection(game, dt = FRAME) {
-  game.state.asteroidTime = dt / 2;
-}
 
 /** One obstacle of the run's own field, at a depth. */
 const ownRock = (z) => ({ x: 0, y: 1, z, rot: 0, rotSpeed: 0, scale: 1, field: false });
@@ -87,97 +63,20 @@ const ownRock = (z) => ({ x: 0, y: 1, z, rot: 0, rotSpeed: 0, scale: 1, field: f
 /** One rock of a section's field, at a depth. */
 const fieldRock = (z) => ({ x: 0, y: 1, z, rot: 0, rotSpeed: 0, scale: 1, field: true });
 
-/**
- * The distinct glyphs standing on the wall columns of a rendered frame.
- *
- * Located from `tunnelSpan` and walked outward through the thickness until the
- * row goes blank, which is how test/warp.test.mjs collects the ramp and for the
- * same reason: a glyph this file does not know about arrives rather than being
- * filtered away. Here the expected answer during a section is the empty set,
- * and a character filter would make that unfalsifiable - it would quietly
- * discard the very wall this is checking is absent.
- *
- * Started one row below the play area, as `wallCells` in test/warp.test.mjs is
- * and for the same reason: the HUD banners are centred on `gameTop`, and at
- * that row the span is only three columns either side of centre, so a banner
- * covers the wall columns. The ramp tests get away with walking from `gameTop`
- * because they render a run with no banner up; a section always has one. One
- * row of twenty-two is the cost, and it is the row with the thinnest wall on it.
- *
- * `shift` is the jolt the frame was rendered under, from `shakeShift` below.
- * `tunnelSpan` names the columns the walls are *drawn* on, and the damage shake
- * moves them afterwards, so a reading taken at the bare span while the play
- * area is jolted looks one column into the corridor and finds it blank. That is
- * not a wall the test can filter for later: at the twelve rows a jolt leaves
- * one character thick the whole wall moves off the column being read, so the
- * row contributes nothing and its depth band drops out of the set entirely.
- */
-function wallGlyphs(build, screen, shift = 0) {
-  const gameTop = HUD_ROWS;
-  const gameBottom = screen.height - FOOTER_ROWS;
-  const found = new Set();
-  for (let row = gameTop + 1; row < gameBottom; row++) {
-    const text = rowText(screen, row);
-    const span = build.tunnelSpan(row, gameTop, gameBottom, screen.width);
-    const left = span.left + shift;
-    const right = span.right + shift;
-    for (const [from, stride] of [[left, -1], [right, 1]]) {
-      for (let x = from; x >= 0 && x < screen.width; x += stride) {
-        const char = text[x];
-        if (char === ' ' || char === undefined) break;
-        found.add(char);
-      }
-    }
-  }
-  return found;
-}
-
-/**
- * The columns `renderGame` has jolted the play area by, which is the whole of
- * the terminal build's damage shake and none of the browser's.
- *
- * The two builds put the same jolt in different places, which is the reason
- * this is asked of the build rather than read off the state. The terminal has
- * no subpixel positioning, so `renderGame` shifts the drawn rows a whole cell
- * (`src/render.ts:56`, through `shiftRows`, which leaves `new[x] = old[x-dx]`)
- * and the walls land `dx` columns from the span they were drawn on. The browser
- * offsets the canvas the grid is painted to instead, below the
- * `// ===== Canvas Setup & Sizing =====` marker, so its grid is never shifted
- * and it exports no `shakeColumns` at all - hence the zero, which is a reading
- * of that build and not a fallback for a missing export.
- */
-const shakeShift = (build, state) => (build.shakeColumns ? build.shakeColumns(state) : 0);
-
 /** The centre row of the HUD, where every banner competes for the line. */
 const bannerRow = (screen) => rowText(screen, HUD_ROWS);
-
-/** A rendered frame of a run as it stands. */
-function frame(build, game, width = 80, height = 24) {
-  const screen = new build.ScreenBuffer(width, height);
-  build.renderGame(screen, game.state);
-  return screen;
-}
-
-/** Clear everything but the tunnel, so a rendered frame carries only the walls. */
-function clearTunnel(game) {
-  game.state.obstacles = [];
-  game.state.orbs = [];
-  game.state.mines = [];
-  game.state.particles = [];
-  game.state.stars = [];
-}
 
 // ----- The clock -----
 
 for (const build of BUILDS) {
   test(`${build.name}: a run opens with the tunnel up and nothing counted toward a section`, () => {
-    const s = quietRun(build).state;
+    const s = emptyRun(build).state;
     assert.equal(s.asteroidTime, 0, 'no section is open');
     assert.equal(s.asteroidTimer, 0, 'and none is part way counted');
   });
 
   test(`${build.name}: crossing the interval opens a section`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     step(game);
 
@@ -187,7 +86,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: short of the interval nothing opens`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const armed = build.ASTEROID_INTERVAL - FRAME * 4;
     game.state.asteroidTimer = armed;
     step(game);
@@ -200,7 +99,7 @@ for (const build of BUILDS) {
     // test winding the clock, a shell handed one enormous frame - cannot open a
     // section the run has not actually flown to. This is the whole reason it is
     // not read off gameTime the way updateWarpLevel is.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     game.state.gameTime = build.ASTEROID_INTERVAL * 4;
     step(game);
     assert.equal(game.state.asteroidTime, 0, 'no section off a clock jump');
@@ -208,7 +107,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: an open section holds the interval still`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     step(game);
 
@@ -219,7 +118,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: the section closes when its time is up`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     step(game);
     closeSection(game);
@@ -237,7 +136,7 @@ for (const build of BUILDS) {
     // Both announce themselves on the one HUD row, so they are not allowed to
     // coincide at the opening. The timer is left where it is while the flash
     // decays, which is what makes this a delay and not a cancellation.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     game.state.warpFlash = build.WARP_FLASH_TIME;
     step(game);
@@ -271,7 +170,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: a run started over is not part way into a section`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     step(game);
     assert.ok(game.state.asteroidTime > 0, 'a section is open to be left behind');
@@ -286,7 +185,7 @@ for (const build of BUILDS) {
 
 for (const build of BUILDS) {
   test(`${build.name}: a section brings its rocks in and takes them out again`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     for (let i = 0; i < 60; i++) s.obstacles.push(ownRock(-i * 14 - 30));
     const own = s.obstacles.slice();
@@ -319,7 +218,7 @@ for (const build of BUILDS) {
     // inside four and a half units proves nothing, and a single one landing
     // outside it could be the only one that ever does.
     const reach = TUNNEL_RADIUS - build.SHIP_MARGIN;
-    const game = quietRun(build);
+    const game = emptyRun(build);
     build.seedRng(20261014);
     try {
       let past = 0;
@@ -353,7 +252,7 @@ for (const build of BUILDS) {
     // messages they fail with name the placement band and the bound broken, for
     // the same reason the case name does. A section is the exception to this
     // band, and the exception has to stay attached to the flag.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     build.seedRng(20261014);
     try {
       for (let i = 0; i < 2000; i++) {
@@ -375,7 +274,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: a section's rock recycles as a section's rock`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     armSection(build, game);
     step(game);
@@ -395,7 +294,7 @@ for (const build of BUILDS) {
     // field by a tenth of the section as well. The section's rocks go when it
     // closes; obstacles grown off the back of them are ordinary ones and would
     // not, so one unlucky boundary would step the curve by seven rather than one.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     for (let i = 0; i < 60; i++) s.obstacles.push(ownRock(-i * 14 - 30));
 
@@ -413,30 +312,10 @@ for (const build of BUILDS) {
 
 // ----- The walls -----
 
-/**
- * The seed the two cases below walk the section under, which is the one the
- * placement cases above already use. A section's rocks are placed from the
- * draw, so whether one of them reaches the ship is a draw as well, and an
- * unseeded section leaves that to chance: this seed brings the rocks in without
- * hitting anything, so the frame the walls are read off carries no jolt.
- */
-const QUIET_SECTION_SEED = 20261014;
-
-/**
- * A seed whose section does put a rock into the ship, so the frame is jolted.
- *
- * This is the draw that used to fail the case below, about four runs in a
- * thousand of them. It is listed as its own constant rather than reached for
- * by accident, because the jolted frame is the half of the render `wallGlyphs`
- * had to be taught to read, and a case can only hold it by arriving there
- * deliberately.
- */
-const JOLTED_SECTION_SEED = 111;
-
 for (const build of BUILDS) {
   test(`${build.name}: an open section draws no walls at all`, () => {
-    const game = quietRun(build);
-    const before = wallGlyphs(build, frame(build, game));
+    const game = emptyRun(build);
+    const before = wallGlyphs(build, renderFrame(build, game));
     assert.ok(before.size > 0, 'the tunnel is drawn to begin with');
 
     build.seedRng(QUIET_SECTION_SEED);
@@ -448,7 +327,7 @@ for (const build of BUILDS) {
     }
     clearTunnel(game);
 
-    const during = wallGlyphs(build, frame(build, game), shakeShift(build, game.state));
+    const during = wallGlyphs(build, renderFrame(build, game), shakeShift(build, game.state));
     assert.deepEqual(
       [...during], [],
       'drawTunnel left ' + JSON.stringify([...during]) + ' on the wall columns during a section.'
@@ -459,35 +338,30 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: the walls come back with the tunnel`, () => {
-    const game = quietRun(build);
-    const before = wallGlyphs(build, frame(build, game));
+    const seen = openAndClose(build, GRIDS[0], { seed: QUIET_SECTION_SEED });
 
-    build.seedRng(QUIET_SECTION_SEED);
-    try {
-      armSection(build, game);
-      step(game);
-      closeSection(game);
-      step(game);
-    } finally {
-      build.seedRng(null);
-    }
-    clearTunnel(game);
-
-    assert.equal(game.state.shake, 0, 'this seed is the one whose section hits nothing');
+    assert.equal(seen.shake, 0, 'this seed is the one whose section hits nothing');
     assert.deepEqual(
-      [...wallGlyphs(build, frame(build, game), shakeShift(build, game.state))].sort(),
-      [...before].sort(),
+      [...seen.atSpan].sort(), [...seen.drawn].sort(),
       'the tunnel is drawn from what it was drawn from before the section'
     );
   });
 
   test(`${build.name}: the walls come back with the tunnel through a jolt`, () => {
     // The case above renders a section that hits nothing, which is all but four
-    // runs in a thousand of them. This is one of the four. Walked over 60,000
-    // unseeded runs of that sequence per build: the terminal build shook 237
-    // times and read the walls back wrong 237 times, and those are the same 237
-    // runs - none shook without misreading, and none misread without shaking.
-    // The browser build shook 258 times and read them back right every time.
+    // runs in a thousand of them at this grid. This is one of the four, and
+    // `npm run probe -- section-jolt` is what counts them: over seeds 1 to
+    // 60,000 of this sequence, 254 worlds put a rock into the ship at 80x24 -
+    // 0.42% - and at every one of them the terminal build read the walls back
+    // wrong at the bare span while the browser build read them back right. None
+    // shook without misreading, and none misread without shaking.
+    //
+    // Two things that walk says which the 60,000 unseeded runs this comment
+    // used to quote could not. Both builds shake on the same worlds, 254 of
+    // them each, so the figures that used to differ by build - 237 and 258 -
+    // were two unseeded draws rather than two behaviours. And the rate belongs
+    // to a grid, because the collision test is a bounding-box overlap on the
+    // character grid: the same walk gives 0.83% at 60x20 and 0.04% at 205x50.
     //
     // So the jolt is the whole of the difference, and the difference is between
     // the two renders rather than between the two sections: both builds' state
@@ -495,32 +369,25 @@ for (const build of BUILDS) {
     // it. At this seed the terminal build answers the bare span with the two
     // near bands alone, off the six it was drawn from, which is the report the
     // flake filed.
-    const game = quietRun(build);
-    const before = wallGlyphs(build, frame(build, game));
+    const seen = openAndClose(build, GRIDS[0], { seed: JOLTED_SECTION_SEED });
 
-    build.seedRng(JOLTED_SECTION_SEED);
-    try {
-      armSection(build, game);
-      step(game);
-      closeSection(game);
-      step(game);
-    } finally {
-      build.seedRng(null);
-    }
-    clearTunnel(game);
-
-    assert.ok(game.state.shake > 0, 'a rock reached the ship, or this case is the one above again');
+    assert.ok(seen.shake > 0, 'a rock reached the ship, or this case is the one above again');
     assert.equal(
-      shakeShift(build, game.state), build.shakeColumns ? 1 : 0,
+      seen.shift, build.shakeColumns ? 1 : 0,
       'the build that jolts its grid jolts it a column here, and the one that jolts its canvas'
       + ' leaves the grid where it was drawn'
     );
     assert.deepEqual(
-      [...wallGlyphs(build, frame(build, game), shakeShift(build, game.state))].sort(),
-      [...before].sort(),
+      [...seen.atSpan].sort(), [...seen.drawn].sort(),
       'the walls come back where the jolt leaves them, not where they were drawn. Read at the'
       + ' bare span instead, a jolted frame answers with the two near depth bands alone: the'
       + ' twelve rows whose wall is one character thick have moved off the column being read'
+    );
+    assert.equal(
+      seen.bareWrong, Boolean(build.shakeColumns),
+      'the bare span is the misreading on the build that jolts its grid and the same reading'
+      + ' as the jolted span on the build that does not - which is the contingency'
+      + ' test/probes/section-jolt.mjs reports the rate of'
     );
   });
 }
@@ -533,7 +400,7 @@ for (const build of BUILDS) {
     // column almost no target can occupy at that depth - drawBullets measures
     // the "almost". A section has no walls to cross and its rocks are placed
     // across the whole band, so the premise is gone and the clip goes with it.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     const gameTop = HUD_ROWS;
     const gameBottom = s.screenHeight - FOOTER_ROWS;
@@ -569,7 +436,7 @@ for (const build of BUILDS) {
     // The grid bound is what the span used to supply. Without it a shot drifting
     // off the screen would go on registering against anything whose own block
     // the renderer had clipped to the edge.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     const gameTop = HUD_ROWS;
     const gameBottom = s.screenHeight - FOOTER_ROWS;
@@ -587,7 +454,7 @@ for (const build of BUILDS) {
   });
 
   test(`${build.name}: the corridor closes with the section`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     const s = game.state;
     const gameTop = HUD_ROWS;
     const gameBottom = s.screenHeight - FOOTER_ROWS;
@@ -614,9 +481,9 @@ for (const build of BUILDS) {
 
 for (const build of BUILDS) {
   test(`${build.name}: the banner says why the tunnel is gone, for the whole section`, () => {
-    const game = quietRun(build);
+    const game = emptyRun(build);
     assert.ok(
-      !bannerRow(frame(build, game)).includes('ASTEROID FIELD'),
+      !bannerRow(renderFrame(build, game)).includes('ASTEROID FIELD'),
       'nothing says it before a section'
     );
 
@@ -629,7 +496,7 @@ for (const build of BUILDS) {
     for (const uiTime of [0, 0.1, 0.3, 0.52, 0.8, 1.4]) {
       game.state.uiTime = uiTime;
       assert.ok(
-        bannerRow(frame(build, game)).includes('>> ASTEROID FIELD <<'),
+        bannerRow(renderFrame(build, game)).includes('>> ASTEROID FIELD <<'),
         `the banner is up at uiTime ${uiTime}`
       );
     }
@@ -637,7 +504,7 @@ for (const build of BUILDS) {
     closeSection(game);
     step(game);
     assert.ok(
-      !bannerRow(frame(build, game)).includes('ASTEROID FIELD'),
+      !bannerRow(renderFrame(build, game)).includes('ASTEROID FIELD'),
       'and down again once the tunnel is back'
     );
   });
@@ -647,14 +514,14 @@ for (const build of BUILDS) {
     // is live - but a section opened just under its own length before an
     // interval crossing is still running when the next flash arrives. The flash
     // is two seconds of the fifteen and is the newer news.
-    const game = quietRun(build);
+    const game = emptyRun(build);
     armSection(build, game);
     step(game);
     clearTunnel(game);
     game.state.warpFlash = build.WARP_FLASH_TIME;
     game.state.warpLevel = 3;
 
-    const row = bannerRow(frame(build, game));
+    const row = bannerRow(renderFrame(build, game));
     assert.ok(row.includes('WARP LEVEL 3'), 'the warp banner is the one drawn');
     assert.ok(!row.includes('ASTEROID FIELD'), 'and it covers the section banner');
     assert.ok(game.state.asteroidTime > 0, 'while the section itself is still open');
@@ -672,7 +539,7 @@ for (const build of BUILDS) {
     s.asteroidTime = build.ASTEROID_TIME;
 
     assert.ok(
-      !bannerRow(frame(build, game)).includes('ASTEROID FIELD'),
+      !bannerRow(renderFrame(build, game)).includes('ASTEROID FIELD'),
       'the banner is held back rather than drawn over the scenario label'
     );
   });

@@ -152,6 +152,7 @@ npm run probe -- seen-versus-kill
 npm run probe -- column --grid 205x50 --build browser
 npm run probe -- free-flight --passes 2
 npm run probe -- versus-half --count 300   # seconds of game time to fly out to
+npm run probe -- section-jolt --passes 5000 # seeded worlds of one section each
 npm run probe -- overlay-anchor    # no grid, no build: it walks viewports
 npm run probe -- glyph-tuning      # no flags: it walks the font size range
 ```
@@ -181,6 +182,16 @@ seeded run out to twenty minutes, reads the score and the distance off it at six
 marks, and sweeps half widths for the narrowest at which SCORE, DIST and SHIELD
 stop overlapping. 45 columns is what holds every mark, which is the floor a round
 opens on.
+
+`section-jolt` is the one probe that reports a rate. It walks seeds 1 to 60,000
+of one asteroid field section opening and closing again, counts the worlds whose
+rocks reach the ship on the frame the walls come back, and reads the wall columns
+off every frame twice: at the span the jolt left them on, and at the span they
+were drawn on. 254 of the 60,000 shake at 80x24, and the terminal build's second
+reading is wrong at every one of them while the browser build's is wrong at none.
+The rate belongs to a grid rather than to the game, because the hit test is a box
+overlap on the character cells: the same walk gives 0.83% at 60x20 and 0.04% at
+205x50.
 
 `glyph-tuning` is the one probe that measures nothing: it rebuilds the figures
 the browser build's glyph centring quotes about itself, out of Courier New's

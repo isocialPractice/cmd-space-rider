@@ -60,6 +60,10 @@ const runner = (...argv) => spawnSync(process.execPath, [RUNNER, ...argv], { enc
  * `versus-half` reads it as the seconds of game time its flight runs out to, so
  * `count: 1` is a one-second flight: none of the probe's own marks is reached,
  * and it reports the width the readings a second into a run want instead.
+ * `section-jolt` takes no `count` at all and reads `passes` as the seeded worlds
+ * it walks, so `passes: 1` is one section opened and closed - a rate over one
+ * world, which is the clearest case of a figure off this workload being worth
+ * nothing.
  *
  * Keyed by the property each flag arrives in rather than by the flag's own
  * word, so a probe is handed exactly what FLAG_ARG says it destructures and the

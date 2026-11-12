@@ -27,7 +27,7 @@
     types.ts        # Types, shared constants, colors, and the seeded RNG
   test/
     helpers.mjs                 # Shared test rigging
-    engagement.mjs              # One pulse cannon engagement, at any grid
+    engagement.mjs              # One pulse cannon engagement, and one asteroid section
     page-style.mjs              # Resolves a stylesheet this repository ships
     probes/                     # Figures the comments and tests quote, reported
       probes.mjs                # The probe table: every probe, and the flags it reads
@@ -36,6 +36,7 @@
       drop-clip.mjs             # What the tracer's drop clip costs a whole frame
       frame-rate.mjs            # Whether a shot resolves the same at any frame length
       free-flight.mjs           # Screen against register, in a run nobody staged
+      section-jolt.mjs          # How often a section's rocks reach the ship, and the jolt
       seen-versus-kill.mjs      # Kills with no tracer, and tracers with no kill
       suite-replay.mjs          # The suite's own bands, replayed at a given grid
       versus-half.mjs           # The narrowest half the split screen's HUD reads in
