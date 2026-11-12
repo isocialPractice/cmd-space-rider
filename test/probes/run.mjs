@@ -40,10 +40,12 @@
 // engagement places its target and flies the same flight every time, so it has
 // one world and takes no passes; a probe that flies the run the game opens for
 // itself has a set of seeded worlds and walks all of them by default, taking
-// the spread across them. Passing a number flies the first N of the set, which
-// is for iterating - a figure quoted anywhere in this repository is the whole
-// set. No probe here is a sample any more: every walk is seeded, so a figure
-// is rebuilt by running the probe again rather than by averaging it.
+// the spread across them, and section-jolt reads the flag the same way for the
+// seeded worlds of one asteroid field section it counts a rate over. Passing a
+// number flies the first N of the set, which is for iterating - a figure quoted
+// anywhere in this repository is the whole set. No probe here is a sample any
+// more: every walk is seeded, so a figure is rebuilt by running the probe again
+// rather than by averaging it.
 
 import { GRIDS, BUILDS, parseGrid } from '../engagement.mjs';
 // The table lives in its own module because this one runs a probe at import, so

@@ -6,18 +6,36 @@ The work queued for the next run, moved from the roadmap sections below.
 Each item keeps a nested `From:` line recording the section it came from, so
 its origin survives archiving into `## Complete`.
 
-- [ ] **A probe for how often a section's rocks reach the ship** - 0.15.2 quotes
-  a rate in `test/asteroid-field.test.mjs` and in the CHANGELOG that nothing in
-  the repository can rebuild: over 60,000 unseeded runs of the open-and-close
-  sequence, the terminal build shook 237 times and misread the walls the same
-  237 times, and the browser build shook 258 times and misread none. Those
-  figures came from a scratch script in `.tmp`, which is the thing this section
-  exists to replace. The reading is a natural probe - it walks a sequence many
-  times and reports a rate and a contingency rather than asserting one - and it
-  would also carry the figure that explains the pair, which is that a hit
-  jolts the terminal build's grid a whole column and the browser build's not at
-  all. Nothing is wrong today: the two cases it came from are seeded and
-  deterministic, so this is a figure needing a home rather than a defect.
+### Code Review Override - the rate probe is said to be the only one
+
+#### Resolve Issues
+
+- [ ] Section Jolt Probe 1 - the docs call it the only probe reporting a rate
+  - **Issue**: The new probe's published prose calls it the only probe that
+    reports a rate, and three others do. `CHEATSHEET.md:186` and
+    `docs/cheatsheet.html:84` say "`section-jolt` is the one probe that reports
+    a rate", and `docs/development.html:57` says "`section-jolt` is the one that
+    reports a rate" in a series with `drop-clip`'s "reports a time rather than a
+    count" and `versus-half`'s "reports a width", which reads the claim as
+    exclusive. `npm run probe -- column --count 3 --grid 80x24 --build terminal`
+    prints a block the probe itself labels `rates:` and three percentages off
+    it - "lone shot 60 to 140: 52/58 90%", "volley 98%", and "contact at 60 to
+    140: 9/12 killed 75%". `seen-versus-kill` prints a kill rate per band and
+    aim - 80%, 63%, 100% and 50% at `--count 2` - and the `AIMED_BANDS`
+    docstring at `test/engagement.mjs:111` quotes `free-flight`'s own bands the
+    same way, "lands 88% at 80x24, 93% at 60x20 and 67% at 205x50". So a reader
+    sent to the one probe that reports a rate finds four, and the sentence meant
+    to say what makes this probe unlike the others states something the rig
+    disproves on request.
+  - **Goal**: Name the property that is this probe's alone. What separates it is
+    the shape of the walk and its subject rather than the kind of figure: it is
+    the only probe whose rate is how often an event falls out of seeded worlds
+    of a whole sequence, rather than a hit rate over staged placements, and the
+    only one whose subject is the asteroid field rather than the pulse cannon.
+    Rewrite the opening clause in all three files to that and leave the rest of
+    each paragraph as it stands - every figure in them is correct, and the walk
+    was re-run this review to confirm it. Leave the other probes' "the one
+    that ..." sentences alone; each of those is true.
   - From: Measurement
 
 ### Create and Deploy GitHub Pages Override
@@ -66,32 +84,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 203 earlier items in `TODO-archive.md`, newest last.
+> 204 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The new sweep's docstring quotes a count from no sweep in the repository
-  - **Issue**: `test/browser-shell.test.mjs` carries `188,421` twice, and
-    nothing produces it. The docstring above `floorSweep` says "The whole space
-    is 188,421 fitted viewports and test/probes/overlay-anchor.mjs walks it,
-    which is where the figures the CHANGELOG quotes come from", and the comment
-    opening the case below it says "1,276 of the 188,421 fitted viewports letter
-    under 8px". Three readings disagree with that. `node test/probes/run.mjs
-    overlay-anchor` reports `3581 of 682500 viewports unlettered (0.52%)`, which
-    is what `index.html` and the `0.15.6` CHANGELOG entry both quote. The
-    `floorSweep` lattice itself - every 23rd width from 240 and every 11th
-    height from 120 - yields 14,915 fitted viewports, of which 123 letter under
-    `8px`; 14,915 is the figure the CHANGELOG's own **Added** entry uses for
-    this very case. And the CHANGELOG's **Notes** say of `1,276 of 188,421`
-    that it "came from the review's own sweep" and that "Nothing published
-    carries it" - which this file does, in the two places above. So the
-    docstring attributes the review's scratch lattice to the probe, and the case
-    comment describes a space it does not walk.
-  - **Goal**: Give each figure the sweep it belongs to. The docstring should
-    name what `floorSweep` actually produces - 14,915 fitted viewports, 123 of
-    them under the floor - and point at the probe for the 682,500 walk the
-    CHANGELOG quotes, rather than merging the two into one number. `188,421` and
-    `1,276` should leave the file, since nothing in the repository can rebuild
-    them.
-  - From: UI/UX Override - two claims the label floor was justified with
 - [x] The floor's reading says the CRT crosses the glyphs, and it paints under them
   - **Issue**: `index.html`'s comment on `#touch.unlettered #fire,#touch.unlettered
     #boost`, and the `0.15.6` CHANGELOG entry in the same words, say "The `#crt`
@@ -189,3 +183,17 @@ the roadmap section each one came from.
     Nothing executes any of these sentences, so the suite staying at 972 of 972
     is the whole check.
   - From: UI/UX Override - two claims the label floor was justified with
+- [x] **Section Jolt Probe**: **A probe for how often a section's rocks reach
+  the ship** - 0.15.2 quotes a rate in `test/asteroid-field.test.mjs` and in the
+  CHANGELOG that nothing in the repository can rebuild: over 60,000 unseeded
+  runs of the open-and-close sequence, the terminal build shook 237 times and
+  misread the walls the same 237 times, and the browser build shook 258 times
+  and misread none. Those figures came from a scratch script in `.tmp`, which is
+  the thing this section exists to replace. The reading is a natural probe - it
+  walks a sequence many times and reports a rate and a contingency rather than
+  asserting one - and it would also carry the figure that explains the pair,
+  which is that a hit jolts the terminal build's grid a whole column and the
+  browser build's not at all. Nothing is wrong today: the two cases it came from
+  are seeded and deterministic, so this is a figure needing a home rather than a
+  defect.
+  - From: Measurement

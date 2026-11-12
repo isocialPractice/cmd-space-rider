@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.16.0] - 2026-11-12
 
 ### Fixed
 
@@ -37,21 +37,90 @@
   Node has a viewport or a colour scheme to test a prelude against", so the
   site stated it as well. Corrected in the same terms.
 
+### Added
+
+- `test/probes/section-jolt.mjs`, the probe behind the rate the asteroid field
+  section's jolted wall case has quoted since `0.15.2` and nothing in the
+  repository could rebuild. A section's rocks are placed from the draw, so
+  whether one reaches the ship on the frame the walls come back is a draw too,
+  and the suite pins both outcomes at a seed apiece; the probe walks seeds 1 to
+  60,000 of the open-and-close sequence and counts which draw each world was.
+  It reads the wall columns twice off every frame - at the span the jolt left
+  them on, which is what the suite asserts, and at the span they were drawn on -
+  and reports the contingency between the two as four cells rather than two
+  totals, because the claim being measured is that the build that shook is the
+  build that misread. It takes `--grid`, `--build` and `--passes`; the whole
+  walk is six build-and-grid pairs of 60,000 worlds and ran in about half a
+  minute on the machine it was taken on.
+- The figures from that walk, in place of the two the case comment carried.
+  254 of 60,000 worlds put a rock into the ship at 80x24, which is 0.42% and the
+  "four runs in a thousand" the case already claimed. Every one of those 254 is
+  a world where the terminal build's bare-span reading is wrong and the browser
+  build's is right, and neither build's jolted-span reading is ever wrong, so
+  the fix the case was written for holds across the walk rather than at one
+  seed. The jolt is one column at all 254, 497 and 22 of them.
+- `QUIET_SECTION_SEED` and `JOLTED_SECTION_SEED` as exports of
+  `test/engagement.mjs`, where the sequence they seed now lives. The probe
+  reads the jolted one, so it can say whether the seed the suite pins is inside
+  the walk it just made and whether it still shook. The module already held the
+  floors the suite pins for the same reason.
+
+### Changed
+
+- The open-and-close sequence itself moved out of
+  `test/asteroid-field.test.mjs` and into `test/engagement.mjs`, with the six
+  helpers it is built from: `armSection`, `closeSection`, `clearTunnel`,
+  `renderFrame`, `shakeShift` and `wallGlyphs`, plus an `openAndClose` that
+  flies the whole sequence and hands back the three readings. The two cases that
+  walk a seeded section now call it, so the probe's rate and the suite's
+  assertions come from one function rather than from two copies of it - which is
+  the rule that module opens with, and the reason the figure it replaces could
+  not be checked. The test's own `quietRun` went with them: it was
+  `emptyRun(build, GRIDS[0])` with one extra line clearing a `powerups` array
+  that `startGame` has already emptied in both builds.
+- The rate is now quoted with a grid, because it belongs to one. The hit test is
+  a bounding-box overlap on the character cells, so the same walk gives 0.83% at
+  60x20 and 0.04% at 205x50 against 0.42% at 80x24 - 497 worlds against 22, so
+  a rock reaches the ship twenty-two times as often on the smallest grid as on
+  the largest.
+- Both builds shake on exactly the same worlds, 254 of them at 80x24, which
+  retires the half of the old figure that read as a difference between the
+  builds. 237 shakes against 258 was two unseeded draws of one sequence, not two
+  behaviours: the jolt is the whole of what separates the two renders, and it is
+  in `renderGame` rather than in the section.
+- `wallGlyphs`' docstring no longer counts the rows it skips as "one row of
+  twenty-two". It is read at three grids now, where that figure was a reading of
+  one of them.
+- `test/probes/run.mjs` and the narrowed-workload docstring in
+  `test/probes.test.mjs` say what the new probe reads `--passes` as, and
+  `CHEATSHEET.md`, `docs/cheatsheet.html`, `docs/development.html` and
+  `docs/project-structure.html` carry it in the probe listings and prose a
+  reader goes to.
+
 ### Notes
 
-- No version applied, and the manifest version is untouched. Every change in
-  the run is a comment or published prose - one docstring, one case comment,
-  one clause on the site - so there is nothing in the diff that executes. The
-  suite is at 972 of 972, unchanged, which is the whole check available for
-  sentences nothing runs.
+- The three **Fixed** entries above are the `11-11-26` turn's, which applied no
+  version: every change in that diff was a comment or published prose - one
+  docstring, one case comment, one clause on the site - so nothing in it
+  executed, and it opened `## [Unreleased]` for the work instead. They ship
+  here, under the first version applied since, which is what that section is
+  drained by. Nothing in them was rewritten on the way.
+- A minor rather than a patch, on the precedent of `0.12.0`, which is where
+  `test/probes/versus-half.mjs` arrived: a probe reaching the rig as a queued
+  item of its own is an addition to what the repository can measure.
+- The suite is at 972 of 972, the count it was at before this run. The probe
+  adds no case of its own - `test/probes.test.mjs` already reaches every probe
+  that imports the shared engagement, and it reaches this one on one world - and
+  the one assertion added, that the bare span is the misreading on the build
+  that jolts its grid and is not on the build that does not, went into the case
+  that already pinned that seed.
 - The `0.15.7` entry below carried the same overreach and was corrected in
   place during that turn, so it already reads as `test/page-style.mjs`
   speaking about itself and wanted no further change here.
-- An override run, working the one found issue the `11-10-26` code review
-  raised. The regular `## Current` item - the probe that would rebuild
-  `0.15.2`'s 60,000-run figures - was left unchecked and in place for the next
-  run, which is what an override run does with the queue it stands in front
-  of.
+- The `11-11-26` turn was an override run, working the one found issue the
+  `11-10-26` code review raised, and it left the regular `## Current` item - the
+  probe that would rebuild `0.15.2`'s 60,000-run figures - unchecked and in
+  place for the next run. This is that run, and that item is what it worked.
 - `### Create and Deploy GitHub Pages Override` stays a bare header under
   `## Current`. `README.md` is 126 lines and 8,420 characters, under both
   defaults, so the check that owns it decided nothing this run.
