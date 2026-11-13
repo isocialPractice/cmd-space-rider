@@ -183,15 +183,18 @@ marks, and sweeps half widths for the narrowest at which SCORE, DIST and SHIELD
 stop overlapping. 45 columns is what holds every mark, which is the floor a round
 opens on.
 
-`section-jolt` is the one probe that reports a rate. It walks seeds 1 to 60,000
-of one asteroid field section opening and closing again, counts the worlds whose
-rocks reach the ship on the frame the walls come back, and reads the wall columns
-off every frame twice: at the span the jolt left them on, and at the span they
-were drawn on. 254 of the 60,000 shake at 80x24, and the terminal build's second
-reading is wrong at every one of them while the browser build's is wrong at none.
-The rate belongs to a grid rather than to the game, because the hit test is a box
-overlap on the character cells: the same walk gives 0.83% at 60x20 and 0.04% at
-205x50.
+`section-jolt` is the one probe whose subject is the asteroid field. Its figure
+is an incidence rather than a hit rate - how often an event falls out of a whole
+seeded sequence, rather than what share of shots land - which is the shape
+`overlay-anchor` reports in too, over viewports rather than worlds. It walks
+seeds 1 to 60,000 of one asteroid field
+section opening and closing again, counts the worlds whose rocks reach the ship
+on the frame the walls come back, and reads the wall columns off every frame
+twice: at the span the jolt left them on, and at the span they were drawn on.
+254 of the 60,000 shake at 80x24, and the terminal build's second reading is
+wrong at every one of them while the browser build's is wrong at none. The rate
+belongs to a grid rather than to the game, because the hit test is a box overlap
+on the character cells: the same walk gives 0.83% at 60x20 and 0.04% at 205x50.
 
 `glyph-tuning` is the one probe that measures nothing: it rebuilds the figures
 the browser build's glyph centring quotes about itself, out of Courier New's

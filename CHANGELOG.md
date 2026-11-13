@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- The new probe's published prose called it the only probe that reports a
+  rate, and three others do. `CHEATSHEET.md`, `docs/cheatsheet.html` and
+  `docs/development.html` opened `section-jolt`'s paragraph with "the one
+  probe that reports a rate", and `npm run probe -- column --count 3 --grid
+  80x24 --build terminal` prints a block the probe itself labels `rates:`
+  with three percentages under it - a lone shot landing 90% of 58, a volley
+  98%, and contact killing 75% of 12. `seen-versus-kill` prints a kill rate
+  per band and aim, and the `AIMED_BANDS` docstring in `test/engagement.mjs`
+  quotes `free-flight`'s own bands the same way, "lands 88% at 80x24, 93% at
+  60x20 and 67% at 205x50". So a reader sent to the one probe that reports a
+  rate found four. The opening clause now names what is this probe's alone,
+  which is its subject rather than the kind of figure it reports: it is the
+  only probe whose subject is the asteroid field, which is the line
+  `test/engagement.mjs` draws in its own header - the pulse cannon engagement
+  is most of that module, and the asteroid field section at its foot is there
+  for the same reason rather than the same subject. The incidence is still
+  described - how often an event falls out of a whole seeded sequence, rather
+  than what share of shots land - but is no longer claimed as this probe's
+  alone, because `overlay-anchor` reports four of them over the viewport
+  space: 2,132, 3,581, 5,491 and 7,766 of 682,500 viewports unlettered at the
+  four label floors it walks, which are shares of viewports and not of shots.
+  Every figure in the three paragraphs is unchanged and the walk was re-run to
+  confirm them. The other probes' "the one that ..." sentences were left
+  alone, and are not all true: `docs/development.html` also calls
+  `overlay-anchor` "the one that flies nothing" while `glyph-tuning` flies
+  nothing by the same test - neither names a grid or a build, both carry
+  `flags: []`, and neither steps a frame - which is queued rather than
+  corrected here. Nothing executes any of these sentences, so the suite
+  staying at 972 of 972 is the whole check.
+
 ## [1.0.0-alpha.0.16.0] - 2026-11-12
 
 ### Fixed

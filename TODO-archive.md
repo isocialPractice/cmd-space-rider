@@ -4278,3 +4278,25 @@ still be found by name.
     `1,276` should leave the file, since nothing in the repository can rebuild
     them.
   - From: UI/UX Override - two claims the label floor was justified with
+
+## Archived 11-13-26
+
+- [x] The floor's reading says the CRT crosses the glyphs, and it paints under them
+  - **Issue**: `index.html`'s comment on `#touch.unlettered #fire,#touch.unlettered
+    #boost`, and the `0.15.6` CHANGELOG entry in the same words, say "The `#crt`
+    scanline gradient crosses the glyphs and costs another half step of contrast
+    on all three, so those are the sizes as a player sees them rather than as
+    the font would draw them on a clean background". `#crt` and `#touch` are
+    both `position:fixed`, `grep -n "z-index" index.html` returns nothing, and
+    `#touch` is the later element in the body - so the label paints over the
+    gradient. Measured in Chromium `151.0.7922.34` at `deviceScaleFactor: 1`,
+    with the glyph's own pixels isolated by taking `BOOST` out of the markup and
+    the CRT toggled by the page's own `C` key: of 220 glyph pixels at `13px`, 0
+    change; of 106 at `7.99844px`, 1 changes by 0.7 of 255 a channel; of 26 at
+    `3.98906px`, 2 change by 1.7. The gradient is on - it changes 18,659 pixels
+    of the `1400x800` window - and it is not on the glyphs. What it does band is
+    the circle's own 35%-alpha fill, so the word is read against a striped
+    backdrop, which is the half of the claim that holds. The three sizes
+    themselves are exact and are not in question.
+  - **Goal**: Resolve to [crt-does-not-cross-the-glyphs.prompt.md](.claude/prompts/crt-does-not-cross-the-glyphs.prompt.md)
+  - From: UI/UX Override - two claims the label floor was justified with
