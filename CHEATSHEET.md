@@ -176,12 +176,17 @@ the seconds of game time to fly out to.
 A probe reports; it never asserts. Every walk is seeded, so the same command
 gives the same numbers every time.
 
-`versus-half` is the one probe that reports a width. The split screen gives each
-pilot half the grid and the half carries the whole HUD, so the probe flies a
-seeded run out to twenty minutes, reads the score and the distance off it at six
-marks, and sweeps half widths for the narrowest at which SCORE, DIST and SHIELD
-stop overlapping. 45 columns is what holds every mark, which is the floor a round
-opens on.
+Each paragraph below opens by naming what is that probe's alone, and
+`test/probes.test.mjs` reads those sentences: a claim is refused where it
+singles a probe out by something `overlay-anchor` and `glyph-tuning` cannot be
+told apart by, since neither of those two flies a shot or reads a flag.
+
+`versus-half` is the one probe whose subject is the split screen. That screen
+gives each pilot half the grid and the half carries the whole HUD, so the probe
+flies a seeded run out to twenty minutes, reads the score and the distance off
+it at six marks, and sweeps half widths for the narrowest at which SCORE, DIST
+and SHIELD stop overlapping. 45 columns is what holds every mark, which is the
+floor a round opens on.
 
 `section-jolt` is the one probe whose subject is the asteroid field. Its figure
 is an incidence rather than a hit rate - how often an event falls out of a whole
@@ -196,12 +201,12 @@ wrong at every one of them while the browser build's is wrong at none. The rate
 belongs to a grid rather than to the game, because the hit test is a box overlap
 on the character cells: the same walk gives 0.83% at 60x20 and 0.04% at 205x50.
 
-`glyph-tuning` is the one probe that measures nothing: it rebuilds the figures
-the browser build's glyph centring quotes about itself, out of Courier New's
-`1229/2048` em advance and the page's own `glyphInset`. It also lists, at the
-foot of its output, the four figures in that tuning that needed a rasterizer and
-so are not rebuilt - each with the instrument that read it and what it
-concluded, which is the method published beside the number.
+`glyph-tuning` is the one probe whose subject is the glyph centring: it rebuilds
+the figures that tuning quotes about itself, out of Courier New's `1229/2048` em
+advance and the page's own `glyphInset`. It also lists, at the foot of its
+output, the four figures in that tuning that needed a rasterizer and so are not
+rebuilt - each with the instrument that read it and what it concluded, which is
+the method published beside the number.
 
 ## Test grids
 

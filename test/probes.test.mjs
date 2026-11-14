@@ -290,6 +290,119 @@ test('probes: every probe that calls the harness is run against it', async () =>
   );
 });
 
+/**
+ * Every "<probe> is the one ..." sentence a published file makes, read off the
+ * file rather than listed here: the probe it names, and the property it claims
+ * is that probe's alone.
+ *
+ * Both files write the claim in one shape and only the span around the name
+ * differs - a `<code>` element on the page, a backtick span in the markdown - so
+ * the text is flattened and one pattern reads both. The predicate ends at the
+ * full stop or at the colon that introduces the rest of the paragraph, because
+ * `glyph-tuning`'s sentence in CHEATSHEET.md closes on the colon.
+ */
+function soleClaims(file) {
+  const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    .replace(/<[^>]*>/g, '')
+    .replace(/`/g, '')
+    .replace(/\s+/g, ' ');
+  return [...text.matchAll(/([a-z][a-z-]+) is the one (?:probe )?((?:that|whose)[^.:]*)[.:]/g)]
+    .map(([, probe, property]) => ({ file, probe, property: property.trim() }));
+}
+
+/**
+ * The predicates that single out neither probe in HARNESS_EXCLUSIONS, because
+ * each is true of both of them or false of both.
+ *
+ * Every one of these was reached for at some point as the thing that told the
+ * pair apart, and the pair is where a sentence of this shape goes wrong: eight
+ * probes fly a shot and two do not, so a property of *not* flying is a property
+ * of two probes and never of one.
+ *
+ * - `flies nothing` and the flag phrases are true of both, and the test below
+ *   derives them rather than trusting this list.
+ * - `walks a space` and `walks viewports` are true of both as well, which is the
+ *   less obvious half: `reachable` in test/probes/glyph-tuning.mjs walks every
+ *   integer width from 200 to 2200 against heights from 150 to 1400 to find
+ *   which font sizes `fitGrid` can actually settle on, so the probe that is
+ *   supposed to be pure arithmetic walks viewports too.
+ * - `measures nothing` and `counts nothing` are false of both, for the same
+ *   reason: each counts outcomes over a walk whose answers it cannot know in
+ *   advance - 682,500 viewports against the overlay, 11 font sizes against two
+ *   cell models - so neither is the one that counts nothing either.
+ * - `loads the browser alone` is true of both, and test/probes/run.mjs says so
+ *   in those words two paragraphs above where it used to say the other thing.
+ */
+/**
+ * The files whose claims are read. CHEATSHEET.md and the page published from it
+ * are both here rather than one standing for the other: test/docs-site.test.mjs
+ * compares the two in one direction only, so a sentence added to the page alone
+ * is the publishing working as far as that check is concerned.
+ */
+const PUBLISHED = ['docs/development.html', 'CHEATSHEET.md', 'docs/cheatsheet.html'];
+
+const SHARED_BY_THE_PAIR = [
+  'flies nothing',
+  'flies no',
+  'walks a space',
+  'walks viewports',
+  'measures nothing',
+  'counts nothing',
+  'loads the browser alone',
+  'reads no flag',
+  'takes no flag',
+];
+
+test('probes: no published sentence singles a probe out by a property the pair shares', () => {
+  // 0.16.0 found docs/development.html calling `overlay-anchor` "the one that
+  // flies nothing" while `glyph-tuning` flew nothing by the same test - and
+  // test/probes/run.mjs calling `glyph-tuning` "the one probe that flies
+  // nothing" while `overlay-anchor` did. Two published claims of sole
+  // possession, each disproved by the other, three paragraphs apart in files
+  // that are read together. Nothing in the suite read either sentence.
+  //
+  // What a probe reports and what its subject is can single it out and are
+  // left alone here. What it does *not* do cannot, once two probes do not do
+  // it, and that is the whole of what this refuses.
+  const claims = PUBLISHED.flatMap(soleClaims);
+  assert.ok(claims.length, 'no published file makes a "<probe> is the one ..." claim');
+
+  // Every claim names a probe. A sentence outliving a renamed probe publishes a
+  // property with nothing left to be the property of.
+  for (const { file, probe, property } of claims) {
+    assert.ok(
+      probe in PROBES,
+      `${file} says "${probe} is the one ${property}", and ${probe} is not a probe -`
+      + ' a published sentence naming no probe is one nothing can be checked against'
+    );
+  }
+
+  // The two halves of what the pair shares that the rig can compute, computed
+  // rather than taken from the list above: neither flies, and neither reads a
+  // flag. Both were published as one probe's own property.
+  const pair = [...HARNESS_EXCLUSIONS].sort();
+  assert.deepEqual(
+    pair.filter((name) => !callsHarness(name)).sort(), pair,
+    `${pair.join(' and ')} are the probes that import no engagement, so flying nothing is a`
+    + ' property of the pair and a sentence giving it to one of them is wrong about the other'
+  );
+  assert.deepEqual(
+    pair.filter((name) => PROBES[name].flags.length === 0).sort(), pair,
+    `and ${pair.join(' and ')} are the probes the table lists no flags for, so reading no flag`
+    + ' is a property of the pair as well'
+  );
+
+  for (const { file, probe, property } of claims) {
+    const shared = SHARED_BY_THE_PAIR.find((phrase) => property.includes(phrase));
+    assert.ok(
+      !shared,
+      `${file} says "${probe} is the one ${property}", and "${shared}" is true of both`
+      + ` ${pair.join(' and ')} or of neither - so it singles out nothing. Name something the`
+      + " probe does not share: its subject, or a figure only it reports"
+    );
+  }
+});
+
 test('probes: the column probe reaches ghostFlight rather than printing its refusal', async () => {
   // The pairing that moved, checked in the direction it moved in. `creep` is not
   // exported, so the probe's own `run()` is what reaches it.

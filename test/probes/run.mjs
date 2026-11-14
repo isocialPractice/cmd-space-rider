@@ -14,11 +14,16 @@
 // glyph-tuning, because a terminal has no glyph of its own to centre - it writes
 // characters and the terminal places them in its own cells.
 //
-// glyph-tuning is also the one probe that flies nothing. It rebuilds the figures
-// the browser build's glyph centring quotes about itself from the font's em
-// advance and the page's own glyphInset, which is still a figure taken off the
-// real engine rather than a copy - that is the rule this rig exists for, and
-// arithmetic drifts from a restated copy exactly as a flight does.
+// Those two are also the pair that flies nothing: each loads the engine to read
+// constants and functions off it and neither opens a run, so neither takes a
+// grid or a build. What they do take is still taken off the real engine rather
+// than a copy - glyph-tuning's figures out of the font's em advance and the
+// page's own glyphInset, overlay-anchor's out of the page's own fitGrid and
+// stylesheet - and that is the rule this rig exists for, because arithmetic
+// drifts from a restated copy exactly as a flight does. Flying nothing is what
+// the two have in common and not what tells them apart: their subjects do, the
+// glyph centring and the touch overlay, which is how docs/development.html
+// names them.
 //
 //   npm run probe -- <name> [--grid 205x50] [--grid 80x24] [--build browser]
 //                            [--count 30] [--passes 5]

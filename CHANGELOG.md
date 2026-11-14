@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0-alpha.0.16.1] - 2026-11-14
 
 ### Fixed
 
@@ -33,6 +33,57 @@
   `flags: []`, and neither steps a frame - which is queued rather than
   corrected here. Nothing executes any of these sentences, so the suite
   staying at 972 of 972 is the whole check.
+- Three more of those sentences claimed a property two probes share, and two
+  of them disagreed with each other across the repository.
+  `docs/development.html` called `overlay-anchor` "the one that flies nothing"
+  and the header of `test/probes/run.mjs` called `glyph-tuning` "the one probe
+  that flies nothing": neither probe imports `test/engagement.mjs`, both carry
+  `flags: []`, and each loads the browser only to read constants and functions
+  off the page, so flying nothing belongs to the pair and to neither of them
+  alone. `glyph-tuning`'s "the one that measures nothing" fell to something
+  easier to miss - `reachable()` in that probe walks every integer width from
+  200 to 2200 against heights from 150 to 1400 through the page's own
+  `fitGrid` and reports how many of the eleven font sizes it can settle on,
+  with the viewport count behind each, so the probe held up as pure arithmetic
+  counts outcomes over a walk exactly as `overlay-anchor` does. And
+  `versus-half`'s "the one that reports a width" is wrong in two places at
+  once: `column` prints `volley spread at the muzzle: N columns` and a creep
+  in columns beside it, and `overlay-anchor` prints the smallest control it
+  draws in px and the px band each label floor reaches over. All three now
+  open on the probe's subject - the touch overlay, the glyph centring, the
+  split screen - which is the shape `section-jolt`'s sentence was given above
+  for the same reason, and a subject does not go stale when a probe gains a
+  walk, which is how two of these three broke. `drop-clip`'s "the one that
+  reports a time rather than a count" was walked against all ten probes and
+  left standing: it is the only one that times anything, `hrtime`,
+  `performance.now` and `BUDGET_US` appearing in no other probe's source.
+  Every figure in the four paragraphs is unchanged.
+- The replacement the queued item proposed does not survive its own test, and
+  is recorded here rather than silently dropped: "the one that walks a space
+  without flying it" is true of `glyph-tuning` as well, on the viewport walk
+  above, and so is the reasoning offered for it - that `glyph-tuning` "derives
+  figures and counts nothing" - since that probe also reports how many of the
+  eleven sizes get a different cell under the two models it compares. The
+  property had to come off the probe's subject rather than off what it does
+  with a space.
+
+### Added
+
+- `probes: no published sentence singles a probe out by a property the pair
+  shares` in `test/probes.test.mjs`, the first thing in the suite to read a
+  "the one that ..." sentence at all. It flattens `docs/development.html`,
+  `CHEATSHEET.md` and `docs/cheatsheet.html`, reads every
+  `<probe> is the one ...` claim out of them, asserts each names a probe in
+  `PROBES`, and refuses any whose predicate is one `overlay-anchor` and
+  `glyph-tuning` cannot be told apart by. Two of those predicates are computed
+  rather than listed - the probes importing no engagement, and the probes the
+  table lists no flags for - so the test states why it refuses instead of
+  matching a string it was handed. Restoring "the one that flies nothing" to
+  `docs/development.html` fails it with the pair named and the fix spelled
+  out. The page published from `CHEATSHEET.md` is read beside the file because
+  `test/docs-site.test.mjs` compares the two in one direction only, so a
+  sentence added to the page alone would otherwise pass. The suite goes from
+  972 to 973.
 
 ## [1.0.0-alpha.0.16.0] - 2026-11-12
 

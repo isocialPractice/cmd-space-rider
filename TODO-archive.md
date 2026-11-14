@@ -4300,3 +4300,28 @@ still be found by name.
     themselves are exact and are not in question.
   - **Goal**: Resolve to [crt-does-not-cross-the-glyphs.prompt.md](.claude/prompts/crt-does-not-cross-the-glyphs.prompt.md)
   - From: UI/UX Override - two claims the label floor was justified with
+
+## Archived 11-14-26
+
+- [x] The new sweep's docstring justifies its height step with a factor it shares
+  - **Issue**: `floorSweep`'s docstring in `test/browser-shell.test.mjs` says
+    "Neither step shares a factor with any cell the fitter produces, so the
+    lattice cannot step over the band the floor is about". The height step is
+    11, and the fitter produces a `6x11` cell at font size 9 - the whole set it
+    can produce is `4x8`, `5x9`, `5x10`, `6x11`, `6x12`, `7x13`, `8x14`, `8x15`,
+    `9x16`, `9x17` and `10x18`, and the sweep itself settles on `6x11` at some
+    of its viewports - so the height step is exactly a cell height rather than
+    coprime to all of them. Nothing fails, and the sentence's own conclusion is
+    carried by the clause after it: heights 164, 175, 186 and 197 fall inside
+    the band and the sweep does find 123 viewports under the floor. A step equal
+    to the cell height also moves the row count by exactly one a sample, which
+    is full coverage rather than a gap. The width step 23 is prime and shares no
+    factor with any cell width, so that half is right. What is wrong is the
+    reason given for the step, which a reader changing either axis would trust.
+  - **Goal**: Either drop the coprimality claim and keep the reason that holds -
+    the band is 2563-3837px wide by 160-197px tall and both steps land inside it
+    - or say what is actually true of the height step. `axis`'s docstring in
+    `test/probes/overlay-anchor.mjs` makes the same claim of its coarse step of
+    7, and `7x13` is a cell the fitter produces, so a fix wants to cover both
+    rather than leave two sentences disagreeing about one fact.
+  - From: UI/UX Override - two claims the label floor was justified with
