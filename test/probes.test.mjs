@@ -291,24 +291,93 @@ test('probes: every probe that calls the harness is run against it', async () =>
 });
 
 /**
- * Every "<probe> is the one ..." sentence a published file makes, read off the
- * file rather than listed here: the probe it names, and the property it claims
- * is that probe's alone.
+ * The two shapes a sentence giving one probe sole possession of a property is
+ * written in, read against flattened text so one pattern covers a page, a
+ * markdown file and a source comment alike - a `<code>` element on the page, a
+ * backtick span in the markdown, and neither of them in a comment.
  *
- * Both files write the claim in one shape and only the span around the name
- * differs - a `<code>` element on the page, a backtick span in the markdown - so
- * the text is flattened and one pattern reads both. The predicate ends at the
- * full stop or at the colon that introduces the rest of the paragraph, because
- * `glyph-tuning`'s sentence in CHEATSHEET.md closes on the colon.
+ * The predicate ends at the full stop or at the colon that introduces the rest
+ * of the paragraph, because `glyph-tuning`'s sentence in CHEATSHEET.md closes on
+ * the colon.
+ *
+ * There are two shapes because the single one this check was written with read
+ * only part of what it was written to refuse:
+ *
+ * - The predicate opens on `that` or `whose`, which is how every sentence in
+ *   the published files is phrased - "`overlay-anchor` is the one that flies
+ *   nothing".
+ * - It opens on a participle instead, the relative pronoun dropped. "the one
+ *   probe flying nothing" is the same claim as "the one probe that flies
+ *   nothing" and was matched by nothing. A participle wants the noun in front of
+ *   it to be grammatical, and requiring `probe` there is what keeps this shape
+ *   off an ordinary sentence: test/probes/overlay-anchor.mjs says "which is the
+ *   one reading test/helpers.mjs says is safe to restate", where the gerund is a
+ *   noun and the subject is not a probe at all.
+ *
+ * `also` and `still` are allowed between `is` and `the one`, and `only` beside
+ * `one`, for the same reason the second shape exists: the sentence in
+ * test/probes/run.mjs that half of this test was written for read "glyph-tuning
+ * is also the one probe that flies nothing", so a pattern without the adverb
+ * walks past the claim that prompted it.
  */
-function soleClaims(file) {
-  const text = readFileSync(join(REPO_ROOT, file), 'utf8')
-    .replace(/<[^>]*>/g, '')
-    .replace(/`/g, '')
-    .replace(/\s+/g, ' ');
-  return [...text.matchAll(/([a-z][a-z-]+) is the one (?:probe )?((?:that|whose)[^.:]*)[.:]/g)]
-    .map(([, probe, property]) => ({ file, probe, property: property.trim() }));
+const CLAIM_SHAPES = [
+  /([a-z][a-z-]+) is (?:also |still )?the (?:one|only) (?:probe )?((?:that|whose)[^.:]*)[.:]/g,
+  /([a-z][a-z-]+) is (?:also |still )?the (?:one|only) probe ([a-z]+ing[^.:]*)[.:]/g,
+];
+
+/**
+ * Every sole-possession claim in a stretch of text: the probe it names, and the
+ * property it claims is that probe's alone.
+ *
+ * Takes the text rather than a path, so the shapes can be read against a
+ * sentence a file used to carry rather than only against the files as they
+ * stand. `the sole-claim reader catches the shapes that got past it` below is
+ * what reads them that way, and it is the only thing in the suite that has shown
+ * this guard catching anything.
+ */
+function claimsIn(text, file) {
+  const flat = text.replace(/<[^>]*>/g, '').replace(/`/g, '').replace(/\s+/g, ' ');
+  return CLAIM_SHAPES.flatMap((shape) => [...flat.matchAll(shape)]
+    .map(([said, probe, property]) => ({
+      file, probe, property: property.trim(), said: said.trim(),
+    })));
 }
+
+/** The claims one file makes, read off the file rather than listed here. */
+const soleClaims = (file) => claimsIn(readFileSync(join(REPO_ROOT, file), 'utf8'), file);
+
+/**
+ * The published files whose claims are read. CHEATSHEET.md and the page
+ * published from it are both here rather than one standing for the other:
+ * test/docs-site.test.mjs compares the two in one direction only, so a sentence
+ * added to the page alone is the publishing working as far as that check is
+ * concerned.
+ */
+const PUBLISHED = ['docs/development.html', 'CHEATSHEET.md', 'docs/cheatsheet.html'];
+
+/**
+ * The rig's own source, read beside the published files, which it was not until
+ * 0.16.2.
+ *
+ * That gap was half of the fault this test was written for and the half it did
+ * not reach. The two sentences in opposite sole possession of flying nothing
+ * were one published paragraph and one source comment, so restoring the comment
+ * to test/probes/run.mjs passed the suite while restoring the paragraph to
+ * docs/development.html failed it - the guard covered the half that had already
+ * been corrected. A probe's header is also read by whoever edits the probe,
+ * which is the reader most likely to carry the property on into a comment of
+ * their own.
+ *
+ * The per-probe files come off `PROBES` rather than a list, so a new probe's
+ * header is read without a line being added here.
+ */
+const RIG_SOURCES = [
+  'test/probes/run.mjs',
+  'test/probes/probes.mjs',
+  ...Object.keys(PROBES).map((name) => `test/probes/${name}.mjs`),
+];
+
+const READ_FOR_CLAIMS = [...PUBLISHED, ...RIG_SOURCES];
 
 /**
  * The predicates that single out neither probe in HARNESS_EXCLUSIONS, because
@@ -331,55 +400,57 @@ function soleClaims(file) {
  *   advance - 682,500 viewports against the overlay, 11 font sizes against two
  *   cell models - so neither is the one that counts nothing either.
  * - `loads the browser alone` is true of both, and test/probes/run.mjs says so
- *   in those words two paragraphs above where it used to say the other thing.
+ *   in those words one paragraph above where it used to say the other thing.
+ *
+ * Each property is listed in both inflections, because CLAIM_SHAPES reads a
+ * predicate opening on a participle as well as one opening on a verb:
+ * `flies nothing` and `flying nothing` are the same claim in the two shapes, and
+ * a list carrying only the first refuses only the first.
  */
-/**
- * The files whose claims are read. CHEATSHEET.md and the page published from it
- * are both here rather than one standing for the other: test/docs-site.test.mjs
- * compares the two in one direction only, so a sentence added to the page alone
- * is the publishing working as far as that check is concerned.
- */
-const PUBLISHED = ['docs/development.html', 'CHEATSHEET.md', 'docs/cheatsheet.html'];
-
 const SHARED_BY_THE_PAIR = [
-  'flies nothing',
-  'flies no',
-  'walks a space',
-  'walks viewports',
-  'measures nothing',
-  'counts nothing',
-  'loads the browser alone',
-  'reads no flag',
-  'takes no flag',
+  'flies nothing', 'flying nothing',
+  'flies no', 'flying no',
+  'walks a space', 'walking a space',
+  'walks viewports', 'walking viewports',
+  'measures nothing', 'measuring nothing',
+  'counts nothing', 'counting nothing',
+  'loads the browser alone', 'loading the browser alone',
+  'reads no flag', 'reading no flag',
+  'takes no flag', 'taking no flag',
 ];
 
-test('probes: no published sentence singles a probe out by a property the pair shares', () => {
+test('probes: no sentence singles a probe out by a property the pair shares', () => {
   // 0.16.0 found docs/development.html calling `overlay-anchor` "the one that
   // flies nothing" while `glyph-tuning` flew nothing by the same test - and
   // test/probes/run.mjs calling `glyph-tuning` "the one probe that flies
-  // nothing" while `overlay-anchor` did. Two published claims of sole
-  // possession, each disproved by the other, three paragraphs apart in files
-  // that are read together. Nothing in the suite read either sentence.
+  // nothing" while `overlay-anchor` did. Two claims of sole possession, each
+  // disproved by the other: one in a published paragraph, one in the rig's own
+  // source. Nothing in the suite read either sentence.
+  //
+  // The published half is what this test covered when it was written, which
+  // left the source half unguarded until 0.16.2 - and the source half was the
+  // one still worth guarding, the published sentence having been corrected in
+  // the same release the test arrived in.
   //
   // What a probe reports and what its subject is can single it out and are
   // left alone here. What it does *not* do cannot, once two probes do not do
   // it, and that is the whole of what this refuses.
-  const claims = PUBLISHED.flatMap(soleClaims);
-  assert.ok(claims.length, 'no published file makes a "<probe> is the one ..." claim');
+  const claims = READ_FOR_CLAIMS.flatMap(soleClaims);
+  assert.ok(claims.length, 'no file in READ_FOR_CLAIMS makes a "<probe> is the one ..." claim');
 
   // Every claim names a probe. A sentence outliving a renamed probe publishes a
   // property with nothing left to be the property of.
-  for (const { file, probe, property } of claims) {
+  for (const { file, probe, said } of claims) {
     assert.ok(
       probe in PROBES,
-      `${file} says "${probe} is the one ${property}", and ${probe} is not a probe -`
-      + ' a published sentence naming no probe is one nothing can be checked against'
+      `${file} says "${said}", and ${probe} is not a probe - a sentence naming no probe is`
+      + ' one nothing can be checked against'
     );
   }
 
   // The two halves of what the pair shares that the rig can compute, computed
   // rather than taken from the list above: neither flies, and neither reads a
-  // flag. Both were published as one probe's own property.
+  // flag. Both were written down as one probe's own property.
   const pair = [...HARNESS_EXCLUSIONS].sort();
   assert.deepEqual(
     pair.filter((name) => !callsHarness(name)).sort(), pair,
@@ -392,13 +463,90 @@ test('probes: no published sentence singles a probe out by a property the pair s
     + ' is a property of the pair as well'
   );
 
-  for (const { file, probe, property } of claims) {
+  for (const { file, property, said } of claims) {
     const shared = SHARED_BY_THE_PAIR.find((phrase) => property.includes(phrase));
     assert.ok(
       !shared,
-      `${file} says "${probe} is the one ${property}", and "${shared}" is true of both`
-      + ` ${pair.join(' and ')} or of neither - so it singles out nothing. Name something the`
-      + " probe does not share: its subject, or a figure only it reports"
+      `${file} says "${said}", and "${shared}" is true of both ${pair.join(' and ')} or of`
+      + ' neither - so it singles out nothing. Name something the probe does not share: its'
+      + ' subject, or a figure only it reports'
+    );
+  }
+});
+
+test('probes: the sole-claim reader catches the shapes that got past it', () => {
+  // The check above reads the files as they stand, so it passes on a repository
+  // with no such sentence in it - which is the state this repository was left in
+  // by the release that corrected the sentences. Nothing had been shown to catch
+  // anything. These are the three sentences the repository actually carried, read
+  // on their own, and what became of each before 0.16.2:
+  //
+  // - the published one was caught, and is here so the shape this test was
+  //   written with stays covered by the shapes that replaced it;
+  // - the rig's own header got past on two counts, the file not being read and
+  //   the `also` fitting no pattern;
+  // - the participle form got past on the pattern alone, and is the shape a
+  //   reader reaches for when "that flies" reads stiffly.
+  const sentences = [
+    {
+      was: 'the published shape this check was written with',
+      text: '<p><code>overlay-anchor</code> is the one that flies nothing. It measures where'
+        + " the browser build's three controls land.</p>",
+      probe: 'overlay-anchor',
+      reads: 'overlay-anchor is the one that flies nothing.',
+      shared: 'flies nothing',
+    },
+    {
+      was: "the rig's own header, in a file nothing read and with an adverb in it",
+      text: '// glyph-tuning is also the one probe that flies nothing. It rebuilds the'
+        + ' figures that tuning quotes about itself.',
+      probe: 'glyph-tuning',
+      reads: 'glyph-tuning is also the one probe that flies nothing.',
+      shared: 'flies nothing',
+    },
+    {
+      was: 'the same claim with the relative pronoun dropped',
+      text: '// glyph-tuning is the one probe flying nothing. It rebuilds the figures that'
+        + ' tuning quotes about itself.',
+      probe: 'glyph-tuning',
+      reads: 'glyph-tuning is the one probe flying nothing.',
+      shared: 'flying nothing',
+    },
+  ];
+
+  for (const { was, text: wrote, probe, reads, shared } of sentences) {
+    const claims = claimsIn(wrote, 'a sentence read on its own');
+    assert.equal(
+      claims.length, 1,
+      `${was}: the reader finds ${claims.length} claims in it rather than one - ${wrote}`
+    );
+    assert.equal(claims[0].probe, probe, `${was}: the claim it reads names ${probe}`);
+    // The words the failure message quotes, which are the sentence as written
+    // and not a template filled in from the parts: the shapes allow an adverb,
+    // `only` and the noun, so a reconstruction sends a reader to the file
+    // looking for a sentence it does not hold.
+    assert.equal(
+      claims[0].said, reads,
+      `${was}: the claim is reported as "${claims[0].said}" rather than as the sentence`
+      + ` itself, "${reads}"`
+    );
+    assert.equal(
+      SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase)), shared,
+      `${was}: "${claims[0].property}" is read but no phrase in SHARED_BY_THE_PAIR matches`
+      + ` it, so the sentence would stand - "${shared}" is the property it gives away`
+    );
+  }
+
+  // And the half the shapes cannot cover: whether anybody looks at the file the
+  // second of those lived in. Both halves were needed - the sentence above
+  // matches now, and until the rig's source joined the read set there was
+  // nothing for it to match against.
+  for (const named of ['test/probes/run.mjs', 'test/probes/glyph-tuning.mjs']) {
+    assert.ok(
+      READ_FOR_CLAIMS.includes(named),
+      `${named} is not read for claims - the sentence in opposite sole possession of flying`
+      + ' nothing was a source comment, so reading the published files alone leaves half of'
+      + ' that disagreement unguarded'
     );
   }
 });

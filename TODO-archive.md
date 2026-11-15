@@ -4325,3 +4325,76 @@ still be found by name.
     7, and `7x13` is a cell the fitter produces, so a fix wants to cover both
     rather than leave two sentences disagreeing about one fact.
   - From: UI/UX Override - two claims the label floor was justified with
+
+## Archived 11-15-26
+
+- [x] **At-Rule Reason**: The stub's new style resolver folds rules a browser
+  would have gated
+  - **Issue**: `resolvedStyle` in `test/helpers.mjs` walks `PAGE_SHEET.rules`
+    and never reads `rule.at`, so a declaration inside an `@media` or
+    `@supports` block is folded as though it were top level. Its own docstring
+    offers the opposite behaviour as the model - "left out rather than guessed
+    at, exactly as `declarationsFor` leaves out a rule inside an at-rule" - and
+    `declarationsFor` in `test/page-style.mjs` opens its loop with
+    `if (rule.at.length) continue;`. Nothing fails today: `@media` appears in
+    `index.html` only inside a comment, so the page declares no at-rule and the
+    two resolvers cannot disagree. The state that makes them disagree is the
+    first at-rule naming `#fire` or `#boost` - a narrow-screen or
+    `prefers-reduced-motion` override of the label's size - at which point
+    `window.getComputedStyle` on the stub answers with a length the browser only
+    uses under the query, and the label-floor cases pass or fail on a size no
+    player sees.
+  - **Goal**: Skip an at-rule's rules in `resolvedStyle` the way
+    `declarationsFor` does, so the docstring's claim is the code's behaviour,
+    and leave a conditional block to a caller that reads `rule.at` itself. A
+    case pinning it needs a sheet of its own, since `index.html` has no at-rule
+    to exercise.
+  - From: UI/UX Override - two claims the label floor was justified with
+- [x] At-Rule Reason 1
+  - **Issue**: The gate itself is right and the fix is sound - what is wrong is
+    the reason written beside it, which is the same defect class the rest of
+    this override run was correcting. `test/helpers.mjs:289-291` justifies
+    skipping an at-rule with "nothing running here has a viewport or a colour
+    scheme to test a prelude against", and `resolvedStyle`'s own body
+    contradicts both halves below it: `test/helpers.mjs:310-314` builds
+    `vp` out of `dom.window.innerWidth` and `innerHeight`, which `lengthPx`
+    uses to resolve every `vw` and `vh` in the sheet, and `stubDom` carries a
+    `schemeQuery` at `test/helpers.mjs:387` exposed as `matchMedia` at
+    `:435` and flipped by the harness at `:613`. A stub asked at `1400x800`
+    with a light scheme has exactly the two things the sentence says nothing
+    here has. The claim is true of `test/page-style.mjs`, whose own docstring
+    says "**This module** has no viewport and no colour scheme", and it was
+    widened to the whole harness on the way across. What it costs is a reader
+    asking whether the stub could honour `@media (max-width:600px)`: the
+    docstring answers that there is nothing to test the prelude against, when
+    the actual blocker is that `pageStyle` never parses a prelude at all -
+    `rule.at` holds the prelude as raw text and no code in either resolver
+    evaluates it. `docs/development.html:42` publishes the same widened claim
+    as "nothing running in Node has a viewport or a colour scheme to test a
+    prelude against", so the site states it too.
+  - **Goal**: Give the gate the reason that holds for this module - the
+    resolver has no prelude evaluator, so an `@media` or `@supports` condition
+    cannot be decided here whatever the stub happens to hold - and stop
+    borrowing `page-style.mjs`'s "no viewport, no colour scheme", which is that
+    module speaking about itself. Correct both places: the docstring at
+    `test/helpers.mjs:289-291` and the published clause at
+    `docs/development.html:42`. The `0.15.7` CHANGELOG carried the same
+    overreach and was corrected in place this turn, so it now reads as
+    `page-style.mjs` speaking about itself and wants no further change.
+    Nothing executes any of these sentences, so the suite staying at 972 of 972
+    is the whole check.
+  - From: UI/UX Override - two claims the label floor was justified with
+- [x] **Section Jolt Probe**: **A probe for how often a section's rocks reach
+  the ship** - 0.15.2 quotes a rate in `test/asteroid-field.test.mjs` and in the
+  CHANGELOG that nothing in the repository can rebuild: over 60,000 unseeded
+  runs of the open-and-close sequence, the terminal build shook 237 times and
+  misread the walls the same 237 times, and the browser build shook 258 times
+  and misread none. Those figures came from a scratch script in `.tmp`, which is
+  the thing this section exists to replace. The reading is a natural probe - it
+  walks a sequence many times and reports a rate and a contingency rather than
+  asserting one - and it would also carry the figure that explains the pair,
+  which is that a hit jolts the terminal build's grid a whole column and the
+  browser build's not at all. Nothing is wrong today: the two cases it came from
+  are seeded and deterministic, so this is a figure needing a home rather than a
+  defect.
+  - From: Measurement
