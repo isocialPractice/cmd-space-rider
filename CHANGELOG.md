@@ -1,5 +1,80 @@
 # Changelog
 
+## [1.0.0-alpha.0.16.2] - 2026-11-15
+
+### Fixed
+
+- The page's own account of the 0.16.1 fix counted two paragraphs where it had
+  one. `docs/development.html` closed its probe-harness paragraph with "two of
+  them naming one of that pair as the only probe flying nothing while the other
+  flew nothing beside it", and the page as it stood before that rewrite carries
+  exactly one flying-nothing claim, `overlay-anchor`'s. The second was never on
+  the page at all: it was the header of `test/probes/run.mjs`, which gave the
+  same property to `glyph-tuning`, and that is what made the fault worth
+  describing - two files each claiming sole possession of one property and
+  each disproved by the other. The three paragraphs below did each make a
+  sole-possession claim, and what they claimed was measuring nothing, flying
+  nothing and reporting a width, one apiece. The sentence now says that and
+  names where the other half lived, so it no longer sends a reader down the
+  page after a second flying-nothing paragraph, and no longer disagrees with
+  the 0.16.1 entry above, which names both files.
+- The docstring that release added landed on the wrong constant. A second
+  `/** */` block for `PUBLISHED` was written between "The predicates that single
+  out neither probe in HARNESS_EXCLUSIONS" and the code, so the predicates
+  docstring documented `PUBLISHED` - a list of three file paths - and
+  `SHARED_BY_THE_PAIR` was left with none, which is what a reader or an editor
+  hovering either name was told. Each constant carries its own block now. That
+  same docstring put "Two load the browser alone" two paragraphs above the
+  claim it replaced in `test/probes/run.mjs`, and it is one paragraph: the
+  words are in the paragraph at lines 8-15 and the claim they replaced was the
+  paragraph at lines 17-26.
+- The guard that release added reached the half of the fault that had already
+  been corrected and not the half the other sentence had been in. `PUBLISHED`
+  listed `docs/development.html`, `CHEATSHEET.md` and `docs/cheatsheet.html`
+  only, so restoring "glyph-tuning is also the one probe that flies nothing" to
+  `test/probes/run.mjs` passed `npm test` while restoring a claim to the page
+  failed it. The read set is now those three files beside
+  `test/probes/run.mjs`, `test/probes/probes.mjs` and one file per probe, the
+  per-probe paths taken off `PROBES` so a new probe's header is read without a
+  line being added. The predicate shape was narrow in the same direction: it
+  required the claim to open on `that` or `whose`, so "`glyph-tuning` is the one
+  probe flying nothing" was not read as a claim at all. A second shape reads a
+  predicate opening on a participle, with the noun required in front of it so
+  an ordinary gerund is not taken for one -
+  `test/probes/overlay-anchor.mjs` says "which is the one reading
+  test/helpers.mjs says is safe to restate", where the subject is not a probe.
+  `also` and `still` are allowed between `is` and `the one`, and `only` beside
+  `one`, because the sentence in the rig's own header carried an adverb and a
+  pattern without one walks past the claim that prompted the test.
+  `SHARED_BY_THE_PAIR` carries each property in both inflections for the same
+  reason: "flying nothing" contains no phrase the third-person list held. Both
+  halves were checked against a real file - the rig's header fails with the
+  pair named, and so does a participle claim added to a probe's own header.
+
+### Changed
+
+- `probes: no published sentence singles a probe out by a property the pair
+  shares` is now `probes: no sentence singles a probe out by a property the pair
+  shares`, the rig's source not being published. Its failure messages quote the
+  sentence as the file holds it rather than refilling an "X is the one
+  <property>" template, which with an adverb, `only` or the noun in the
+  sentence sent a reader to the file after words it does not carry.
+
+### Added
+
+- `probes: the sole-claim reader catches the shapes that got past it` in
+  `test/probes.test.mjs`, the first thing in the suite to show that guard
+  catching anything. The check beside it reads the files as they stand, so it
+  passes on a repository holding no such sentence, which is the state 0.16.1
+  left this one in. The new test reads three sentences against the reader on
+  its own: the two this repository carried - the published claim, and the
+  rig's header with its adverb - and the participle form, which no file here
+  ever held and which the second shape was added for. It pins the probe each
+  names, the property each gives away and the words the failure message
+  quotes. It also asserts that
+  `test/probes/run.mjs` and a probe's own file are in the read set, which is
+  the half the shapes cannot cover. The suite goes from 973 to 974.
+
 ## [1.0.0-alpha.0.16.1] - 2026-11-14
 
 ### Fixed
