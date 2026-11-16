@@ -4398,3 +4398,59 @@ still be found by name.
   are seeded and deterministic, so this is a figure needing a home rather than a
   defect.
   - From: Measurement
+
+## Archived 11-16-26
+
+- [x] Section Jolt Probe 1 - the docs call it the only probe reporting a rate
+  - **Issue**: The new probe's published prose calls it the only probe that
+    reports a rate, and three others do. `CHEATSHEET.md:186` and
+    `docs/cheatsheet.html:84` say "`section-jolt` is the one probe that reports
+    a rate", and `docs/development.html:57` says "`section-jolt` is the one that
+    reports a rate" in a series with `drop-clip`'s "reports a time rather than a
+    count" and `versus-half`'s "reports a width", which reads the claim as
+    exclusive. `npm run probe -- column --count 3 --grid 80x24 --build terminal`
+    prints a block the probe itself labels `rates:` and three percentages off
+    it - "lone shot 60 to 140: 52/58 90%", "volley 98%", and "contact at 60 to
+    140: 9/12 killed 75%". `seen-versus-kill` prints a kill rate per band and
+    aim - 80%, 63%, 100% and 50% at `--count 2` - and the `AIMED_BANDS`
+    docstring at `test/engagement.mjs:111` quotes `free-flight`'s own bands the
+    same way, "lands 88% at 80x24, 93% at 60x20 and 67% at 205x50". So a reader
+    sent to the one probe that reports a rate finds four, and the sentence meant
+    to say what makes this probe unlike the others states something the rig
+    disproves on request.
+  - **Goal**: Name the property that is this probe's alone. What separates it is
+    the shape of the walk and its subject rather than the kind of figure: it is
+    the only probe whose rate is how often an event falls out of seeded worlds
+    of a whole sequence, rather than a hit rate over staged placements, and the
+    only one whose subject is the asteroid field rather than the pulse cannon.
+    Rewrite the opening clause in all three files to that and leave the rest of
+    each paragraph as it stands - every figure in them is correct, and the walk
+    was re-run this review to confirm it. Leave the other probes' "the one
+    that ..." sentences alone; each of those is true.
+  - From: Measurement
+- [x] **Probe Sole Claim**: The docs call the overlay probe the only one that flies nothing
+  - **Issue**: `docs/development.html:54` says "`overlay-anchor` is the one
+    that flies nothing", and `glyph-tuning` flies nothing by the same test.
+    Neither probe names a grid or a build - both are `flags: []` in
+    `test/probes/probes.mjs` - neither imports `test/engagement.mjs`, and
+    `grep -n "startGame\|emptyRun\|freeFlight\|openAndClose\|walk(" ` over
+    `test/probes/glyph-tuning.mjs` and `test/probes/overlay-anchor.mjs`
+    returns nothing for either: each imports `loadBrowserEngine` only to read
+    constants and functions off the page. The adjacent paragraph says as much
+    about `glyph-tuning` itself - it "rebuilds the figures ... out of Courier
+    New's `1229/2048` em advance and the page's own `glyphInset`" - so the
+    counterexample is two paragraphs above the claim. This is the same defect
+    class as `Section Jolt Probe 1`, found while checking that item's fix and
+    left for a run of its own rather than widened into it.
+  - **Goal**: Give `overlay-anchor` the property that is actually its own. What
+    separates it from `glyph-tuning` is that it walks a space and counts
+    outcomes over it - 682,500 viewports - where `glyph-tuning` derives figures
+    and counts nothing, so "the one that walks a space without flying it" or
+    similar is true of one and not the other. Check the replacement against all
+    ten probes in `PROBES` before writing it, and re-check the other
+    "the one that ..." sentences in `docs/development.html` and `CHEATSHEET.md`
+    the same way: `drop-clip`'s "reports a time rather than a count" and
+    `versus-half`'s "reports a width" were each read as plausible this review
+    but not walked against every probe, and `versus-half`'s shares the ground
+    `overlay-anchor` reports px bands over.
+  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
