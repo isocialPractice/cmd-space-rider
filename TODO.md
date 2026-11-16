@@ -8,57 +8,41 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the new guard's account of what it was shown
-
-#### Resolve Issues
-
-- [ ] Probe Sole Claim 4 - the new test says the repository carried a sentence it never held
-  - **Issue**: The comment opening `probes: the sole-claim reader catches the
-    shapes that got past it` reads, at `test/probes.test.mjs:481`, "These are
-    the three sentences the repository actually carried, read on their own, and
-    what became of each before 0.16.2" - and the third of the three was never
-    in any file here. `git log --all -S"probe flying nothing"` puts that string
-    in `TODO.md`, where the review that queued `Probe Sole Claim 3` coined it as
-    the shape the old pattern would miss, and in `docs/development.html` at
-    `d79ea2a` inside a different sentence, "two of them naming one of that pair
-    as the only probe flying nothing", which is the page's account of the 0.16.1
-    fix rather than a claim of sole possession about a probe. No file ever held
-    `glyph-tuning is the one probe flying nothing`. The bullet at
-    `test/probes.test.mjs:488` then says the participle form "got past on the
-    pattern alone", in the same past tense as the two sentences that really did
-    get past, so a reader is told a third defect shipped and was corrected and
-    is sent into the history after it. The 0.16.2 `CHANGELOG.md` entry made the
-    same claim and was corrected in place by this review, so the comment and the
-    release note now disagree.
-  - **Goal**: Say that two of the three were carried and that the third is the
-    shape the second pattern was added for; the `### Added` entry for 0.16.2
-    carries that wording already and can be borrowed from. Keep all three
-    fixtures - the participle one is the only case pinning the shape that was
-    widened, and its worth does not rest on the repository ever having held it.
-    Nothing executes the comment, so `npm test` staying at 974 of 974 is the
-    whole check.
-  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
+### Code Review Override - nothing exercises the order-freedom 0.16.3 claims
 
 #### Found Issues
 
-- [ ] The new test pins which phrase of SHARED_BY_THE_PAIR matched, so reordering the list fails it
-  - **Issue**: `test/probes.test.mjs:534` asserts that
-    `SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase))`
-    equals the fixture's own `shared` string, and `find` answers in array order
-    over phrases that are prefixes of one another. The third fixture expects
-    `flying nothing`, which wins only because `flying no` is written after it in
-    the list. Sorting `SHARED_BY_THE_PAIR` alphabetically - the obvious thing to
-    do to an 18-entry list - puts `flying no` first, and that fixture then fails
-    with the guard itself working exactly as before: the main check reads the
-    same `find` only for its message and asserts on `!shared`, so order cannot
-    reach it. What the fixture is standing in for, that the participle
-    inflection is in the list at all, does not depend on order either.
-  - **Goal**: Split the assertion into the two things it means - that
-    `SHARED_BY_THE_PAIR` carries `shared`, and that the property read out of the
-    sentence matches some phrase in the list - both of which hold whatever order
-    the list is in. The three fixtures are the check, so `npm test` staying at
-    974 of 974 covers it.
-  - From: Code Review Override - the new guard's account of what it was shown
+- [ ] The suite reads SHARED_BY_THE_PAIR in the order it is written and in no other
+  - **Issue**: 0.16.3 exists because the three fixtures in `probes: the
+    sole-claim reader catches the shapes that got past it` pinned which phrase
+    of `SHARED_BY_THE_PAIR` matched, and its `CHANGELOG.md` entry closes by
+    saying the suite "passes with the list sorted alphabetically". Nothing in
+    `test/` reads that list in any order but the one it is written in at
+    `test/probes.test.mjs:410`, so the release note is the only record of the
+    property and no run checks it. Putting the pre-0.16.3 assertion back in
+    place of `test/probes.test.mjs:565` - `assert.equal(SHARED_BY_THE_PAIR
+    .find((phrase) => claims[0].property.includes(phrase)), shared, ...)` -
+    leaves `npm test` at 974 of 974 on the list as written, and fails all
+    three fixtures the moment anybody sorts it, the published fixture first:
+    verified this review by doing both. That is the state 0.16.2 shipped in
+    and the state this release was cut to leave, and the suite cannot tell the
+    two apart. The file's own standard is the opposite - the fixtures exist
+    because "a guard nothing has been shown to catch anything" was the
+    position the item behind them started from, and order-freedom is now in
+    exactly that position.
+  - **Goal**: Read the three fixtures against a reordered copy of the list as
+    well as the written one, so an assertion consulting a position rather than
+    a phrase fails on the spot. `[...SHARED_BY_THE_PAIR].sort()` is the
+    ordering that broke them and is the one to read; reversed is a cheap
+    second. The loop over `sentences` already carries everything needed - what
+    wants deciding is whether the ordering becomes a parameter of that loop or
+    a case beside it, and either is fine as long as the sorted order is one of
+    the orders read. Verify it the way 0.16.3 was verified by hand: with the
+    `find` form restored the new case must fail, and with the shipped form it
+    must pass. The suite goes to 975 or stays at 974 depending on which shape
+    is chosen; say which in the release note rather than quoting a count that
+    does not match.
+  - From: Code Review Override - nothing exercises the order-freedom 0.16.3 claims
 
 ## Quick Wins
 
@@ -104,61 +88,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 209 earlier items in `TODO-archive.md`, newest last.
+> 211 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Section Jolt Probe 1 - the docs call it the only probe reporting a rate
-  - **Issue**: The new probe's published prose calls it the only probe that
-    reports a rate, and three others do. `CHEATSHEET.md:186` and
-    `docs/cheatsheet.html:84` say "`section-jolt` is the one probe that reports
-    a rate", and `docs/development.html:57` says "`section-jolt` is the one that
-    reports a rate" in a series with `drop-clip`'s "reports a time rather than a
-    count" and `versus-half`'s "reports a width", which reads the claim as
-    exclusive. `npm run probe -- column --count 3 --grid 80x24 --build terminal`
-    prints a block the probe itself labels `rates:` and three percentages off
-    it - "lone shot 60 to 140: 52/58 90%", "volley 98%", and "contact at 60 to
-    140: 9/12 killed 75%". `seen-versus-kill` prints a kill rate per band and
-    aim - 80%, 63%, 100% and 50% at `--count 2` - and the `AIMED_BANDS`
-    docstring at `test/engagement.mjs:111` quotes `free-flight`'s own bands the
-    same way, "lands 88% at 80x24, 93% at 60x20 and 67% at 205x50". So a reader
-    sent to the one probe that reports a rate finds four, and the sentence meant
-    to say what makes this probe unlike the others states something the rig
-    disproves on request.
-  - **Goal**: Name the property that is this probe's alone. What separates it is
-    the shape of the walk and its subject rather than the kind of figure: it is
-    the only probe whose rate is how often an event falls out of seeded worlds
-    of a whole sequence, rather than a hit rate over staged placements, and the
-    only one whose subject is the asteroid field rather than the pulse cannon.
-    Rewrite the opening clause in all three files to that and leave the rest of
-    each paragraph as it stands - every figure in them is correct, and the walk
-    was re-run this review to confirm it. Leave the other probes' "the one
-    that ..." sentences alone; each of those is true.
-  - From: Measurement
-- [x] **Probe Sole Claim**: The docs call the overlay probe the only one that flies nothing
-  - **Issue**: `docs/development.html:54` says "`overlay-anchor` is the one
-    that flies nothing", and `glyph-tuning` flies nothing by the same test.
-    Neither probe names a grid or a build - both are `flags: []` in
-    `test/probes/probes.mjs` - neither imports `test/engagement.mjs`, and
-    `grep -n "startGame\|emptyRun\|freeFlight\|openAndClose\|walk(" ` over
-    `test/probes/glyph-tuning.mjs` and `test/probes/overlay-anchor.mjs`
-    returns nothing for either: each imports `loadBrowserEngine` only to read
-    constants and functions off the page. The adjacent paragraph says as much
-    about `glyph-tuning` itself - it "rebuilds the figures ... out of Courier
-    New's `1229/2048` em advance and the page's own `glyphInset`" - so the
-    counterexample is two paragraphs above the claim. This is the same defect
-    class as `Section Jolt Probe 1`, found while checking that item's fix and
-    left for a run of its own rather than widened into it.
-  - **Goal**: Give `overlay-anchor` the property that is actually its own. What
-    separates it from `glyph-tuning` is that it walks a space and counts
-    outcomes over it - 682,500 viewports - where `glyph-tuning` derives figures
-    and counts nothing, so "the one that walks a space without flying it" or
-    similar is true of one and not the other. Check the replacement against all
-    ten probes in `PROBES` before writing it, and re-check the other
-    "the one that ..." sentences in `docs/development.html` and `CHEATSHEET.md`
-    the same way: `drop-clip`'s "reports a time rather than a count" and
-    `versus-half`'s "reports a width" were each read as plausible this review
-    but not walked against every probe, and `versus-half`'s shares the ground
-    `overlay-anchor` reports px bands over.
-  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
 - [x] Probe Sole Claim 1 - the page's account of the fix names two paragraphs where it had one
   - **Issue**: `docs/development.html:35` now closes with "Three of the
     paragraphs below made exactly that claim until 0.16.1, two of them naming
@@ -219,3 +150,47 @@ the roadmap section each one came from.
     fails before the change and passes after, since a guard nothing has been
     shown to catch anything is the position this item started from.
   - From: Code Review Override - the overlay probe is said to be the only one flying nothing
+- [x] Probe Sole Claim 4 - the new test says the repository carried a sentence it never held
+  - **Issue**: The comment opening `probes: the sole-claim reader catches the
+    shapes that got past it` reads, at `test/probes.test.mjs:481`, "These are
+    the three sentences the repository actually carried, read on their own, and
+    what became of each before 0.16.2" - and the third of the three was never
+    in any file here. `git log --all -S"probe flying nothing"` puts that string
+    in `TODO.md`, where the review that queued `Probe Sole Claim 3` coined it as
+    the shape the old pattern would miss, and in `docs/development.html` at
+    `d79ea2a` inside a different sentence, "two of them naming one of that pair
+    as the only probe flying nothing", which is the page's account of the 0.16.1
+    fix rather than a claim of sole possession about a probe. No file ever held
+    `glyph-tuning is the one probe flying nothing`. The bullet at
+    `test/probes.test.mjs:488` then says the participle form "got past on the
+    pattern alone", in the same past tense as the two sentences that really did
+    get past, so a reader is told a third defect shipped and was corrected and
+    is sent into the history after it. The 0.16.2 `CHANGELOG.md` entry made the
+    same claim and was corrected in place by this review, so the comment and the
+    release note now disagree.
+  - **Goal**: Say that two of the three were carried and that the third is the
+    shape the second pattern was added for; the `### Added` entry for 0.16.2
+    carries that wording already and can be borrowed from. Keep all three
+    fixtures - the participle one is the only case pinning the shape that was
+    widened, and its worth does not rest on the repository ever having held it.
+    Nothing executes the comment, so `npm test` staying at 974 of 974 is the
+    whole check.
+  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
+- [x] The new test pins which phrase of SHARED_BY_THE_PAIR matched, so reordering the list fails it
+  - **Issue**: `test/probes.test.mjs:534` asserts that
+    `SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase))`
+    equals the fixture's own `shared` string, and `find` answers in array order
+    over phrases that are prefixes of one another. The third fixture expects
+    `flying nothing`, which wins only because `flying no` is written after it in
+    the list. Sorting `SHARED_BY_THE_PAIR` alphabetically - the obvious thing to
+    do to an 18-entry list - puts `flying no` first, and that fixture then fails
+    with the guard itself working exactly as before: the main check reads the
+    same `find` only for its message and asserts on `!shared`, so order cannot
+    reach it. What the fixture is standing in for, that the participle
+    inflection is in the list at all, does not depend on order either.
+  - **Goal**: Split the assertion into the two things it means - that
+    `SHARED_BY_THE_PAIR` carries `shared`, and that the property read out of the
+    sentence matches some phrase in the list - both of which hold whatever order
+    the list is in. The three fixtures are the check, so `npm test` staying at
+    974 of 974 covers it.
+  - From: Code Review Override - the new guard's account of what it was shown
