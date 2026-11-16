@@ -478,15 +478,18 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
   // The check above reads the files as they stand, so it passes on a repository
   // with no such sentence in it - which is the state this repository was left in
   // by the release that corrected the sentences. Nothing had been shown to catch
-  // anything. These are the three sentences the repository actually carried, read
-  // on their own, and what became of each before 0.16.2:
+  // anything. Two of the three sentences below are the ones this repository
+  // carried, read on their own; the third is the shape the second pattern was
+  // added for and no file here ever held:
   //
-  // - the published one was caught, and is here so the shape this test was
-  //   written with stays covered by the shapes that replaced it;
-  // - the rig's own header got past on two counts, the file not being read and
-  //   the `also` fitting no pattern;
-  // - the participle form got past on the pattern alone, and is the shape a
-  //   reader reaches for when "that flies" reads stiffly.
+  // - the published one was carried, and was caught. It is here so the shape
+  //   this test was written with stays covered by the shapes that replaced it;
+  // - the rig's own header was carried, and got past on two counts: the file
+  //   was not read, and the `also` fit no pattern;
+  // - the participle form was never in any file here. It is the shape the
+  //   second pattern was added for, and the one a reader reaches for when
+  //   "that flies" reads stiffly, so it is pinned on its own merits rather
+  //   than as something this repository has to repair.
   const sentences = [
     {
       was: 'the published shape this check was written with',
@@ -530,10 +533,39 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
       `${was}: the claim is reported as "${claims[0].said}" rather than as the sentence`
       + ` itself, "${reads}"`
     );
-    assert.equal(
-      SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase)), shared,
-      `${was}: "${claims[0].property}" is read but no phrase in SHARED_BY_THE_PAIR matches`
-      + ` it, so the sentence would stand - "${shared}" is the property it gives away`
+    // Two assertions rather than one `find` compared against `shared`, because
+    // the phrases are prefixes of one another - `flies no` of `flies nothing`,
+    // `flying no` of `flying nothing` - and `find` answers in array order, so
+    // pinning which of them matched pins the order the list happens to be
+    // written in. Sorting SHARED_BY_THE_PAIR alphabetically, the obvious thing
+    // to do to an 18-entry list, puts each short form ahead of the long one it
+    // is a prefix of, and fails all three fixtures with the guard working
+    // exactly as before. What the fixture stands in for is that the inflection
+    // it names is in the list at all and that the sentence is the one giving
+    // that inflection away, and neither of those depends on order.
+    //
+    // The second names `shared` rather than asking whether some phrase of the
+    // list matched the property. A `some` refuses only a list that dropped the
+    // participle phrases altogether, nothing else in the list being able to
+    // match "flying nothing", and it leaves the fixture's own `shared`
+    // answering to the list rather than to its sentence: the participle
+    // fixture passes with `walks viewports` written in place of
+    // `flying nothing`, naming a property its sentence never gave away. Read
+    // against the property, `shared` is one phrase rather than a position, so
+    // pinning it costs the order-freedom nothing. The check above reads the
+    // same `find` only to name a phrase in its message and asserts on
+    // `!shared`, so order cannot reach it there either.
+    assert.ok(
+      SHARED_BY_THE_PAIR.includes(shared),
+      `${was}: "${shared}" is not in SHARED_BY_THE_PAIR, so nothing refuses the sentence -`
+      + ' each property is listed in both inflections, and a list carrying one of them'
+      + ' refuses only the one it carries'
+    );
+    assert.ok(
+      claims[0].property.includes(shared),
+      `${was}: the property read out of the sentence is "${claims[0].property}", which does`
+      + ` not carry "${shared}" - so the phrase the list holds is not the one this sentence`
+      + ' gives away, and the fixture names an inflection the reader did not find in it'
     );
   }
 

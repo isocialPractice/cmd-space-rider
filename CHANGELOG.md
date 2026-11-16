@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.0.0-alpha.0.16.3] - 2026-11-16
+
+### Fixed
+
+- The fixtures added in 0.16.2 pinned which phrase of `SHARED_BY_THE_PAIR`
+  matched, so reordering the list failed them with the guard working exactly as
+  before. `test/probes.test.mjs` asserted that
+  `SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase))`
+  equalled the fixture's own `shared` string, and the phrases are prefixes of
+  one another - `flies no` of `flies nothing`, `flying no` of
+  `flying nothing` - while `find` answers in array order. Sorting the 18-entry
+  list alphabetically puts each short form ahead of the long one it is a prefix
+  of, and fails all three fixtures, the published one first rather than only
+  the participle one: on the sorted list the pre-change assertion reads
+  `flies no` where it expects `flies nothing`. The assertion is now the two
+  things it meant, each of which holds whatever order the list is in - that
+  `SHARED_BY_THE_PAIR` carries the inflection the fixture names, and that the
+  sentence read is the one giving that inflection away. The second is read
+  against the property rather than against the list, because asking only
+  whether some phrase of the list matched leaves the fixture's own `shared`
+  answering to nothing but the list: the participle fixture passes that pair
+  with `walks viewports` written in place of `flying nothing`, naming a
+  property its sentence never gave away, and what that fixture is in the suite
+  for is the inflection the second shape was added for. One phrase read
+  against one property is no more order-bound than a membership test. The
+  check beside it reads the same `find` only to name a phrase in its message
+  and asserts on `!shared`, so order could not reach it there either. The
+  suite stays at 974 of 974; it passes with the list sorted alphabetically,
+  and fails with either the participle phrases dropped from the list or that
+  fixture's `shared` pointed at another entry.
+- That release's own account of what the new test reads said the repository had
+  carried a sentence it never held. The comment opening `probes: the sole-claim
+  reader catches the shapes that got past it` called its three fixtures "the
+  three sentences the repository actually carried", and outside the fixture
+  itself and these notes `git log --all -S"probe flying nothing"` puts that
+  string in two places only: `TODO.md`, where the review that queued the
+  widened pattern coined it as the shape the old one would miss, and
+  `docs/development.html`, inside a different sentence about the 0.16.1 fix.
+  No file here ever held "glyph-tuning is the one probe flying nothing". The
+  bullet beneath then put the participle form in the same past tense as the two
+  sentences that really did get past, so a reader was told a third defect had
+  shipped and been corrected and was sent into the history after it. The
+  comment now says that two of the three were carried and that the third is the
+  shape the second pattern was added for, which is what the `### Added` entry
+  below already said and what the page's own account says. All three fixtures
+  stay - the participle one is the only case pinning the shape that was
+  widened, and its worth does not rest on this repository ever having held it.
+
 ## [1.0.0-alpha.0.16.2] - 2026-11-15
 
 ### Fixed
