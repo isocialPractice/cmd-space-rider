@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.0.0-alpha.0.16.4] - 2026-11-19
+
+### Added
+
+- The order-freedom 0.16.3 was cut for is now read by the suite rather than
+  only by its release note. That entry closes by saying the suite "passes with
+  the list sorted alphabetically", which was true and verified by hand, and
+  nothing in `test/` read `SHARED_BY_THE_PAIR` in any order but the one it is
+  written in at `test/probes.test.mjs:410`. Putting the pre-0.16.3 assertion
+  back in place of the pair left `npm test` at 974 of 974, so the suite could
+  not tell the state 0.16.2 shipped in from the state 0.16.3 was cut to leave,
+  and the property sat in exactly the position the fixtures themselves were
+  written to end: a guard nothing had been shown to catch anything.
+  `PHRASE_ORDERS` now holds the list as written, sorted alphabetically, and
+  reversed, and the two assertions that replaced the `find` are read once per
+  order inside the loop over `sentences`. The ordering is a parameter of that
+  loop rather than a case beside it, because a test of its own would prove a
+  copy of the assertion order-free while the shipped one could be regressed
+  on its own - the fault being fixed, repeated one level down. Whatever stands
+  in that spot now reads `list`. Each failure message names the order it was
+  read in, because a failure under one order is an assertion reading a
+  position while a failure under all three is the phrase genuinely being
+  absent or wrong. Verified in both directions by hand, as 0.16.3 was: with
+  `list.find((phrase) => claims[0].property.includes(phrase))` put back in
+  place of the pair, the published fixture fails first and reads `flies no`
+  where it names `flies nothing`, under `sorted alphabetically` and under
+  `reversed`, having passed `as written`; with the shipped pair it passes. The
+  suite stays at 974 of 974, the orders being read inside an existing test
+  rather than as a new one, and the pair is read nine times rather than three.
+- Each order has to be a permutation of the list, and a different order from
+  the list as written, which the fixture asserts before it reads them. It does
+  not compare the orders against each other, so two of them coinciding is not
+  refused. The list is written in inflection pairs rather than alphabetically,
+  so sorting it moves something today; a later edit that wrote it out sorted
+  would make that case a copy of the first and leave the order-freedom
+  unexercised while the loop still ran, which is the same silence this release
+  is closing. Four assertions rather than a comment, because the comment is
+  what 0.16.3 left and this is what reading it would have cost.
+
 ## [1.0.0-alpha.0.16.3] - 2026-11-16
 
 ### Fixed
