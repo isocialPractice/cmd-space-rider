@@ -4454,3 +4454,27 @@ still be found by name.
     but not walked against every probe, and `versus-half`'s shares the ground
     `overlay-anchor` reports px bands over.
   - From: Code Review Override - the overlay probe is said to be the only one flying nothing
+
+## Archived 11-19-26
+
+- [x] Probe Sole Claim 1 - the page's account of the fix names two paragraphs where it had one
+  - **Issue**: `docs/development.html:35` now closes with "Three of the
+    paragraphs below made exactly that claim until 0.16.1, two of them naming
+    one of that pair as the only probe flying nothing while the other flew
+    nothing beside it". One paragraph below made that claim, not two:
+    `git show aed6a65:docs/development.html` - the page as it stood before
+    this rewrite - carries exactly one, the `overlay-anchor` one at line 54,
+    and `git grep -n "flies nothing" aed6a65` puts the second in the header of
+    `test/probes/run.mjs` at line 17 - a source file, not a paragraph on this
+    page. The three paragraphs below did
+    each make a sole-possession claim, but they claimed measuring nothing,
+    flying nothing and reporting a width, one apiece. A reader who goes
+    looking on the page for the second flying-nothing paragraph the sentence
+    promises will not find one, and the `CHANGELOG.md` entry for 0.16.1 gets
+    this right in the same words, so the two disagree.
+  - **Goal**: Say where the second claim actually lived. The page is free to
+    name `test/probes/run.mjs` as the other half of the disagreement, which is
+    what makes the fault worth describing at all - two files stating opposite
+    sole possession of one property. Keep the count of paragraphs below at
+    three and the count of flying-nothing claims on the page at one.
+  - From: Code Review Override - the overlay probe is said to be the only one flying nothing

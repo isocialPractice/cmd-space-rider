@@ -419,6 +419,38 @@ const SHARED_BY_THE_PAIR = [
   'takes no flag', 'taking no flag',
 ];
 
+/**
+ * The orderings SHARED_BY_THE_PAIR is read in by the fixtures below. Nothing
+ * about the list is ordered - it is a set of phrases, written in pairs so the
+ * two inflections of a property sit together and a reader can see at a glance
+ * that neither is missing - so an assertion whose answer changes when the list
+ * is reordered is reading a position rather than a phrase.
+ *
+ * 0.16.3 replaced such an assertion, and said in its release note that the
+ * suite "passes with the list sorted alphabetically". That was true and
+ * verified by hand, and nothing in the suite read the list in any order but
+ * the one it is written in, so the note was the only record of the property:
+ * the pre-0.16.3 `find` form could be put back and `npm test` would pass on
+ * the list as written. These are the orders that answer it instead.
+ *
+ * - `as written` is the list itself, which is what the fixtures have always
+ *   read and what every other order has to agree with.
+ * - `sorted alphabetically` is the order that broke all three fixtures, the
+ *   published one first: it puts each short form ahead of the long form it is
+ *   a prefix of - `flies no` before `flies nothing` - so a `find` over it
+ *   answers with the prefix where the fixture names the full phrase. It is
+ *   also the obvious thing to do to an 18-entry list, which is why it is the
+ *   order worth pinning.
+ * - `reversed` is the cheap second: it moves every pair without sorting them,
+ *   so it catches an assertion that reads the list's first or last entry
+ *   rather than the one the sentence gives away.
+ */
+const PHRASE_ORDERS = [
+  { read: 'as written', list: SHARED_BY_THE_PAIR },
+  { read: 'sorted alphabetically', list: [...SHARED_BY_THE_PAIR].sort() },
+  { read: 'reversed', list: [...SHARED_BY_THE_PAIR].reverse() },
+];
+
 test('probes: no sentence singles a probe out by a property the pair shares', () => {
   // 0.16.0 found docs/development.html calling `overlay-anchor` "the one that
   // flies nothing" while `glyph-tuning` flew nothing by the same test - and
@@ -517,6 +549,28 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
     },
   ];
 
+  // Each order has to be a different order, or the fixtures below read the list
+  // as written three times and the order-freedom they are supposed to pin goes
+  // back to being unexercised while the loop still runs. The list is written in
+  // inflection pairs rather than alphabetically, so sorting it moves something
+  // today; a later edit that writes it out sorted would make that case a copy of
+  // the first, and this is what says so rather than leaving it to be noticed.
+  for (const { read, list } of PHRASE_ORDERS.slice(1)) {
+    assert.notDeepEqual(
+      list, SHARED_BY_THE_PAIR,
+      `SHARED_BY_THE_PAIR ${read} is the list as written, so reading it changes nothing and`
+      + ' the fixtures below pin no order-freedom in that pass. Either the list was rewritten'
+      + ` into that order, in which case ${read} has to be replaced by an order that does move`
+      + ' it, or the order is no longer being built from the list'
+    );
+    assert.deepEqual(
+      [...list].sort(), [...SHARED_BY_THE_PAIR].sort(),
+      `SHARED_BY_THE_PAIR ${read} holds different phrases from the list as written, so the`
+      + ' fixtures would be reading a different list rather than the same one in another'
+      + ' order - an order has to be a permutation of the list and nothing else'
+    );
+  }
+
   for (const { was, text: wrote, probe, reads, shared } of sentences) {
     const claims = claimsIn(wrote, 'a sentence read on its own');
     assert.equal(
@@ -555,18 +609,31 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
     // pinning it costs the order-freedom nothing. The check above reads the
     // same `find` only to name a phrase in its message and asserts on
     // `!shared`, so order cannot reach it there either.
-    assert.ok(
-      SHARED_BY_THE_PAIR.includes(shared),
-      `${was}: "${shared}" is not in SHARED_BY_THE_PAIR, so nothing refuses the sentence -`
-      + ' each property is listed in both inflections, and a list carrying one of them'
-      + ' refuses only the one it carries'
-    );
-    assert.ok(
-      claims[0].property.includes(shared),
-      `${was}: the property read out of the sentence is "${claims[0].property}", which does`
-      + ` not carry "${shared}" - so the phrase the list holds is not the one this sentence`
-      + ' gives away, and the fixture names an inflection the reader did not find in it'
-    );
+    //
+    // And the pair is read once per order in PHRASE_ORDERS rather than once
+    // against the list as written, which is what makes the paragraph above a
+    // property of the suite instead of a claim in a release note. Whatever
+    // stands in this spot reads `list`, so the `find` form put back here
+    // answers with `flies no` under the sorted order where the fixture names
+    // `flies nothing`, and fails on the spot. The order is named in each
+    // message because a failure under one order and a failure under all three
+    // are different findings: the first is an assertion reading a position,
+    // the second is the phrase genuinely being absent or wrong.
+    for (const { read, list } of PHRASE_ORDERS) {
+      assert.ok(
+        list.includes(shared),
+        `${was}: "${shared}" is not in SHARED_BY_THE_PAIR read ${read}, so nothing refuses`
+        + ' the sentence - each property is listed in both inflections, and a list carrying'
+        + ' one of them refuses only the one it carries'
+      );
+      assert.ok(
+        claims[0].property.includes(shared),
+        `${was}: with the list read ${read}, the property read out of the sentence is`
+        + ` "${claims[0].property}", which does not carry "${shared}" - so the phrase the`
+        + ' list holds is not the one this sentence gives away, and the fixture names an'
+        + ' inflection the reader did not find in it'
+      );
+    }
   }
 
   // And the half the shapes cannot cover: whether anybody looks at the file the
