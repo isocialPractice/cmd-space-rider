@@ -549,23 +549,43 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
     },
   ];
 
-  // Each order has to be a different order, or the fixtures below read the list
-  // as written three times and the order-freedom they are supposed to pin goes
-  // back to being unexercised while the loop still runs. The list is written in
-  // inflection pairs rather than alphabetically, so sorting it moves something
-  // today; a later edit that writes it out sorted would make that case a copy of
-  // the first, and this is what says so rather than leaving it to be noticed.
+  // Each order has to be a different order from every other, or the fixtures
+  // below read one list twice and the order-freedom they are supposed to pin
+  // goes back to being unexercised in that pass while the loop still runs. Every
+  // pair of orders is compared rather than each order against the list as
+  // written: comparing against `as written` alone leaves the orders after it
+  // free to coincide with one another, and the state that gets past that is a
+  // later edit writing SHARED_BY_THE_PAIR out in reverse-alphabetical order,
+  // which leaves `[...written].sort()` and `[...written].reverse()` holding the
+  // identical array - reversing an already reverse-sorted list sorts it - while
+  // both still differ from the list as written. So the message names the two
+  // orders that coincide rather than one of them, the edit that causes it being
+  // a rewrite of the list rather than a change to PHRASE_ORDERS. The list is
+  // written in inflection pairs rather than alphabetically, so each order moves
+  // it today; this is what says so when an edit stops that being true rather
+  // than leaving it to be noticed.
+  for (const [i, { read, list }] of PHRASE_ORDERS.entries()) {
+    for (const { read: before, list: earlier } of PHRASE_ORDERS.slice(0, i)) {
+      assert.notDeepEqual(
+        list, earlier,
+        `SHARED_BY_THE_PAIR read ${read} and read ${before} are the same order, so one of the`
+        + ' two reads changes nothing and the fixtures below pin no order-freedom in that pass.'
+        + ' Either the list was rewritten into an order that leaves the two agreeing - written'
+        + ' reverse-alphabetically, sorting it and reversing it answer alike - in which case one'
+        + ' of them has to be replaced by an order that still moves it differently, or one of'
+        + ' them is no longer being built from the list'
+      );
+    }
+  }
+
+  // And each of them has to be the same phrases in another order rather than
+  // another list, which the pairwise check above cannot see: two orders built
+  // from different lists differ from each other as readily as two orders of one
+  // list do.
   for (const { read, list } of PHRASE_ORDERS.slice(1)) {
-    assert.notDeepEqual(
-      list, SHARED_BY_THE_PAIR,
-      `SHARED_BY_THE_PAIR ${read} is the list as written, so reading it changes nothing and`
-      + ' the fixtures below pin no order-freedom in that pass. Either the list was rewritten'
-      + ` into that order, in which case ${read} has to be replaced by an order that does move`
-      + ' it, or the order is no longer being built from the list'
-    );
     assert.deepEqual(
       [...list].sort(), [...SHARED_BY_THE_PAIR].sort(),
-      `SHARED_BY_THE_PAIR ${read} holds different phrases from the list as written, so the`
+      `SHARED_BY_THE_PAIR read ${read} holds different phrases from the list as written, so the`
       + ' fixtures would be reading a different list rather than the same one in another'
       + ' order - an order has to be a permutation of the list and nothing else'
     );

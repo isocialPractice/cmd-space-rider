@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.0.0-alpha.0.16.5] - 2026-11-20
+
+### Fixed
+
+- The guard 0.16.4 added over `PHRASE_ORDERS` compared each order against the
+  list as written and never against the orders before it, so two of the three
+  could coincide without being refused. `test/probes.test.mjs` asserted that
+  each of `sorted alphabetically` and `reversed` is a permutation of
+  `SHARED_BY_THE_PAIR` and differs from the list as written, which is four
+  assertions and less than the comment above them promised. The state that got
+  past them: writing the list out in reverse-alphabetical order leaves
+  `[...written].sort()` and `[...written].reverse()` holding the identical
+  array, because reversing an already reverse-sorted list sorts it, while both
+  still differ from the list as written. All four assertions pass in that state
+  and the loop over `sentences` reads two identical orders where the comment
+  says three different ones, so what it cost is the redundant third order
+  rather than the order-freedom itself - the harness still catches the
+  pre-0.16.3 `find` form in that state, `as written` and the coinciding pair
+  being two distinct orders. Every pair of orders is now compared rather than
+  each order against the first, three comparisons rather than two, and the pair
+  the four assertions made are still among them. Each message names both orders
+  that coincide rather than one of them, the edit that causes it being a rewrite
+  of the list rather than a change to `PHRASE_ORDERS`. The permutation assertion
+  stays beside the comparison rather than inside it: the pairwise check cannot
+  see one list swapped for another, two orders built from different lists
+  differing from each other as readily as two orders of one list do. Verified in
+  both directions by hand, as 0.16.4 was: with `SHARED_BY_THE_PAIR` written out
+  reverse-alphabetically the new assertion fails and reports `reversed` and
+  `sorted alphabetically` as the same order, while the pre-change four
+  assertions pass on that same list with all nine probe tests green; with the
+  list as it stands the suite stays at 974 of 974, the comparison being read
+  inside an existing test rather than as a new one. The comment above the guard
+  now states what the comparison checks rather than what the four assertions
+  left to a reader.
+
 ## [1.0.0-alpha.0.16.4] - 2026-11-19
 
 ### Added

@@ -8,39 +8,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the order guard never compares the orders against each other
-
-- [ ] Two of the three phrase orders can coincide without the guard refusing it
-  - **Issue**: `test/probes.test.mjs:558-571` asserts that each of
-    `sorted alphabetically` and `reversed` is a permutation of
-    `SHARED_BY_THE_PAIR` and differs from the list as written, but never
-    compares the two orders against each other. The comment it sits under at
-    line 552 says "Each order has to be a different order", and that is more
-    than the four assertions enforce. The state that gets past them: a later
-    edit that writes the list out in reverse-alphabetical order leaves
-    `[...written].sort()` and `[...written].reverse()` holding the identical
-    array, because reversing an already reverse-sorted list sorts it. Both
-    still differ from `as written`, so all four assertions pass while the loop
-    over `sentences` reads two identical orders where the comment promises
-    three different ones. Verified this review by building that list in node:
-    `sorted === reversed` with both still unequal to the list as written. The
-    harness still catches the pre-0.16.3 `find` form in that state, `as written`
-    and the coinciding pair being two distinct orders, so what this costs is
-    the redundant third order rather than the order-freedom itself - which is
-    why it is queued rather than fixed.
-  - **Goal**: Compare each order against the orders before it rather than only
-    against `as written`. A nested loop over `PHRASE_ORDERS` indices, or an
-    assertion that the number of distinct serialized orders equals
-    `PHRASE_ORDERS.length`, is enough; the message wants to name the two orders
-    that coincide, since the edit that causes it is a rewrite of the list rather
-    than a change to `PHRASE_ORDERS`. Verify it by hand the way 0.16.4 was: with
-    `SHARED_BY_THE_PAIR` written out in reverse-alphabetical order the new
-    assertion must fail, and with the list as it stands it must pass, the suite
-    staying at 974 of 974. The `CHANGELOG.md` 0.16.4 entry was corrected this
-    review to claim only what the four assertions check, so once the comparison
-    exists both it and the comment at line 552 can state the stronger guarantee.
-  - From: Code Review Override - the order guard never compares the orders against each other
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -85,28 +52,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 212 earlier items in `TODO-archive.md`, newest last.
+> 213 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Probe Sole Claim 2 - the new test's docstring sits on the wrong constant and points at the wrong paragraph
-  - **Issue**: Two defects in the comments the new test added to
-    `test/probes.test.mjs`. First, the block at line 313 opening "The
-    predicates that single out neither probe in HARNESS_EXCLUSIONS" documents
-    `SHARED_BY_THE_PAIR`, but a second `/** */` block for `PUBLISHED` was
-    written between it and the code, so the predicates docstring lands on
-    `const PUBLISHED` - a list of three file paths - and
-    `SHARED_BY_THE_PAIR` at line 344 is left with no docstring at all. Any
-    reader or editor hovering `PUBLISHED` is told it is a list of predicates.
-    Second, that same block ends "test/probes/run.mjs says so in those words
-    two paragraphs above where it used to say the other thing": the words
-    "Two load the browser alone" are in the paragraph at lines 8-15 and the
-    claim it replaced was the paragraph at lines 17-26, so it is one paragraph
-    above, and two paragraphs up is "A probe produces the figures ...", which
-    says nothing about loading a browser.
-  - **Goal**: Move the predicates block down so it sits immediately above
-    `SHARED_BY_THE_PAIR`, leaving `PUBLISHED` with its own block, and correct
-    the paragraph count to one. Neither edit changes what the test executes,
-    so `npm test` staying at 973 of 973 is the whole check.
-  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
 - [x] Probe Sole Claim 3 - the new test guards the published docs and not the source file that carried half the fault
   - **Issue**: The fault this item was opened for was two files claiming
     opposite sole possession of flying nothing, one of them the header of
@@ -201,3 +148,33 @@ the roadmap section each one came from.
     is chosen; say which in the release note rather than quoting a count that
     does not match.
   - From: Code Review Override - nothing exercises the order-freedom 0.16.3 claims
+- [x] Two of the three phrase orders can coincide without the guard refusing it
+  - **Issue**: `test/probes.test.mjs:558-571` asserts that each of
+    `sorted alphabetically` and `reversed` is a permutation of
+    `SHARED_BY_THE_PAIR` and differs from the list as written, but never
+    compares the two orders against each other. The comment it sits under at
+    line 552 says "Each order has to be a different order", and that is more
+    than the four assertions enforce. The state that gets past them: a later
+    edit that writes the list out in reverse-alphabetical order leaves
+    `[...written].sort()` and `[...written].reverse()` holding the identical
+    array, because reversing an already reverse-sorted list sorts it. Both
+    still differ from `as written`, so all four assertions pass while the loop
+    over `sentences` reads two identical orders where the comment promises
+    three different ones. Verified this review by building that list in node:
+    `sorted === reversed` with both still unequal to the list as written. The
+    harness still catches the pre-0.16.3 `find` form in that state, `as written`
+    and the coinciding pair being two distinct orders, so what this costs is
+    the redundant third order rather than the order-freedom itself - which is
+    why it is queued rather than fixed.
+  - **Goal**: Compare each order against the orders before it rather than only
+    against `as written`. A nested loop over `PHRASE_ORDERS` indices, or an
+    assertion that the number of distinct serialized orders equals
+    `PHRASE_ORDERS.length`, is enough; the message wants to name the two orders
+    that coincide, since the edit that causes it is a rewrite of the list rather
+    than a change to `PHRASE_ORDERS`. Verify it by hand the way 0.16.4 was: with
+    `SHARED_BY_THE_PAIR` written out in reverse-alphabetical order the new
+    assertion must fail, and with the list as it stands it must pass, the suite
+    staying at 974 of 974. The `CHANGELOG.md` 0.16.4 entry was corrected this
+    review to claim only what the four assertions check, so once the comparison
+    exists both it and the comment at line 552 can state the stronger guarantee.
+  - From: Code Review Override - the order guard never compares the orders against each other
