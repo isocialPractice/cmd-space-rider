@@ -8,6 +8,40 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
+### UI/UX Override - the marker is no longer a test boundary
+
+#### Found Issues
+
+- [ ] The roadmap's standing note still says the wiring below the canvas marker
+  is executed by nothing
+  - **Issue**: `.claude/current.roadmap.md` lines 81-86 say that below
+    `// ===== Canvas Setup & Sizing =====` the frame loop's `versusRematch`
+    call, the two `new VersusRound(..., game.state.muted)` openings, the gamepad
+    poll and the resize "are only read as source text", and that "a green suite
+    is not evidence about any line down there". That stopped being true at
+    `1.0.0-alpha.0.15.3`, when `test/browser-wiring.test.mjs` landed:
+    `loadBrowserPage` evaluates the whole inline script against a stub DOM and
+    drives the frame loop off a manual rAF pump. Its 33 cases cover every line
+    the note names - `the rematch carries the mute, and so does the rematch
+    after that`, `M inside a round moves both pilots`, `a resize re-seats both
+    halves of a round on the new grid`, `in the 60-to-90 column band the grid
+    fits and a round does not`, two pad cases, and `?versus` at lines 891 and
+    896 - and all 33 pass. `test/helpers.mjs` says it outright: "loadBrowserPage
+    runs the same region, which is the reading of what it *does*". The note says
+    of itself that it "is what the review requests are written from", so both
+    `.claude/full-review.request` and `.claude/ui-ux-test.request` for 11-21-26
+    carried the stale claim and scoped this review on it. A browser pass on
+    11-21-26 found no defect below the marker in 308 assertions, so nothing is
+    broken - what is wrong is the reason the scope was written from.
+  - **Goal**: Rewrite that bullet to what is now true. The region is executed by
+    `test/browser-wiring.test.mjs` against a stub DOM; what stays outside the
+    suite is only what a stub cannot take - the painted pixels and real pointer
+    plumbing, which `test/helpers.mjs` already names, plus the real CSS cascade
+    that solves `--ctl` against `--playpx`, real resize events, and a physical
+    gamepad. Keep 0.13.0, 0.13.1 and 0.13.2 as the reason that harness exists
+    rather than as evidence the lines are unrun.
+  - From: UI/UX Override - the marker is no longer a test boundary
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
