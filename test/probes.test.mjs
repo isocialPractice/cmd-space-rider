@@ -135,15 +135,46 @@ function publishedExclusions() {
 }
 
 /**
+ * An import of test/engagement.mjs, in the forms this repository can produce:
+ * the static `from` and the dynamic `import(`, against either quote.
+ *
+ * The pattern this replaces was `/from '\.\.\/engagement\.mjs'/`, which read the
+ * static single-quoted form and nothing else - `await import('../engagement.mjs')`
+ * answered false, and so did `from "../engagement.mjs"`. For the eight probes
+ * expected to call the harness a misread is caught by the two-direction
+ * `deepEqual` at the foot of the harness test: the probe drops out of `reached`,
+ * `excluded` stops matching HARNESS_EXCLUSIONS, and the message names it. For
+ * `glyph-tuning` and `overlay-anchor` it is not caught at all - a `false` there
+ * agrees with the declared list, `excluded` still equals `declared`, and that
+ * probe's harness calls are reached by nothing while the suite stays green.
+ * `npm test` globs `test/*.test.mjs`, so the harness test is the only path in
+ * the suite that runs a probe at all.
+ *
+ * The dynamic form is not hypothetical here: test/probes/probes.mjs loads every
+ * one of the ten probes with `import()`, which is the shape this file's own
+ * header is an argument against meeting by accident.
+ *
+ * The quote has to follow the keyword, which is what keeps this off a sentence.
+ * test/probes/overlay-anchor.mjs's header says it "imports nothing from
+ * test/engagement.mjs" - prose, unquoted, and no match.
+ */
+const HARNESS_IMPORT = /(?:from|import\s*\()\s*(['"])[^'"]*\/engagement\.mjs\1/;
+
+/**
  * Whether a probe calls the harness, read off its own source rather than listed
  * here, so a probe that starts calling it is covered without a line being added.
  *
  * The probes this currently excludes are named in HARNESS_EXCLUSIONS above, with
  * the reason each is out.
+ *
+ * Takes the source text as a parameter, the way `claimsIn` does below, so a form
+ * the repository does not currently hold can be read without editing a probe to
+ * hold one. That is the same file's own precedent, and it is what lets all three
+ * forms be read in a single case.
  */
-function callsHarness(name) {
-  const src = readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
-  return /from '\.\.\/engagement\.mjs'/.test(src);
+function callsHarness(name, src = null) {
+  const text = src ?? readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
+  return HARNESS_IMPORT.test(text);
 }
 
 /** A probe's `run()`, with what it prints collected instead of printed. */
@@ -288,6 +319,66 @@ test('probes: every probe that calls the harness is run against it', async () =>
     + ' reader goes by, so a name either side of that is documentation for a run the suite'
     + ' is not making'
   );
+});
+
+test('probes: a harness call is read whichever import form it is written in', () => {
+  // The two declared exclusions are why this is a case rather than a reading of
+  // the probes as they stand. For the eight probes that do call the harness a
+  // misread surfaces in the `deepEqual` above - the probe leaves `reached`, so
+  // `excluded` stops matching HARNESS_EXCLUSIONS and the message names it. For
+  // `glyph-tuning` and `overlay-anchor` a misread agrees with the declared list:
+  // `excluded` still equals `declared`, the suite stays at its full count, and
+  // that probe's harness calls are reached by nothing. The harness test is the
+  // only path in the suite that runs a probe at all, so there is no second
+  // reader to catch it.
+  //
+  // The pattern this pins replaced one that read the static single-quoted import
+  // alone, and test/probes/probes.mjs loads every one of the ten probes with
+  // `import()` - so the form it could not read is one this repository already
+  // writes. The text is a parameter, which is what lets all four forms be read
+  // here rather than by editing a probe into one of them.
+  const forms = [
+    { was: 'the static import, single quoted', src: "import { BUILDS } from '../engagement.mjs';" },
+    { was: 'the static import, double quoted', src: 'import { BUILDS } from "../engagement.mjs";' },
+    { was: 'the dynamic import, single quoted', src: "const { BUILDS } = await import('../engagement.mjs');" },
+    { was: 'the dynamic import, double quoted', src: 'const { BUILDS } = await import("../engagement.mjs");' },
+    { was: 'a dynamic import with the space the parser allows', src: "await import ('../engagement.mjs')" },
+  ];
+  for (const { was, src } of forms) {
+    assert.ok(
+      callsHarness('a source read on its own', src),
+      `${was} is not read as a harness call, so a probe written that way drops out of the`
+      + ` harness run with nothing refusing it - ${src}`
+    );
+  }
+
+  // And the shape a widened pattern invites: the file named in a sentence rather
+  // than imported. Both of these are real lines from probes that call no
+  // harness or do not name it as an import.
+  const prose = [
+    '// imports nothing from test/engagement.mjs, so it has no harness call to reach',
+    '// The engagement flown from the ship is reported underneath, at the two ship',
+  ];
+  for (const src of prose) {
+    assert.equal(
+      callsHarness('a source read on its own', src), false,
+      `prose naming the harness is read as a call into it, which would put a probe into the`
+      + ` harness run on the strength of its own comment - ${src}`
+    );
+  }
+
+  // The pair itself, read against their real sources. This is the one reading
+  // the assertions above cannot stand in for: a `false` for either of these is
+  // the answer HARNESS_EXCLUSIONS declares, so nothing else in the file refuses
+  // it, and a probe of theirs that started importing the harness would have to
+  // be found here or not at all.
+  for (const name of HARNESS_EXCLUSIONS) {
+    assert.equal(
+      callsHarness(name), false,
+      `${name} is declared as calling no harness and its source imports one - the declared`
+      + ' list and the sources disagree, and the harness run goes by the sources'
+    );
+  }
 });
 
 /**
@@ -451,6 +542,24 @@ const PHRASE_ORDERS = [
   { read: 'reversed', list: [...SHARED_BY_THE_PAIR].reverse() },
 ];
 
+/**
+ * Whether a name read out of a sentence is one of the rig's probes.
+ *
+ * Named rather than written inline, so the case below exercises the predicate
+ * the check above actually takes rather than a copy of it.
+ *
+ * `Object.hasOwn` rather than `in`. `in` walks the prototype chain and PROBES is
+ * a plain object literal (test/probes/probes.mjs), so every Object.prototype key
+ * answers `true` to it - and one of them is reachable from the `([a-z][a-z-]+)`
+ * capture in CLAIM_SHAPES, `constructor`, the rest carrying capitals or
+ * underscores. So "the constructor is the one that flies nothing." named a probe
+ * as far as the check was concerned, and the assertion written to catch a
+ * sentence outliving a renamed probe passed on it with its own message reading
+ * "is not a probe". `test/probes/*.mjs` headers are in READ_FOR_CLAIMS, and a
+ * constructor is an ordinary thing for one of them to name.
+ */
+const isProbe = (name) => Object.hasOwn(PROBES, name);
+
 test('probes: no sentence singles a probe out by a property the pair shares', () => {
   // 0.16.0 found docs/development.html calling `overlay-anchor` "the one that
   // flies nothing" while `glyph-tuning` flew nothing by the same test - and
@@ -474,7 +583,7 @@ test('probes: no sentence singles a probe out by a property the pair shares', ()
   // property with nothing left to be the property of.
   for (const { file, probe, said } of claims) {
     assert.ok(
-      probe in PROBES,
+      isProbe(probe),
       `${file} says "${said}", and ${probe} is not a probe - a sentence naming no probe is`
       + ' one nothing can be checked against'
     );
@@ -668,6 +777,49 @@ test('probes: the sole-claim reader catches the shapes that got past it', () => 
       + ' that disagreement unguarded'
     );
   }
+});
+
+test('probes: a name the rig inherits is not read as the name of a probe', () => {
+  // The three fixtures above pin the shapes the reader matches. This pins what
+  // becomes of a name it hands back, which was unguarded for the one name the
+  // capture can produce that PROBES answers to without holding.
+  //
+  // `([a-z][a-z-]+)` admits lower-case words and hyphens, which is every
+  // Object.prototype key except the ones carrying capitals or underscores - and
+  // what is left is `constructor`. PROBES is a plain object literal, so `in`
+  // answered `true` for it and the assertion whose message reads "is not a
+  // probe" passed on a sentence naming no probe.
+  //
+  // No file in READ_FOR_CLAIMS carries such a sentence today, which is the same
+  // position the three fixtures were written from: `claimsIn` takes the text, so
+  // the sentence is read on its own rather than by editing a probe to hold it.
+  const inherited = 'constructor';
+  const [claim, ...rest] = claimsIn(
+    `the ${inherited} is the one that flies nothing.`, 'a sentence read on its own'
+  );
+  assert.equal(rest.length, 0, 'the reader finds more than one claim in a one-claim sentence');
+  assert.equal(
+    claim?.probe, inherited,
+    `the capture in CLAIM_SHAPES no longer yields "${inherited}" - if a shape has narrowed so`
+    + ' that no inherited key can be read out of a sentence, this case has nothing left to'
+    + ' guard and the predicate below can go back to being a membership test'
+  );
+
+  // Both forms, which is what makes this a case rather than a restatement. The
+  // first is the hazard still being real: a prototype key PROBES answers to.
+  // The second is the predicate the check above takes, refusing it.
+  assert.equal(
+    inherited in PROBES, true,
+    `"${inherited}" is no longer reachable through PROBES's prototype, so the guard this case`
+    + ' is about has stopped being needed rather than stopped working - read why before'
+    + ' deleting anything'
+  );
+  assert.equal(
+    isProbe(inherited), false,
+    `the sole-claim reader accepts "${inherited}" as the name of a probe - \`in\` walks the`
+    + ' prototype chain, so a sentence naming an inherited key passes the assertion written'
+    + ' to catch a sentence naming no probe at all'
+  );
 });
 
 test('probes: the column probe reaches ghostFlight rather than printing its refusal', async () => {

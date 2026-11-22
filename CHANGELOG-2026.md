@@ -4,6 +4,30 @@ Entries rolled out of `CHANGELOG.md`, newest first. Nothing reads this
 file to decide what happens next: it is here so a dated entry can still
 be found by its date.
 
+## [0.6.2-alpha] - 2026-09-22
+
+### Changed
+
+- The debris window's three numbers are module-private again. Pinning the
+  window to the draw last run exported `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
+  `DEBRIS_VZ_MAX` out of `test/engagement.mjs`, and nothing outside that file
+  ever read them: the check that needed them reads `DEBRIS_DRAWN` a few lines
+  below, which carries all three values already, and
+  `test/pulse-cannon.test.mjs` imports that rather than the numbers behind it.
+  They are `const` again, which is what `DRIFT_SLACK` does in the same block
+  for the same reason - a number the checks never name stays inside the module.
+  `DEBRIS_DRAWN` is the surface the checks read, and the suite is unchanged at
+  325 passing.
+- The heights bullet in the `0.6.1-alpha` entry below is filed under
+  `### Changed` rather than `### Fixed`. It centralises the free flight's ship
+  heights so two files stop keeping their own copy, which is the same kind of
+  work, on the same file, for the same stated reason as the frame rates one
+  version earlier - and that one was recorded under `### Changed`. One refactor
+  was described in two sections of the same changelog, so a reader scanning
+  `### Fixed` for repaired defects met a deduplication. The debris window
+  bullet stays where it is: that one repaired a guard that did not hold. The
+  version is not re-cut.
+
 ## [0.6.1-alpha] - 2026-09-21
 
 ### Fixed
