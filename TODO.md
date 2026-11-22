@@ -8,134 +8,74 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### UI/UX Override - the marker is no longer a test boundary
+### Code Review Override - the new cases' accounts of themselves
 
-#### Found Issues
+#### Resolve Issues
 
-- [ ] The roadmap's standing note still says the wiring below the canvas marker
-  is executed by nothing
-  - **Issue**: `.claude/current.roadmap.md` lines 81-86 say that below
-    `// ===== Canvas Setup & Sizing =====` the frame loop's `versusRematch`
-    call, the two `new VersusRound(..., game.state.muted)` openings, the gamepad
-    poll and the resize "are only read as source text", and that "a green suite
-    is not evidence about any line down there". That stopped being true at
-    `1.0.0-alpha.0.15.3`, when `test/browser-wiring.test.mjs` landed:
-    `loadBrowserPage` evaluates the whole inline script against a stub DOM and
-    drives the frame loop off a manual rAF pump. Its 33 cases cover every line
-    the note names - `the rematch carries the mute, and so does the rematch
-    after that`, `M inside a round moves both pilots`, `a resize re-seats both
-    halves of a round on the new grid`, `in the 60-to-90 column band the grid
-    fits and a round does not`, two pad cases, and `?versus` at lines 891 and
-    896 - and all 33 pass. `test/helpers.mjs` says it outright: "loadBrowserPage
-    runs the same region, which is the reading of what it *does*". The note says
-    of itself that it "is what the review requests are written from", so both
-    `.claude/full-review.request` and `.claude/ui-ux-test.request` for 11-21-26
-    carried the stale claim and scoped this review on it. A browser pass on
-    11-21-26 found no defect below the marker in 308 assertions, so nothing is
-    broken - what is wrong is the reason the scope was written from.
-  - **Goal**: Rewrite that bullet to what is now true. The region is executed by
-    `test/browser-wiring.test.mjs` against a stub DOM; what stays outside the
-    suite is only what a stub cannot take - the painted pixels and real pointer
-    plumbing, which `test/helpers.mjs` already names, plus the real CSS cascade
-    that solves `--ctl` against `--playpx`, real resize events, and a physical
-    gamepad. Keep 0.13.0, 0.13.1 and 0.13.2 as the reason that harness exists
-    rather than as evidence the lines are unrun.
+- [ ] Harness Form Reader 1
+  - **Issue**: the third block of `probes: a harness call is read whichever
+    import form it is written in` (`test/probes.test.mjs:368-381`) asserts
+    `callsHarness(name) === false` for each name in `HARNESS_EXCLUSIONS`, and
+    its comment says that is "the one reading the assertions above cannot stand
+    in for" because "nothing else in the file refuses it". Both halves are
+    false. `test/probes.test.mjs:596-600` has asserted the same thing since
+    before this turn -
+    `pair.filter((name) => !callsHarness(name)).sort()` against `pair`, through
+    the same function - and the two-direction `deepEqual` at
+    `test/probes.test.mjs:301` is a third reader. Appending
+    `import { BUILDS } from '../engagement.mjs';` to
+    `test/probes/overlay-anchor.mjs` fails three cases, two of them pre-dating
+    the new one. The misread the item was raised about - `callsHarness`
+    answering `false` for a probe that does import the engagement - is caught by
+    none of the three, including the new block: all three assert `false`, which
+    is what a misread returns. What does catch it is the `forms` loop above the
+    block, and that loop is the whole of the fix.
+  - **Goal**: either drop the `HARNESS_EXCLUSIONS` block and say in the comment
+    that the `forms` loop is what covers the declared pair, since a misread is a
+    property of the pattern rather than of those two files; or keep it and
+    rewrite the comment to what it does - a third reading of a condition two
+    older assertions already hold, named as deliberate duplication rather than
+    as the only reader. Do not leave the comment claiming sole coverage either
+    way: a later reader deleting `test/probes.test.mjs:596-600` would be told by
+    that comment that the new block stands in for it, and a reader deleting the
+    new block would be told the opposite by nothing at all.
   - From: UI/UX Override - the marker is no longer a test boundary
-- [ ] `callsHarness` reads one import form, and for the two declared exclusions
-  a misread is not refused
-  - **Issue**: `test/probes.test.mjs:146` decides whether a probe calls the
-    harness with `/from '\.\.\/engagement\.mjs'/.test(src)`, which matches the
-    static single-quoted import and nothing else. Checked in node against that
-    exact pattern: `await import('../engagement.mjs')` reads `false`, and so
-    does `from "../engagement.mjs"`. The two-direction `deepEqual` at
-    `test/probes.test.mjs:265` catches a misread for the eight probes expected
-    to call the harness - the probe drops out of `reached`, so `excluded` stops
-    matching `HARNESS_EXCLUSIONS` and the message names it. It cannot catch one
-    for `glyph-tuning` or `overlay-anchor`: a `false` there agrees with the
-    declared list, `excluded` still equals `declared`, the suite stays at 974 of
-    974, and that probe's harness calls are reached by nothing - `npm test`
-    globs `test/*.test.mjs`, and this test is the only path in the suite that
-    runs a probe at all. The dynamic form is not hypothetical in this folder:
-    `test/probes/probes.mjs:22-31` loads every one of the ten probes with
-    `import()`. This is the shape the file's own header is an argument against,
-    and `callsHarness`'s docstring promises the opposite of it - "so a probe
-    that starts calling it is covered without a line being added".
-  - **Goal**: Decide a probe's harness use from something a quote style cannot
-    move. Widening the pattern to the forms this repository can produce -
-    `from` and `import(` against either quote - is the small answer and is
-    enough. Whatever is chosen, give it a case that fails before the change and
-    passes after, and take the source text as a parameter the way `claimsIn`
-    already does at `test/probes.test.mjs:338` rather than by editing a probe:
-    that is the same file's own precedent for reading a form the repository does
-    not currently hold, and it is what lets all three forms be read in one case.
+- [ ] Harness Form Reader 2
+  - **Issue**: `HARNESS_IMPORT`'s docstring (`test/probes.test.mjs:158-160`)
+    says "test/probes/overlay-anchor.mjs's header says it 'imports nothing from
+    test/engagement.mjs' - prose, unquoted, and no match". That probe's header
+    never mentions `engagement.mjs`; grepping it for `engagement` returns
+    nothing, and its imports are `node:fs`, `node:path`, `../helpers.mjs` and
+    `../page-style.mjs`. The sentence quoted is this same test file's own
+    `HARNESS_EXCLUSIONS` docstring at `test/probes.test.mjs:92-94`. The comment
+    on the fixtures that pattern is pinned against
+    (`test/probes.test.mjs:356-357`) carries the same error from the other side:
+    "Both of these are real lines from probes" is true only of the second
+    fixture, which is `test/probes/frame-rate.mjs:15`.
+  - **Goal**: name the real source of the first fixture in both places - the
+    `HARNESS_EXCLUSIONS` docstring in `test/probes.test.mjs`, not the probe -
+    and narrow the fixture comment to the one line that does come from a probe.
+    A reader sent to `overlay-anchor.mjs` to see the prose the pattern must not
+    match finds no such prose, and may conclude the negative fixture is pinned
+    by a probe file when nothing pins it at all.
   - From: UI/UX Override - the marker is no longer a test boundary
-- [ ] The sole-claim reader accepts `constructor` as the name of a probe
-  - **Issue**: `test/probes.test.mjs:477` asserts `probe in PROBES`, and `in`
-    walks the prototype chain. `PROBES` is a plain object literal
-    (`test/probes/probes.mjs:21`), so every `Object.prototype` key answers
-    `true`, and the `([a-z][a-z-]+)` capture in `CLAIM_SHAPES` can produce
-    exactly one of them - `constructor`, the rest carrying capitals or
-    underscores. Checked in node: `'constructor' in PROBES` is `true` where
-    `Object.hasOwn(PROBES, 'constructor')` is `false`, and the first shape reads
-    `the constructor is the one that flies nothing.` as a claim naming
-    `constructor`. So that sentence passes the assertion whose own message is
-    "is not a probe", and the check written to catch a sentence outliving a
-    renamed probe does not catch it. No file in `READ_FOR_CLAIMS` carries such a
-    sentence today, so this costs nothing now; `test/probes/*.mjs` headers are
-    in the read set and a constructor is an ordinary thing for one of them to
-    name.
-  - **Goal**: `Object.hasOwn(PROBES, probe)` in place of `probe in PROBES`. It
-    is a guard nothing has been shown to catch anything until a case reads a
-    sentence whose subject is an inherited key, which is the position the three
-    fixtures above it were written from, so add one: `claimsIn` takes the text,
-    so the sentence can be read on its own and the name it yields asserted
-    against both forms - failing on `in` and passing on `hasOwn`.
-  - From: UI/UX Override - the marker is no longer a test boundary
-- [ ] The rolled changelog is named for a year that does not partition it, and
-  nothing reads the pointer
-  - **Issue**: This turn moved the oldest 17 entries out of `CHANGELOG.md` into
-    a new `CHANGELOG-2026.md` and left a pointer at `CHANGELOG.md:3` reading
-    "17 earlier entries in `CHANGELOG-2026.md`, newest first". The move itself is
-    clean - the 959 moved lines are byte for byte what `CHANGELOG.md` held at
-    `dcf3db8`, and 49 released entries plus 17 account for all 66 - but the name
-    says something the split does not do. Every entry in both files is dated
-    2026: the new file holds `2026-02-08` and `2026-09-05` to `2026-09-21`,
-    while `CHANGELOG.md` keeps `2026-09-22` to `2026-11-20`. So a file named for
-    the year holds 17 of that year's 66 entries, a reader who finds it by its
-    name and looks up `2026-10-15` meets a gap, and the scheme has no next step:
-    the next roll moves more 2026 entries and there is no second year to name a
-    file after. The repository's own precedent is `TODO-archive.md`, named for
-    what it is rather than for a date and pointed at from `TODO.md` in this same
-    shape. Nothing in `test/` reads either changelog, so neither the name nor
-    the count in the pointer is pinned - a later roll can move entries and leave
-    `17` behind with the suite green.
-  - **Goal**: Rename to `CHANGELOG-archive.md`, which matches `TODO-archive.md`
-    and what the new file's own header already says it is ("Entries rolled out
-    of `CHANGELOG.md`"), or keep a year name and roll by year so the name is
-    true. Say which was chosen and why in the note, since the next roll inherits
-    it. Then pin the pointer: a case reading `CHANGELOG.md`'s pointer line
-    against the `## [` headings in the file it names, so a roll that moves
-    entries and leaves the count behind fails rather than publishing a figure
-    nothing read. Decide the name first - the check has to name the file.
-  - From: UI/UX Override - the marker is no longer a test boundary
-- [ ] The roadmap note says this turn changed one tracked file, and it changed
-  the changelog in two places
-  - **Issue**: `.claude/current.roadmap.md` line 17 reads "The one change to a
-    tracked file is this turn's `## [Unreleased]` note in `CHANGELOG.md`". The
-    same turn also rolled 17 entries out of `CHANGELOG.md` - 960 lines deleted
-    from a tracked file - and created `CHANGELOG-2026.md`, which is neither
-    ignored nor tracked yet and becomes a tracked file at the next commit. Both
-    files carry the turn's own timestamp, so the roll was not a later edit the
-    sentence predates. The cost is the same one this file has already shown
-    today: it says of itself that it "is what the review requests are written
-    from", and the stale marker bullet in **Where the work has been coming
-    from** is why both of this turn's review requests were scoped on a claim
-    that stopped being true at `1.0.0-alpha.0.15.3`. A run reading "one change"
-    looks at one change.
-  - **Goal**: Say both changes in **What this run did** - the `## [Unreleased]`
-    note and the 17-entry roll with the file it went to. The canvas-marker
-    bullet in the same file belongs to the first item under this header and is
-    not this one's to rewrite.
+- [ ] Rolled Changelog Pointer 1
+  - **Issue**: `test/changelog-roll.test.mjs:13-14` states "`CHANGELOG-2026.md`
+    holds 17 of 2026's 66 entries". It holds 18 of 67: `grep -c '^## \['` reads
+    18 in the archive and 49 in `CHANGELOG.md`, and `CHANGELOG.md:3` says 18.
+    The archive pass rolled `0.6.2-alpha` out later in the same turn, which the
+    run's own log records watching ("the archive pass rolled one more entry and
+    rewrote the pointer from 17 to 18 on its own"), so the header was left
+    quoting a figure the turn had already seen move. That header is the file's
+    argument for keeping the year name and it is made entirely out of counts, so
+    a wrong count is the one thing in it a later reader cannot check against the
+    file without finding the argument wrong too. The same figure was corrected
+    in `CHANGELOG.md` by this review, which leaves the two disagreeing.
+  - **Goal**: give the header a figure that cannot go stale, or state the count
+    as of a named version rather than in the present tense. The surrounding
+    argument does not need the exact number - "a fraction of 2026's entries"
+    carries it - and the paragraph already explains why no file holds all of a
+    year, which is the point the count was reached for.
   - From: UI/UX Override - the marker is no longer a test boundary
 
 ## Quick Wins
@@ -182,129 +122,130 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 213 earlier items in `TODO-archive.md`, newest last.
+> 218 earlier items in `TODO-archive.md`, newest last.
 
-- [x] Probe Sole Claim 3 - the new test guards the published docs and not the source file that carried half the fault
-  - **Issue**: The fault this item was opened for was two files claiming
-    opposite sole possession of flying nothing, one of them the header of
-    `test/probes/run.mjs`. `PUBLISHED` in `test/probes.test.mjs:342` lists
-    `docs/development.html`, `CHEATSHEET.md` and `docs/cheatsheet.html` only,
-    so restoring "glyph-tuning is also the one probe that flies nothing" to
-    that header passes `npm test` - verified by restoring it to
-    `docs/development.html` instead, which does fail the test with the pair
-    named, so the guard works and simply does not reach the other half. The
-    predicate pattern is narrow in the same direction: it requires the
-    predicate to open on `that` or `whose`, so "`glyph-tuning` is the one
-    probe flying nothing" is not read as a claim at all.
-  - **Goal**: Read the rig's own source comments beside the published files -
-    `test/probes/run.mjs` at least, and each probe's own header is the same
-    kind of sentence - and widen the predicate shape so a claim phrased
-    without `that` or `whose` is still matched. Both halves want a case that
-    fails before the change and passes after, since a guard nothing has been
-    shown to catch anything is the position this item started from.
-  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
-- [x] Probe Sole Claim 4 - the new test says the repository carried a sentence it never held
-  - **Issue**: The comment opening `probes: the sole-claim reader catches the
-    shapes that got past it` reads, at `test/probes.test.mjs:481`, "These are
-    the three sentences the repository actually carried, read on their own, and
-    what became of each before 0.16.2" - and the third of the three was never
-    in any file here. `git log --all -S"probe flying nothing"` puts that string
-    in `TODO.md`, where the review that queued `Probe Sole Claim 3` coined it as
-    the shape the old pattern would miss, and in `docs/development.html` at
-    `d79ea2a` inside a different sentence, "two of them naming one of that pair
-    as the only probe flying nothing", which is the page's account of the 0.16.1
-    fix rather than a claim of sole possession about a probe. No file ever held
-    `glyph-tuning is the one probe flying nothing`. The bullet at
-    `test/probes.test.mjs:488` then says the participle form "got past on the
-    pattern alone", in the same past tense as the two sentences that really did
-    get past, so a reader is told a third defect shipped and was corrected and
-    is sent into the history after it. The 0.16.2 `CHANGELOG.md` entry made the
-    same claim and was corrected in place by this review, so the comment and the
-    release note now disagree.
-  - **Goal**: Say that two of the three were carried and that the third is the
-    shape the second pattern was added for; the `### Added` entry for 0.16.2
-    carries that wording already and can be borrowed from. Keep all three
-    fixtures - the participle one is the only case pinning the shape that was
-    widened, and its worth does not rest on the repository ever having held it.
-    Nothing executes the comment, so `npm test` staying at 974 of 974 is the
-    whole check.
-  - From: Code Review Override - the overlay probe is said to be the only one flying nothing
-- [x] The new test pins which phrase of SHARED_BY_THE_PAIR matched, so reordering the list fails it
-  - **Issue**: `test/probes.test.mjs:534` asserts that
-    `SHARED_BY_THE_PAIR.find((phrase) => claims[0].property.includes(phrase))`
-    equals the fixture's own `shared` string, and `find` answers in array order
-    over phrases that are prefixes of one another. The third fixture expects
-    `flying nothing`, which wins only because `flying no` is written after it in
-    the list. Sorting `SHARED_BY_THE_PAIR` alphabetically - the obvious thing to
-    do to an 18-entry list - puts `flying no` first, and that fixture then fails
-    with the guard itself working exactly as before: the main check reads the
-    same `find` only for its message and asserts on `!shared`, so order cannot
-    reach it. What the fixture is standing in for, that the participle
-    inflection is in the list at all, does not depend on order either.
-  - **Goal**: Split the assertion into the two things it means - that
-    `SHARED_BY_THE_PAIR` carries `shared`, and that the property read out of the
-    sentence matches some phrase in the list - both of which hold whatever order
-    the list is in. The three fixtures are the check, so `npm test` staying at
-    974 of 974 covers it.
-  - From: Code Review Override - the new guard's account of what it was shown
-- [x] The suite reads SHARED_BY_THE_PAIR in the order it is written and in no other
-  - **Issue**: 0.16.3 exists because the three fixtures in `probes: the
-    sole-claim reader catches the shapes that got past it` pinned which phrase
-    of `SHARED_BY_THE_PAIR` matched, and its `CHANGELOG.md` entry closes by
-    saying the suite "passes with the list sorted alphabetically". Nothing in
-    `test/` reads that list in any order but the one it is written in at
-    `test/probes.test.mjs:410`, so the release note is the only record of the
-    property and no run checks it. Putting the pre-0.16.3 assertion back in
-    place of `test/probes.test.mjs:565` - `assert.equal(SHARED_BY_THE_PAIR
-    .find((phrase) => claims[0].property.includes(phrase)), shared, ...)` -
-    leaves `npm test` at 974 of 974 on the list as written, and fails all
-    three fixtures the moment anybody sorts it, the published fixture first:
-    verified this review by doing both. That is the state 0.16.2 shipped in
-    and the state this release was cut to leave, and the suite cannot tell the
-    two apart. The file's own standard is the opposite - the fixtures exist
-    because "a guard nothing has been shown to catch anything" was the
-    position the item behind them started from, and order-freedom is now in
-    exactly that position.
-  - **Goal**: Read the three fixtures against a reordered copy of the list as
-    well as the written one, so an assertion consulting a position rather than
-    a phrase fails on the spot. `[...SHARED_BY_THE_PAIR].sort()` is the
-    ordering that broke them and is the one to read; reversed is a cheap
-    second. The loop over `sentences` already carries everything needed - what
-    wants deciding is whether the ordering becomes a parameter of that loop or
-    a case beside it, and either is fine as long as the sorted order is one of
-    the orders read. Verify it the way 0.16.3 was verified by hand: with the
-    `find` form restored the new case must fail, and with the shipped form it
-    must pass. The suite goes to 975 or stays at 974 depending on which shape
-    is chosen; say which in the release note rather than quoting a count that
-    does not match.
-  - From: Code Review Override - nothing exercises the order-freedom 0.16.3 claims
-- [x] Two of the three phrase orders can coincide without the guard refusing it
-  - **Issue**: `test/probes.test.mjs:558-571` asserts that each of
-    `sorted alphabetically` and `reversed` is a permutation of
-    `SHARED_BY_THE_PAIR` and differs from the list as written, but never
-    compares the two orders against each other. The comment it sits under at
-    line 552 says "Each order has to be a different order", and that is more
-    than the four assertions enforce. The state that gets past them: a later
-    edit that writes the list out in reverse-alphabetical order leaves
-    `[...written].sort()` and `[...written].reverse()` holding the identical
-    array, because reversing an already reverse-sorted list sorts it. Both
-    still differ from `as written`, so all four assertions pass while the loop
-    over `sentences` reads two identical orders where the comment promises
-    three different ones. Verified this review by building that list in node:
-    `sorted === reversed` with both still unequal to the list as written. The
-    harness still catches the pre-0.16.3 `find` form in that state, `as written`
-    and the coinciding pair being two distinct orders, so what this costs is
-    the redundant third order rather than the order-freedom itself - which is
-    why it is queued rather than fixed.
-  - **Goal**: Compare each order against the orders before it rather than only
-    against `as written`. A nested loop over `PHRASE_ORDERS` indices, or an
-    assertion that the number of distinct serialized orders equals
-    `PHRASE_ORDERS.length`, is enough; the message wants to name the two orders
-    that coincide, since the edit that causes it is a rewrite of the list rather
-    than a change to `PHRASE_ORDERS`. Verify it by hand the way 0.16.4 was: with
-    `SHARED_BY_THE_PAIR` written out in reverse-alphabetical order the new
-    assertion must fail, and with the list as it stands it must pass, the suite
-    staying at 974 of 974. The `CHANGELOG.md` 0.16.4 entry was corrected this
-    review to claim only what the four assertions check, so once the comparison
-    exists both it and the comment at line 552 can state the stronger guarantee.
-  - From: Code Review Override - the order guard never compares the orders against each other
+- [x] The roadmap's standing note still says the wiring below the canvas marker
+  is executed by nothing
+  - **Issue**: `.claude/current.roadmap.md` lines 81-86 say that below
+    `// ===== Canvas Setup & Sizing =====` the frame loop's `versusRematch`
+    call, the two `new VersusRound(..., game.state.muted)` openings, the gamepad
+    poll and the resize "are only read as source text", and that "a green suite
+    is not evidence about any line down there". That stopped being true at
+    `1.0.0-alpha.0.15.3`, when `test/browser-wiring.test.mjs` landed:
+    `loadBrowserPage` evaluates the whole inline script against a stub DOM and
+    drives the frame loop off a manual rAF pump. Its 33 cases cover every line
+    the note names - `the rematch carries the mute, and so does the rematch
+    after that`, `M inside a round moves both pilots`, `a resize re-seats both
+    halves of a round on the new grid`, `in the 60-to-90 column band the grid
+    fits and a round does not`, two pad cases, and `?versus` at lines 891 and
+    896 - and all 33 pass. `test/helpers.mjs` says it outright: "loadBrowserPage
+    runs the same region, which is the reading of what it *does*". The note says
+    of itself that it "is what the review requests are written from", so both
+    `.claude/full-review.request` and `.claude/ui-ux-test.request` for 11-21-26
+    carried the stale claim and scoped this review on it. A browser pass on
+    11-21-26 found no defect below the marker in 308 assertions, so nothing is
+    broken - what is wrong is the reason the scope was written from.
+  - **Goal**: Rewrite that bullet to what is now true. The region is executed by
+    `test/browser-wiring.test.mjs` against a stub DOM; what stays outside the
+    suite is only what a stub cannot take - the painted pixels and real pointer
+    plumbing, which `test/helpers.mjs` already names, plus the real CSS cascade
+    that solves `--ctl` against `--playpx`, real resize events, and a physical
+    gamepad. Keep 0.13.0, 0.13.1 and 0.13.2 as the reason that harness exists
+    rather than as evidence the lines are unrun.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] **Harness Form Reader**: `callsHarness` reads one import form, and for the
+  two declared exclusions a misread is not refused
+  - **Issue**: `test/probes.test.mjs:146` decides whether a probe calls the
+    harness with `/from '\.\.\/engagement\.mjs'/.test(src)`, which matches the
+    static single-quoted import and nothing else. Checked in node against that
+    exact pattern: `await import('../engagement.mjs')` reads `false`, and so
+    does `from "../engagement.mjs"`. The two-direction `deepEqual` at
+    `test/probes.test.mjs:265` catches a misread for the eight probes expected
+    to call the harness - the probe drops out of `reached`, so `excluded` stops
+    matching `HARNESS_EXCLUSIONS` and the message names it. It cannot catch one
+    for `glyph-tuning` or `overlay-anchor`: a `false` there agrees with the
+    declared list, `excluded` still equals `declared`, the suite stays at 974 of
+    974, and that probe's harness calls are reached by nothing - `npm test`
+    globs `test/*.test.mjs`, and this test is the only path in the suite that
+    runs a probe at all. The dynamic form is not hypothetical in this folder:
+    `test/probes/probes.mjs:22-31` loads every one of the ten probes with
+    `import()`. This is the shape the file's own header is an argument against,
+    and `callsHarness`'s docstring promises the opposite of it - "so a probe
+    that starts calling it is covered without a line being added".
+  - **Goal**: Decide a probe's harness use from something a quote style cannot
+    move. Widening the pattern to the forms this repository can produce -
+    `from` and `import(` against either quote - is the small answer and is
+    enough. Whatever is chosen, give it a case that fails before the change and
+    passes after, and take the source text as a parameter the way `claimsIn`
+    already does at `test/probes.test.mjs:338` rather than by editing a probe:
+    that is the same file's own precedent for reading a form the repository does
+    not currently hold, and it is what lets all three forms be read in one case.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] The sole-claim reader accepts `constructor` as the name of a probe
+  - **Issue**: `test/probes.test.mjs:477` asserts `probe in PROBES`, and `in`
+    walks the prototype chain. `PROBES` is a plain object literal
+    (`test/probes/probes.mjs:21`), so every `Object.prototype` key answers
+    `true`, and the `([a-z][a-z-]+)` capture in `CLAIM_SHAPES` can produce
+    exactly one of them - `constructor`, the rest carrying capitals or
+    underscores. Checked in node: `'constructor' in PROBES` is `true` where
+    `Object.hasOwn(PROBES, 'constructor')` is `false`, and the first shape reads
+    `the constructor is the one that flies nothing.` as a claim naming
+    `constructor`. So that sentence passes the assertion whose own message is
+    "is not a probe", and the check written to catch a sentence outliving a
+    renamed probe does not catch it. No file in `READ_FOR_CLAIMS` carries such a
+    sentence today, so this costs nothing now; `test/probes/*.mjs` headers are
+    in the read set and a constructor is an ordinary thing for one of them to
+    name.
+  - **Goal**: `Object.hasOwn(PROBES, probe)` in place of `probe in PROBES`. It
+    is a guard nothing has been shown to catch anything until a case reads a
+    sentence whose subject is an inherited key, which is the position the three
+    fixtures above it were written from, so add one: `claimsIn` takes the text,
+    so the sentence can be read on its own and the name it yields asserted
+    against both forms - failing on `in` and passing on `hasOwn`.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] **Rolled Changelog Pointer**: The rolled changelog is named for a year
+  that does not partition it, and nothing reads the pointer
+  - **Issue**: This turn moved the oldest 17 entries out of `CHANGELOG.md` into
+    a new `CHANGELOG-2026.md` and left a pointer at `CHANGELOG.md:3` reading
+    "17 earlier entries in `CHANGELOG-2026.md`, newest first". The move itself is
+    clean - the 959 moved lines are byte for byte what `CHANGELOG.md` held at
+    `dcf3db8`, and 49 released entries plus 17 account for all 66 - but the name
+    says something the split does not do. Every entry in both files is dated
+    2026: the new file holds `2026-02-08` and `2026-09-05` to `2026-09-21`,
+    while `CHANGELOG.md` keeps `2026-09-22` to `2026-11-20`. So a file named for
+    the year holds 17 of that year's 66 entries, a reader who finds it by its
+    name and looks up `2026-10-15` meets a gap, and the scheme has no next step:
+    the next roll moves more 2026 entries and there is no second year to name a
+    file after. The repository's own precedent is `TODO-archive.md`, named for
+    what it is rather than for a date and pointed at from `TODO.md` in this same
+    shape. Nothing in `test/` reads either changelog, so neither the name nor
+    the count in the pointer is pinned - a later roll can move entries and leave
+    `17` behind with the suite green.
+  - **Goal**: Rename to `CHANGELOG-archive.md`, which matches `TODO-archive.md`
+    and what the new file's own header already says it is ("Entries rolled out
+    of `CHANGELOG.md`"), or keep a year name and roll by year so the name is
+    true. Say which was chosen and why in the note, since the next roll inherits
+    it. Then pin the pointer: a case reading `CHANGELOG.md`'s pointer line
+    against the `## [` headings in the file it names, so a roll that moves
+    entries and leaves the count behind fails rather than publishing a figure
+    nothing read. Decide the name first - the check has to name the file.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] The roadmap note says this turn changed one tracked file, and it changed
+  the changelog in two places
+  - **Issue**: `.claude/current.roadmap.md` line 17 reads "The one change to a
+    tracked file is this turn's `## [Unreleased]` note in `CHANGELOG.md`". The
+    same turn also rolled 17 entries out of `CHANGELOG.md` - 960 lines deleted
+    from a tracked file - and created `CHANGELOG-2026.md`, which is neither
+    ignored nor tracked yet and becomes a tracked file at the next commit. Both
+    files carry the turn's own timestamp, so the roll was not a later edit the
+    sentence predates. The cost is the same one this file has already shown
+    today: it says of itself that it "is what the review requests are written
+    from", and the stale marker bullet in **Where the work has been coming
+    from** is why both of this turn's review requests were scoped on a claim
+    that stopped being true at `1.0.0-alpha.0.15.3`. A run reading "one change"
+    looks at one change.
+  - **Goal**: Say both changes in **What this run did** - the `## [Unreleased]`
+    note and the 17-entry roll with the file it went to. The canvas-marker
+    bullet in the same file belongs to the first item under this header and is
+    not this one's to rewrite.
+  - From: UI/UX Override - the marker is no longer a test boundary

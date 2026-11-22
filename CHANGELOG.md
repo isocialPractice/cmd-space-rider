@@ -1,11 +1,90 @@
 # Changelog
 
-> 17 earlier entries in `CHANGELOG-2026.md`, newest first.
+> 18 earlier entries in `CHANGELOG-2026.md`, newest first.
 
-## [Unreleased]
+## [1.0.0-alpha.0.16.6] - 2026-11-22
+
+### Added
+
+- `test/changelog-roll.test.mjs`, which reads `CHANGELOG.md`'s rolled archive
+  against the pointer naming it. Nothing in `test/` read either changelog, so
+  the split was pinned from neither side: a hand edit to the pointer, or a year
+  file nothing names, read as fine. Three cases. The pointer and the file agree
+  in both directions - every pointer names a file beside it and states the
+  number of `## [` entries that file holds, and every `CHANGELOG-<year>.md`
+  beside the changelog has a pointer, a file nothing names being history no
+  reader is told about. A year file holds that year: every entry in it is dated,
+  dated to the year the name carries, and everything rolled is older than
+  everything `CHANGELOG.md` keeps, so a reader going by the name and the date is
+  sent to the file that has it. And the pointers sit above the first entry,
+  which is where the roll puts them and the only place one reads as a statement
+  about the file rather than as part of a release's notes. Verified by hand in
+  six directions, each reverted: the count stepped off what the archive holds,
+  the pointer deleted with the file left unnamed, an entry redated to 2025, an
+  entry redated newer than the oldest `CHANGELOG.md` keeps, the pointer moved
+  below the first entry heading, and an entry's date removed - each fails, and
+  each names which of the two files it read. The counts the mutations were run
+  against were 17 and 66; the archive pass later in this turn rolled one more
+  entry and rewrote the pointer, so they are 18 and 67 now.
+  `docs/project-structure.html` names the new file, which its own census case
+  requires, and `docs/development.html` carries the account of it.
+- A case reading `callsHarness` against each import form this repository can
+  produce, in `test/probes.test.mjs`: the static `from` and the dynamic
+  `import(`, against either quote and with the space the parser allows, plus two
+  real prose lines naming the harness without importing it, plus the two
+  declared exclusions read against their own sources. Fails before the widening
+  below and passes after, reporting the double-quoted static form first.
+- A case reading what the sole-claim reader hands back, for the one name the
+  capture can produce that `PROBES` answers to without holding. `claimsIn` takes
+  the text, so `the constructor is the one that flies nothing.` is read on its
+  own rather than by editing a probe to carry it, and the name it yields is
+  asserted against both membership forms - the hazard still being real, and the
+  predicate refusing it. Fails before the change below and passes after.
+
+### Fixed
+
+- `callsHarness` in `test/probes.test.mjs` decided whether a probe calls the
+  harness with `/from '\.\.\/engagement\.mjs'/`, which matches the static
+  single-quoted import and nothing else: `await import('../engagement.mjs')`
+  reads false, and so does `from "../engagement.mjs"`. For the eight probes
+  expected to call the harness a misread is caught by the two-direction
+  `deepEqual` - the probe drops out of `reached`, `excluded` stops matching
+  `HARNESS_EXCLUSIONS`, and the message names it. For `glyph-tuning` and
+  `overlay-anchor` it is not caught at all: a false there agrees with the
+  declared list, `excluded` still equals `declared`, the suite stays green, and
+  that probe's harness calls are reached by nothing - `npm test` globs
+  `test/*.test.mjs`, and the harness test is the only path in the suite that
+  runs a probe. The dynamic form is not hypothetical here, `test/probes/probes.mjs`
+  loading every one of the ten probes with `import()`. The pattern is now
+  `/(?:from|import\s*\()\s*(['"])[^'"]*\/engagement\.mjs\1/`, which takes both
+  keywords against either quote with the backreference holding the quote pair,
+  and the quote has to follow the keyword so prose naming the file is not read
+  as a call to it - the `HARNESS_EXCLUSIONS` docstring in the same test file
+  says of `overlay-anchor` that it "imports nothing from test/engagement.mjs",
+  and that sentence is the fixture. The source text is a parameter now,
+  defaulting to the probe's own file, which is the precedent `claimsIn` already
+  set in the same file and is what lets every form be read in one case.
+- The sole-claim reader accepted `constructor` as the name of a probe.
+  `test/probes.test.mjs` asserted `probe in PROBES`, and `in` walks the
+  prototype chain over a plain object literal, so every `Object.prototype` key
+  answered true - and one of them is spellable by the `([a-z][a-z-]+)` capture
+  in `CLAIM_SHAPES`, the rest carrying capitals or underscores. So
+  `the constructor is the one that flies nothing.` passed the assertion whose
+  own message reads "is not a probe", and the check written to catch a sentence
+  outliving a renamed probe did not catch it. No file in `READ_FOR_CLAIMS`
+  carries such a sentence, so it cost nothing yet; `test/probes/*.mjs` headers
+  are in that set and a constructor is an ordinary thing for one of them to
+  name. It is `Object.hasOwn` now, in a named `isProbe` predicate rather than
+  inline, so the new case reads the predicate the check takes rather than a copy
+  of it.
 
 ### Notes
 
+- **The bullet immediately below is 11-21-26's**, which applied no version: it
+  sat under `## [Unreleased]` until this turn, and a turn that applies a version
+  drains that heading into its own entry rather than leaving the section for a
+  later release. Every figure in it is that turn's, including the manifest
+  version it left standing.
 - A review turn. `## Current` was empty and carried no pause marker, and the
   only level 3 header under it is
   `### Create and Deploy GitHub Pages Override`, which is excluded from the
@@ -41,6 +120,46 @@
   physical pad. `.claude/current.roadmap.md`, which the request flags are
   written from, still carries the stale claim, and the browser pass queued that
   under `## Current`.
+
+- **The rolled changelog keeps its year name, and that is a decision.**
+  `CHANGELOG-2026.md` held 17 of 2026's 66 entries when the item was raised, and
+  holds 18 of 67 now, which reads as a file named for a year it does not
+  partition. The two answers were to rename it after what it is, the way
+  `TODO-archive.md` is named, or to keep the year and say why.
+  The year is kept, because the name is not this repository's to choose: the
+  roll is the automation tool's, it writes `CHANGELOG-<year>.md`, and a rename
+  lasts until the next roll - which creates `CHANGELOG-2026.md` fresh, writes a
+  pointer naming only that, and leaves the renamed file orphaned with nothing
+  pointing at it. The year name is also what the tool's history reader looks
+  for. Two premises behind the rename are false and are recorded as such in the
+  new test file's header, because they are why it looked like the better answer:
+  the scheme does have a next step, later rolls merging into the same year file
+  and a new year opening its own, so the name stays true of what each file holds
+  even while no file holds all of a year; and the count cannot go stale through
+  a roll, the pointer being rebuilt from the file it names on every pass rather
+  than added to - which this turn demonstrated, the archive pass rolling
+  `0.6.2-alpha` out and rewriting the pointer from 17 to 18 unprompted. What
+  was genuinely unpinned is a hand edit, and a year file that stops being
+  named - which is what the new cases read.
+- `.claude/current.roadmap.md` is untracked and carries no version weight, and
+  two of this turn's items were corrections to it. Its standing note still
+  called the `// ===== Canvas Setup & Sizing =====` marker in `index.html` a
+  test boundary and said a green suite is no evidence about any line below it.
+  That stopped being true at `1.0.0-alpha.0.15.3`, when
+  `test/browser-wiring.test.mjs` landed: `loadBrowserPage` evaluates the whole
+  inline script against a stub DOM and drives the frame loop off a manual
+  `requestAnimationFrame` pump, and its 33 cases cover every line the note
+  named. The file says of itself that it is what the review requests are written
+  from, so both of 11-21-26's requests carried the stale claim and scoped that
+  review on it - a browser pass then found no defect below the marker in 308
+  assertions. The bullet now says the region is executed, keeps 0.13.0, 0.13.1
+  and 0.13.2 as the reason that harness exists rather than as evidence the lines
+  are unrun, and names what a stub cannot take: the painted pixels and real
+  pointer plumbing `test/helpers.mjs` already names, plus the real CSS cascade
+  solving `--ctl` against `--playpx`, real resize events, and a physical pad.
+  The same file's account of 11-21-26 said one change reached a tracked file,
+  the `## [Unreleased]` note below, and the same turn also rolled 17 entries out
+  of `CHANGELOG.md` and created `CHANGELOG-2026.md`; it now says both.
 
 ## [1.0.0-alpha.0.16.5] - 2026-11-20
 
@@ -5123,27 +5242,3 @@
   `test/powerups.test.mjs` fly both builds; `test/browser-shell.test.mjs` is
   browser-only, because a terminal has neither a colour scheme to follow nor a
   touchscreen to be played on.
-
-## [0.6.2-alpha] - 2026-09-22
-
-### Changed
-
-- The debris window's three numbers are module-private again. Pinning the
-  window to the draw last run exported `DEBRIS_VXY`, `DEBRIS_VZ_MIN` and
-  `DEBRIS_VZ_MAX` out of `test/engagement.mjs`, and nothing outside that file
-  ever read them: the check that needed them reads `DEBRIS_DRAWN` a few lines
-  below, which carries all three values already, and
-  `test/pulse-cannon.test.mjs` imports that rather than the numbers behind it.
-  They are `const` again, which is what `DRIFT_SLACK` does in the same block
-  for the same reason - a number the checks never name stays inside the module.
-  `DEBRIS_DRAWN` is the surface the checks read, and the suite is unchanged at
-  325 passing.
-- The heights bullet in the `0.6.1-alpha` entry below is filed under
-  `### Changed` rather than `### Fixed`. It centralises the free flight's ship
-  heights so two files stop keeping their own copy, which is the same kind of
-  work, on the same file, for the same stated reason as the frame rates one
-  version earlier - and that one was recorded under `### Changed`. One refactor
-  was described in two sections of the same changelog, so a reader scanning
-  `### Fixed` for repaired defects met a deduplication. The debris window
-  bullet stays where it is: that one repaired a guard that did not hold. The
-  version is not re-cut.
