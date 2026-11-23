@@ -26,3 +26,5 @@ test-results/ui-ux-tester.agent/
 # ignores nothing: out/, node_modules/ and the agent's test-results folder all
 # read as untracked there, however carefully they are named above.
 !.gitignore
+CHANGELOG-*.md 
+TODO-archive.md 
