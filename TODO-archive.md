@@ -4628,3 +4628,85 @@ still be found by name.
     review to claim only what the four assertions check, so once the comparison
     exists both it and the comment at line 552 can state the stronger guarantee.
   - From: Code Review Override - the order guard never compares the orders against each other
+
+## Archived 11-23-26
+
+- [x] The roadmap's standing note still says the wiring below the canvas marker
+  is executed by nothing
+  - **Issue**: `.claude/current.roadmap.md` lines 81-86 say that below
+    `// ===== Canvas Setup & Sizing =====` the frame loop's `versusRematch`
+    call, the two `new VersusRound(..., game.state.muted)` openings, the gamepad
+    poll and the resize "are only read as source text", and that "a green suite
+    is not evidence about any line down there". That stopped being true at
+    `1.0.0-alpha.0.15.3`, when `test/browser-wiring.test.mjs` landed:
+    `loadBrowserPage` evaluates the whole inline script against a stub DOM and
+    drives the frame loop off a manual rAF pump. Its 33 cases cover every line
+    the note names - `the rematch carries the mute, and so does the rematch
+    after that`, `M inside a round moves both pilots`, `a resize re-seats both
+    halves of a round on the new grid`, `in the 60-to-90 column band the grid
+    fits and a round does not`, two pad cases, and `?versus` at lines 891 and
+    896 - and all 33 pass. `test/helpers.mjs` says it outright: "loadBrowserPage
+    runs the same region, which is the reading of what it *does*". The note says
+    of itself that it "is what the review requests are written from", so both
+    `.claude/full-review.request` and `.claude/ui-ux-test.request` for 11-21-26
+    carried the stale claim and scoped this review on it. A browser pass on
+    11-21-26 found no defect below the marker in 308 assertions, so nothing is
+    broken - what is wrong is the reason the scope was written from.
+  - **Goal**: Rewrite that bullet to what is now true. The region is executed by
+    `test/browser-wiring.test.mjs` against a stub DOM; what stays outside the
+    suite is only what a stub cannot take - the painted pixels and real pointer
+    plumbing, which `test/helpers.mjs` already names, plus the real CSS cascade
+    that solves `--ctl` against `--playpx`, real resize events, and a physical
+    gamepad. Keep 0.13.0, 0.13.1 and 0.13.2 as the reason that harness exists
+    rather than as evidence the lines are unrun.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] **Harness Form Reader**: `callsHarness` reads one import form, and for the
+  two declared exclusions a misread is not refused
+  - **Issue**: `test/probes.test.mjs:146` decides whether a probe calls the
+    harness with `/from '\.\.\/engagement\.mjs'/.test(src)`, which matches the
+    static single-quoted import and nothing else. Checked in node against that
+    exact pattern: `await import('../engagement.mjs')` reads `false`, and so
+    does `from "../engagement.mjs"`. The two-direction `deepEqual` at
+    `test/probes.test.mjs:265` catches a misread for the eight probes expected
+    to call the harness - the probe drops out of `reached`, so `excluded` stops
+    matching `HARNESS_EXCLUSIONS` and the message names it. It cannot catch one
+    for `glyph-tuning` or `overlay-anchor`: a `false` there agrees with the
+    declared list, `excluded` still equals `declared`, the suite stays at 974 of
+    974, and that probe's harness calls are reached by nothing - `npm test`
+    globs `test/*.test.mjs`, and this test is the only path in the suite that
+    runs a probe at all. The dynamic form is not hypothetical in this folder:
+    `test/probes/probes.mjs:22-31` loads every one of the ten probes with
+    `import()`. This is the shape the file's own header is an argument against,
+    and `callsHarness`'s docstring promises the opposite of it - "so a probe
+    that starts calling it is covered without a line being added".
+  - **Goal**: Decide a probe's harness use from something a quote style cannot
+    move. Widening the pattern to the forms this repository can produce -
+    `from` and `import(` against either quote - is the small answer and is
+    enough. Whatever is chosen, give it a case that fails before the change and
+    passes after, and take the source text as a parameter the way `claimsIn`
+    already does at `test/probes.test.mjs:338` rather than by editing a probe:
+    that is the same file's own precedent for reading a form the repository does
+    not currently hold, and it is what lets all three forms be read in one case.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] The sole-claim reader accepts `constructor` as the name of a probe
+  - **Issue**: `test/probes.test.mjs:477` asserts `probe in PROBES`, and `in`
+    walks the prototype chain. `PROBES` is a plain object literal
+    (`test/probes/probes.mjs:21`), so every `Object.prototype` key answers
+    `true`, and the `([a-z][a-z-]+)` capture in `CLAIM_SHAPES` can produce
+    exactly one of them - `constructor`, the rest carrying capitals or
+    underscores. Checked in node: `'constructor' in PROBES` is `true` where
+    `Object.hasOwn(PROBES, 'constructor')` is `false`, and the first shape reads
+    `the constructor is the one that flies nothing.` as a claim naming
+    `constructor`. So that sentence passes the assertion whose own message is
+    "is not a probe", and the check written to catch a sentence outliving a
+    renamed probe does not catch it. No file in `READ_FOR_CLAIMS` carries such a
+    sentence today, so this costs nothing now; `test/probes/*.mjs` headers are
+    in the read set and a constructor is an ordinary thing for one of them to
+    name.
+  - **Goal**: `Object.hasOwn(PROBES, probe)` in place of `probe in PROBES`. It
+    is a guard nothing has been shown to catch anything until a case reads a
+    sentence whose subject is an inherited key, which is the position the three
+    fixtures above it were written from, so add one: `claimsIn` takes the text,
+    so the sentence can be read on its own and the name it yields asserted
+    against both forms - failing on `in` and passing on `hasOwn`.
+  - From: UI/UX Override - the marker is no longer a test boundary

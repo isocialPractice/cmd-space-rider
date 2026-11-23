@@ -10,11 +10,15 @@
 // and published a figure no run had looked at.
 //
 // **The year name is kept, and that is a decision rather than the status quo.**
-// `CHANGELOG-2026.md` holds 17 of 2026's 66 entries, which reads as a file named
-// for a year that does not partition it - a reader who looks up a mid-October
-// date by the name meets a gap. The two answers were to rename it after what it
-// is, the way `TODO-archive.md` is named, or to keep the year. The year is kept
-// because the name is not this repository's to choose: the roll writes
+// `CHANGELOG-2026.md` holds a fraction of 2026's entries and `CHANGELOG.md`
+// keeps the rest, which reads as a file named for a year it does not partition
+// - a reader who looks up a mid-October date by the name meets a gap. No
+// figure is quoted here on purpose: the roll moves entries and rewrites the
+// pointer on every pass, so a count written into this header is one the next
+// roll can leave behind, and the argument never needed the exact number. The
+// two answers were to rename it after what it is, the way `TODO-archive.md` is
+// named, or to keep the year. The year is kept because the name is not this
+// repository's to choose: the roll writes
 // `CHANGELOG-<year>.md`, regenerates every pointer from each archive's own
 // entry count on each pass, and merges later rolls into the same year file
 // sorted newest-first. So a rename lasts until the next roll, which creates
