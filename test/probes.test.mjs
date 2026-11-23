@@ -155,8 +155,11 @@ function publishedExclusions() {
  * header is an argument against meeting by accident.
  *
  * The quote has to follow the keyword, which is what keeps this off a sentence.
- * test/probes/overlay-anchor.mjs's header says it "imports nothing from
- * test/engagement.mjs" - prose, unquoted, and no match.
+ * HARNESS_EXCLUSIONS's own docstring above says of `overlay-anchor` that it
+ * "imports nothing from test/engagement.mjs" - prose, unquoted, and no match.
+ * That sentence is this file's, not the probe's: test/probes/overlay-anchor.mjs
+ * never names the engagement at all, which is why the exclusion had to be
+ * written down here rather than read off the probe.
  */
 const HARNESS_IMPORT = /(?:from|import\s*\()\s*(['"])[^'"]*\/engagement\.mjs\1/;
 
@@ -169,8 +172,8 @@ const HARNESS_IMPORT = /(?:from|import\s*\()\s*(['"])[^'"]*\/engagement\.mjs\1/;
  *
  * Takes the source text as a parameter, the way `claimsIn` does below, so a form
  * the repository does not currently hold can be read without editing a probe to
- * hold one. That is the same file's own precedent, and it is what lets all three
- * forms be read in a single case.
+ * hold one. That is the same file's own precedent, and it is what lets every
+ * form the pattern has to read be read in a single case.
  */
 function callsHarness(name, src = null) {
   const text = src ?? readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
@@ -329,14 +332,26 @@ test('probes: a harness call is read whichever import form it is written in', ()
   // `glyph-tuning` and `overlay-anchor` a misread agrees with the declared list:
   // `excluded` still equals `declared`, the suite stays at its full count, and
   // that probe's harness calls are reached by nothing. The harness test is the
-  // only path in the suite that runs a probe at all, so there is no second
-  // reader to catch it.
+  // only path in the suite that runs a probe at all, so nothing else in the
+  // suite reaches those calls to find them missing.
+  //
+  // What is read here is the pattern, not the pair's two files. Their own
+  // sources are read against `callsHarness` elsewhere - the `deepEqual` at the
+  // foot of the harness test above holds them out of `reached`, and the
+  // sole-claim test below holds `pair.filter((name) => !callsHarness(name))`
+  // equal to the pair - and no reading of that shape can catch a misread,
+  // because `false` is the answer every one of them is written to expect. A
+  // misread is a property of the pattern rather than of `glyph-tuning` or
+  // `overlay-anchor`, so reading the forms is the whole of what covers those
+  // two, and an assertion here that `callsHarness` answers `false` for the pair
+  // would be a third statement of a condition those two assertions already
+  // hold.
   //
   // The pattern this pins replaced one that read the static single-quoted import
   // alone, and test/probes/probes.mjs loads every one of the ten probes with
   // `import()` - so the form it could not read is one this repository already
-  // writes. The text is a parameter, which is what lets all four forms be read
-  // here rather than by editing a probe into one of them.
+  // writes. The text is a parameter, which is what lets every form be read here
+  // rather than by editing a probe into one of them.
   const forms = [
     { was: 'the static import, single quoted', src: "import { BUILDS } from '../engagement.mjs';" },
     { was: 'the static import, double quoted', src: 'import { BUILDS } from "../engagement.mjs";' },
@@ -353,8 +368,12 @@ test('probes: a harness call is read whichever import form it is written in', ()
   }
 
   // And the shape a widened pattern invites: the file named in a sentence rather
-  // than imported. Both of these are real lines from probes that call no
-  // harness or do not name it as an import.
+  // than imported. The second is a real line from a probe that names the
+  // engagement without importing it, test/probes/frame-rate.mjs:15. The first is
+  // not from a probe at all: it is this file's own HARNESS_EXCLUSIONS docstring
+  // rewritten as a `//` line, because the sentence saying `overlay-anchor`
+  // imports no engagement lives here rather than in the probe, which never names
+  // the engagement.
   const prose = [
     '// imports nothing from test/engagement.mjs, so it has no harness call to reach',
     '// The engagement flown from the ship is reported underneath, at the two ship',
@@ -364,19 +383,6 @@ test('probes: a harness call is read whichever import form it is written in', ()
       callsHarness('a source read on its own', src), false,
       `prose naming the harness is read as a call into it, which would put a probe into the`
       + ` harness run on the strength of its own comment - ${src}`
-    );
-  }
-
-  // The pair itself, read against their real sources. This is the one reading
-  // the assertions above cannot stand in for: a `false` for either of these is
-  // the answer HARNESS_EXCLUSIONS declares, so nothing else in the file refuses
-  // it, and a probe of theirs that started importing the harness would have to
-  // be found here or not at all.
-  for (const name of HARNESS_EXCLUSIONS) {
-    assert.equal(
-      callsHarness(name), false,
-      `${name} is declared as calling no harness and its source imports one - the declared`
-      + ' list and the sources disagree, and the harness run goes by the sources'
     );
   }
 });
