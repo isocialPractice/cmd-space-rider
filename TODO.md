@@ -8,44 +8,76 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the corrected docstring's new premise
+### Code Review Override - the new guard's account of itself
 
 #### Resolve Issues
 
-- [ ] Exclusion Provenance 1 - the corrected docstring now says the exclusion
-  could not be read off the probe, which the same file denies twice
-  - **Issue**: the correction to `HARNESS_IMPORT`'s docstring closes on a
-    causal clause that is false about the code. `test/probes.test.mjs:161-162`
-    reads "test/probes/overlay-anchor.mjs never names the engagement at all,
-    which is why the exclusion had to be written down here rather than read off
-    the probe". The exclusion *is* read off the probe: `callsHarness`
-    (`test/probes.test.mjs:178-181`) reads that probe's source, finds no
-    engagement import, answers `false`, and the `if (!callsHarness(name))
-    continue` at `test/probes.test.mjs:290` is what drops it from the harness
-    run. `HARNESS_EXCLUSIONS`'s own docstring says so twice over, at
-    `test/probes.test.mjs:86-90` - "declared rather than inferred, so a third
-    one has to be written down here before the suite will accept it", and
-    "`callsHarness` below is what actually decides, by reading each probe's
-    source, and this list does not drive that - it pins it" - and
-    `callsHarness`'s own docstring at `test/probes.test.mjs:167-169` promises
-    the same thing from the other side, "read off its own source rather than
-    listed here, so a probe that starts calling it is covered without a line
-    being added". The probe not naming the engagement is not an obstacle to
-    reading it; it is exactly what the reading returns. The clause also
-    distinguishes nothing: `glyph-tuning` names no engagement either
-    (`grep -n engagement test/probes/glyph-tuning.mjs` returns nothing, its one
-    import being `../helpers.mjs`), so whatever the clause explains is true of
-    both halves of the pair.
-  - **Goal**: drop or rewrite that clause so the file states one account of the
-    list rather than two. What is true is the sentence it is attached to - the
-    negative fixture's prose lives in this file because neither probe mentions
-    the engagement, so there is no probe line to quote - and the list is a
-    pinning of what `callsHarness` already decides. A later reader who believes
-    the clause has been told `HARNESS_EXCLUSIONS` decides exclusions, which is
-    the inference `callsHarness`'s docstring was written to refuse, and acting
-    on it would turn the read-off-source design back into a hand-maintained
-    list.
+- [ ] Exclusion Provenance 2 - the guard written for the account claims a
+  completeness and an affirmation it does not hold
+  - **Issue**: two claims the new case makes about itself are wider than what it
+    checks. **The list.** `EXCLUSION_ACCOUNT`'s docstring
+    (`test/probes.test.mjs:396`) says of its three declarations "Nothing else in
+    the file states it". `READING_DENIED`'s own docstring, written in the same
+    turn, states the same account at `test/probes.test.mjs:433-435` -
+    "`callsHarness` is what decides, by reading each source, and the `continue`
+    in the harness test above is where that answer is spent; HARNESS_EXCLUSIONS
+    pins it rather than supplying it" - and is not in the list, so nothing reads
+    it. Its omission is a gap rather than a necessity: adding
+    `'const READING_DENIED'` to `EXCLUSION_ACCOUNT` and running
+    `node --test test/probes.test.mjs` leaves the case green, checked. It is
+    also the paragraph a denial is likeliest to reach, being the one written
+    about denials, and `docs/development.html` now publishes the same count -
+    "the three paragraphs that state the account" - so the page inherits the
+    claim. **The affirmation.** The case is titled `probes: all three docstrings
+    say the exclusion is read off the probe` (`test/probes.test.mjs:467`) and
+    holds only that none of the three denies it. Delete the sentence 0.16.8
+    wrote at `test/probes.test.mjs:163-166`, "The exclusion itself is read off
+    those same two sources...", leaving that paragraph silent on the reading,
+    and the case passes under a name saying the paragraph says it. The file
+    names its other guards by the refusal they make - `probes: no sentence
+    singles a probe out by a property the pair shares` - and `READING_DENIED`'s
+    docstring says as much at `test/probes.test.mjs:443`, "What is matched is
+    the denial rather than the subject". A reader who goes by the name believes
+    the affirmative half is pinned when only its denial is, which is the same
+    belief about the same paragraphs that 0.16.7 and 0.16.8 were each spent on.
+  - **Goal**: close each claim to what is checked, either by widening the check
+    or by narrowing the sentence, and say which was chosen. For the list: add
+    `const READING_DENIED`, and anything else in the file that states the
+    account, to `EXCLUSION_ACCOUNT` and rewrite the "Nothing else" sentence to
+    say what the list holds and how a later paragraph joins it; or keep three
+    and name the paragraphs that are out of it and on what ground.
+    `docs/development.html`'s "three paragraphs" sentence moves with whichever
+    is taken. For the name: rename the case to the refusal it makes, or hold the
+    affirmation as well - a fixture per docstring for the sentence that affirms
+    the reading, so deleting one fails - and keep the name only if the second is
+    chosen. Neither half needs a new reader; `readingDenials` already takes text
+    rather than a path.
   - From: UI/UX Override - the marker is no longer a test boundary
+
+#### Found Issues
+
+- [ ] The engagement-mention reader matches against the path it printed, not
+  only against the probe's line
+  - **Issue**: `probes: neither excluded probe names the engagement, in an
+    import or in prose` (`test/probes.test.mjs:525-527`) maps every line of a
+    probe to `` `${file}:${i + 1} ${line.trim()}` `` and then filters that
+    composed string for `engagement`, so the path the reader wrote is part of
+    what the match is made against. For the declared pair it reads right -
+    neither `glyph-tuning` nor `overlay-anchor` holds the word anywhere. A probe
+    whose own name holds it does not: an `engagement-trace` added to
+    `HARNESS_EXCLUSIONS` for importing no engagement reports every one of its
+    lines as a mention, and the message names the file as naming the engagement
+    when no line of it does. The guard's whole subject is text read off a file
+    rather than text the reader supplied, which is the one property the composed
+    string gives up.
+  - **Goal**: filter on the probe's own line and compose the message afterwards,
+    keeping the index - `.filter(...)` before `.map(...)`, or a filter over
+    `line` with `i` carried - so what is matched is the line and nothing the
+    reader added. `node --test test/probes.test.mjs` stays green, and the check
+    that it still catches a mention is the one the changelog already records:
+    add a comment naming the engagement to `test/probes/glyph-tuning.mjs`, see
+    the case fail with the file and line named, and revert.
+  - From: Code Review Override - the new guard's account of itself
 
 ## Quick Wins
 
@@ -91,35 +123,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 221 earlier items in `TODO-archive.md`, newest last.
+> 222 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Rolled Changelog Pointer**: The rolled changelog is named for a year
-  that does not partition it, and nothing reads the pointer
-  - **Issue**: This turn moved the oldest 17 entries out of `CHANGELOG.md` into
-    a new `CHANGELOG-2026.md` and left a pointer at `CHANGELOG.md:3` reading
-    "17 earlier entries in `CHANGELOG-2026.md`, newest first". The move itself is
-    clean - the 959 moved lines are byte for byte what `CHANGELOG.md` held at
-    `dcf3db8`, and 49 released entries plus 17 account for all 66 - but the name
-    says something the split does not do. Every entry in both files is dated
-    2026: the new file holds `2026-02-08` and `2026-09-05` to `2026-09-21`,
-    while `CHANGELOG.md` keeps `2026-09-22` to `2026-11-20`. So a file named for
-    the year holds 17 of that year's 66 entries, a reader who finds it by its
-    name and looks up `2026-10-15` meets a gap, and the scheme has no next step:
-    the next roll moves more 2026 entries and there is no second year to name a
-    file after. The repository's own precedent is `TODO-archive.md`, named for
-    what it is rather than for a date and pointed at from `TODO.md` in this same
-    shape. Nothing in `test/` reads either changelog, so neither the name nor
-    the count in the pointer is pinned - a later roll can move entries and leave
-    `17` behind with the suite green.
-  - **Goal**: Rename to `CHANGELOG-archive.md`, which matches `TODO-archive.md`
-    and what the new file's own header already says it is ("Entries rolled out
-    of `CHANGELOG.md`"), or keep a year name and roll by year so the name is
-    true. Say which was chosen and why in the note, since the next roll inherits
-    it. Then pin the pointer: a case reading `CHANGELOG.md`'s pointer line
-    against the `## [` headings in the file it names, so a roll that moves
-    entries and leaves the count behind fails rather than publishing a figure
-    nothing read. Decide the name first - the check has to name the file.
-  - From: UI/UX Override - the marker is no longer a test boundary
 - [x] The roadmap note says this turn changed one tracked file, and it changed
   the changelog in two places
   - **Issue**: `.claude/current.roadmap.md` line 17 reads "The one change to a
@@ -203,4 +208,38 @@ the roadmap section each one came from.
     argument does not need the exact number - "a fraction of 2026's entries"
     carries it - and the paragraph already explains why no file holds all of a
     year, which is the point the count was reached for.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] **Exclusion Provenance 1** - the corrected docstring now says the exclusion
+  could not be read off the probe, which the same file denies twice
+  - **Issue**: the correction to `HARNESS_IMPORT`'s docstring closes on a
+    causal clause that is false about the code. `test/probes.test.mjs:161-162`
+    reads "test/probes/overlay-anchor.mjs never names the engagement at all,
+    which is why the exclusion had to be written down here rather than read off
+    the probe". The exclusion *is* read off the probe: `callsHarness`
+    (`test/probes.test.mjs:178-181`) reads that probe's source, finds no
+    engagement import, answers `false`, and the `if (!callsHarness(name))
+    continue` at `test/probes.test.mjs:290` is what drops it from the harness
+    run. `HARNESS_EXCLUSIONS`'s own docstring says so twice over, at
+    `test/probes.test.mjs:86-90` - "declared rather than inferred, so a third
+    one has to be written down here before the suite will accept it", and
+    "`callsHarness` below is what actually decides, by reading each probe's
+    source, and this list does not drive that - it pins it" - and
+    `callsHarness`'s own docstring at `test/probes.test.mjs:167-169` promises
+    the same thing from the other side, "read off its own source rather than
+    listed here, so a probe that starts calling it is covered without a line
+    being added". The probe not naming the engagement is not an obstacle to
+    reading it; it is exactly what the reading returns. The clause also
+    distinguishes nothing: `glyph-tuning` names no engagement either
+    (`grep -n engagement test/probes/glyph-tuning.mjs` returns nothing, its one
+    import being `../helpers.mjs`), so whatever the clause explains is true of
+    both halves of the pair.
+  - **Goal**: drop or rewrite that clause so the file states one account of the
+    list rather than two. What is true is the sentence it is attached to - the
+    negative fixture's prose lives in this file because neither probe mentions
+    the engagement, so there is no probe line to quote - and the list is a
+    pinning of what `callsHarness` already decides. A later reader who believes
+    the clause has been told `HARNESS_EXCLUSIONS` decides exclusions, which is
+    the inference `callsHarness`'s docstring was written to refuse, and acting
+    on it would turn the read-off-source design back into a hand-maintained
+    list.
   - From: UI/UX Override - the marker is no longer a test boundary
