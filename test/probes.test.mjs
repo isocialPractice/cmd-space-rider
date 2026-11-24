@@ -158,8 +158,11 @@ function publishedExclusions() {
  * HARNESS_EXCLUSIONS's own docstring above says of `overlay-anchor` that it
  * "imports nothing from test/engagement.mjs" - prose, unquoted, and no match.
  * That sentence is this file's, not the probe's: test/probes/overlay-anchor.mjs
- * never names the engagement at all, which is why the exclusion had to be
- * written down here rather than read off the probe.
+ * never names the engagement at all, and neither does `glyph-tuning`, so the
+ * negative fixture below has no probe line to quote and takes this file's own
+ * sentence instead. The exclusion itself is read off those same two sources:
+ * `callsHarness` finds no import in either, the harness run skips them on that
+ * reading, and HARNESS_EXCLUSIONS pins the answer rather than supplying it.
  */
 const HARNESS_IMPORT = /(?:from|import\s*\()\s*(['"])[^'"]*\/engagement\.mjs\1/;
 
@@ -383,6 +386,150 @@ test('probes: a harness call is read whichever import form it is written in', ()
       callsHarness('a source read on its own', src), false,
       `prose naming the harness is read as a call into it, which would put a probe into the`
       + ` harness run on the strength of its own comment - ${src}`
+    );
+  }
+});
+
+/**
+ * The three declarations whose docstrings account for how a probe comes to be
+ * left out of the harness run: the declared pair, the pattern that reads an
+ * import, and the function that decides. Nothing else in the file states it, and
+ * between them they have to state one account rather than two.
+ *
+ * Read by name rather than by line, so the account travels with the declaration
+ * it belongs to.
+ */
+const EXCLUSION_ACCOUNT = [
+  'const HARNESS_EXCLUSIONS',
+  'const HARNESS_IMPORT',
+  'function callsHarness',
+];
+
+/**
+ * The docstring directly above a top-level declaration, with nothing but
+ * whitespace between the two.
+ *
+ * Bounded to the three declarations above rather than run over the whole file,
+ * which is what lets the fixtures below be written out in full: a guard that
+ * reads its own source cannot hold the sentence it refuses.
+ */
+function docstringAbove(src, declaration) {
+  const at = src.indexOf(`\n${declaration}`);
+  assert.ok(at > 0, `${declaration} is not declared at the top level of test/probes.test.mjs`);
+  const close = src.lastIndexOf('*/', at);
+  const open = src.lastIndexOf('/**', close);
+  assert.ok(open >= 0 && close > open, `${declaration} carries no docstring`);
+  assert.equal(
+    src.slice(close + 2, at).trim(), '',
+    `the block comment above ${declaration} is separated from it by code, so it documents`
+    + ' something else and this is reading the wrong paragraph'
+  );
+  return src.slice(open, close + 2);
+}
+
+/**
+ * Prose denying that a probe's exclusion is read off the probe's own source.
+ *
+ * `callsHarness` is what decides, by reading each source, and the `continue` in
+ * the harness test above is where that answer is spent; HARNESS_EXCLUSIONS pins
+ * it rather than supplying it. A sentence saying the opposite costs more than
+ * its own accuracy: a reader who believes it has been told the list decides,
+ * which is the inference `callsHarness`'s docstring was written to refuse, and
+ * acting on it turns a read-off-source design back into a hand-maintained list.
+ * 0.16.8 took such a clause out of HARNESS_IMPORT's docstring - the second
+ * correction to those three paragraphs in two versions - and nothing in the
+ * suite had read any of them.
+ *
+ * What is matched is the denial rather than the subject, because the subject is
+ * what varies and the true account needs the same words for itself.
+ * HARNESS_EXCLUSIONS is "declared rather than inferred", which is true of the
+ * list and is held below as a fixture that has to keep passing. What is never
+ * true is that the probe could not be read.
+ */
+const READING_DENIED = [
+  /(?:rather than|instead of) (?:being )?read(?:ing)? off (?:the |its |that )?[a-z' ]*(?:probe|source)/g,
+  /(?:cannot|can't|could not|couldn't) be read off (?:the |its |that )?[a-z' ]*(?:probe|source)/g,
+];
+
+/**
+ * Every denial in a stretch of text, read flattened so a clause broken over two
+ * comment lines is one sentence.
+ *
+ * Takes the text rather than a path, the way `claimsIn` and `callsHarness` do:
+ * the clause this was written for is gone from the file, so a reader that could
+ * only take the file as it stands would never have been shown to catch anything.
+ */
+function readingDenials(text) {
+  const flat = text.replace(/^\s*\*\s?/gm, '').replace(/`/g, '').replace(/\s+/g, ' ');
+  return READING_DENIED.flatMap((shape) => [...flat.matchAll(shape)].map(([said]) => said));
+}
+
+test('probes: all three docstrings say the exclusion is read off the probe', () => {
+  const src = readFileSync(join(REPO_ROOT, 'test', 'probes.test.mjs'), 'utf8');
+  for (const declaration of EXCLUSION_ACCOUNT) {
+    const said = readingDenials(docstringAbove(src, declaration));
+    assert.deepEqual(
+      said, [],
+      `${declaration}'s docstring says a probe's exclusion is not read off the probe -`
+      + ` "${said.join('"; "')}". callsHarness reads every probe's source and the harness`
+      + ' test skips whatever it answers false for, so the list pins that answer rather than'
+      + ' supplying it, and a docstring saying otherwise is what turns the design back into a'
+      + ' hand-maintained list'
+    );
+  }
+
+  // The clause 0.16.8 took out of HARNESS_IMPORT's docstring, which is what this
+  // reads for. It closed a sentence that was true up to the comma, which is why
+  // three passes over the paragraph left it standing.
+  const was = 'test/probes/overlay-anchor.mjs never names the engagement at all, which is'
+    + ' why the exclusion had to be written down here rather than read off the probe.';
+  assert.deepEqual(
+    readingDenials(was), ['rather than read off the probe'],
+    'the clause this guard was written for is not read as a denial, so the guard passes on'
+    + ` the one sentence it is known to have had to catch - ${was}`
+  );
+
+  // And the sentences that have to keep passing: the one that replaced it, and
+  // the true half of HARNESS_EXCLUSIONS's own account, which spends the same
+  // `rather than` on a different object.
+  const keeps = [
+    'The exclusion itself is read off those same two sources: callsHarness finds no import'
+    + ' in either, the harness run skips them on that reading, and HARNESS_EXCLUSIONS pins'
+    + ' the answer rather than supplying it.',
+    'The probes that call no harness, declared rather than inferred, so a third one has to'
+    + ' be written down here before the suite will accept it.',
+    'Whether a probe calls the harness, read off its own source rather than listed here.',
+  ];
+  for (const text of keeps) {
+    assert.deepEqual(
+      readingDenials(text), [],
+      'a true account of the list is read as a denial, which would leave the paragraph no'
+      + ` correct wording to be written in - ${text}`
+    );
+  }
+});
+
+test('probes: neither excluded probe names the engagement, in an import or in prose', () => {
+  // The negative prose fixture above is this file's own sentence rather than a
+  // probe's, and the reason is a property of the two probes: neither mentions
+  // test/engagement.mjs at all, in an import or in a comment, so there is no
+  // probe line to quote in its place. That was unpinned from the probes' side.
+  // An import is caught by `callsHarness` and named by the `deepEqual` at the
+  // foot of the harness test; a mention in prose is caught by nothing, and prose
+  // is the whole reason the fixture is drawn from this file - a probe whose
+  // header starts naming the engagement is a probe the fixture should quote
+  // instead, with every assertion above still passing.
+  for (const name of HARNESS_EXCLUSIONS) {
+    const file = `test/probes/${name}.mjs`;
+    const src = readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
+    const named = src.split('\n')
+      .map((line, i) => `${file}:${i + 1} ${line.trim()}`)
+      .filter((line) => line.includes('engagement'));
+    assert.deepEqual(
+      named, [],
+      `${file} names the engagement, which the three docstrings above say no excluded probe`
+      + ' does - the first of them is where the negative prose fixture comes from, and it'
+      + ` comes from there because no probe line said it - ${named.join(' | ')}`
     );
   }
 });

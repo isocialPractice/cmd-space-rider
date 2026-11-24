@@ -2,6 +2,73 @@
 
 > 19 earlier entries in `CHANGELOG-2026.md`, newest first.
 
+## [1.0.0-alpha.0.16.8] - 2026-11-24
+
+### Fixed
+
+- `HARNESS_IMPORT`'s docstring in `test/probes.test.mjs` closed on a causal
+  clause the same file denies twice: "test/probes/overlay-anchor.mjs never names
+  the engagement at all, which is why the exclusion had to be written down here
+  rather than read off the probe". The exclusion is read off the probe.
+  `callsHarness` reads that probe's source, finds no engagement import, answers
+  `false`, and the `if (!callsHarness(name)) continue` in the harness test is
+  what drops it from the run. `HARNESS_EXCLUSIONS`'s own docstring says so twice
+  over - "declared rather than inferred, so a third one has to be written down
+  here before the suite will accept it", and "`callsHarness` below is what
+  actually decides, by reading each probe's source, and this list does not drive
+  that - it pins it" - and `callsHarness`'s docstring promises the same from the
+  other side, "read off its own source rather than listed here". The probe not
+  naming the engagement is not an obstacle to reading it; it is exactly what the
+  reading returns. The clause also distinguished nothing: `glyph-tuning` names no
+  engagement either, its one import being `../helpers.mjs`, so whatever it
+  explained was true of both halves of the pair. What is left is the sentence it
+  was attached to - neither probe mentions the engagement, so the negative prose
+  fixture has no probe line to quote and takes this file's own sentence instead -
+  with the list pinning what `callsHarness` already decides. A reader who
+  believed the clause had been told `HARNESS_EXCLUSIONS` decides exclusions,
+  which is the inference `callsHarness`'s docstring was written to refuse, and
+  acting on it would turn the read-off-source design back into a hand-maintained
+  list.
+
+### Added
+
+- `probes: all three docstrings say the exclusion is read off the probe` reads
+  the three paragraphs that state how a probe comes to be left out of the
+  harness run - `HARNESS_EXCLUSIONS`, `HARNESS_IMPORT` and `callsHarness` - and
+  refuses prose denying that the exclusion is read off the probe's own source.
+  Two corrections to those same three paragraphs in two versions had nothing in
+  the suite reading any of them. `docstringAbove` takes each docstring by the
+  declaration it sits above rather than by line, asserting that nothing but
+  whitespace separates the two, so the account travels with what it documents;
+  the reader takes text rather than a path, the way `claimsIn` and `callsHarness`
+  do, which is what lets the clause removed above be held as a fixture the guard
+  has to catch. Checked by restoring that clause: the case fails, names the
+  declaration and quotes the clause back. Three sentences are held beside it as
+  fixtures that have to keep passing - the replacement, and the true `rather
+  than` in each of the other two docstrings, which spend the same words on a
+  different object. Bounding the read to those three paragraphs is what lets the
+  fixtures be written out in full, a guard reading its own whole source being
+  unable to hold the sentence it refuses.
+- `probes: neither excluded probe names the engagement, in an import or in
+  prose` reads both excluded probes for any mention of the engagement, which is
+  what the negative fixture's provenance rests on and was pinned from neither
+  side. An import is caught by `callsHarness` and named by the two-direction
+  `deepEqual` at the foot of the harness test; a mention in a comment is caught
+  by nothing, and prose is the whole reason the fixture is drawn from the test
+  file - a probe whose header starts naming the engagement is a line the fixture
+  should be quoting instead, with every assertion above still passing. Checked
+  by adding such a comment to `test/probes/glyph-tuning.mjs` and reverting: the
+  case fails and names the file and the line. `npm test` is 981 pass, 0 fail.
+
+### Changed
+
+- `docs/development.html` publishes the third reading the rig now makes, beside
+  the two readings of source text it already described: the paragraphs stating
+  how the exclusion is decided are read themselves, with the clause that got
+  past three passes over one of them held beside its replacement, and both
+  excluded probes are read for a mention of the engagement rather than taken on
+  trust.
+
 ## [1.0.0-alpha.0.16.7] - 2026-11-23
 
 ### Changed
