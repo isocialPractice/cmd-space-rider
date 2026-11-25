@@ -8,76 +8,77 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the new guard's account of itself
-
-#### Resolve Issues
-
-- [ ] Exclusion Provenance 2 - the guard written for the account claims a
-  completeness and an affirmation it does not hold
-  - **Issue**: two claims the new case makes about itself are wider than what it
-    checks. **The list.** `EXCLUSION_ACCOUNT`'s docstring
-    (`test/probes.test.mjs:396`) says of its three declarations "Nothing else in
-    the file states it". `READING_DENIED`'s own docstring, written in the same
-    turn, states the same account at `test/probes.test.mjs:433-435` -
-    "`callsHarness` is what decides, by reading each source, and the `continue`
-    in the harness test above is where that answer is spent; HARNESS_EXCLUSIONS
-    pins it rather than supplying it" - and is not in the list, so nothing reads
-    it. Its omission is a gap rather than a necessity: adding
-    `'const READING_DENIED'` to `EXCLUSION_ACCOUNT` and running
-    `node --test test/probes.test.mjs` leaves the case green, checked. It is
-    also the paragraph a denial is likeliest to reach, being the one written
-    about denials, and `docs/development.html` now publishes the same count -
-    "the three paragraphs that state the account" - so the page inherits the
-    claim. **The affirmation.** The case is titled `probes: all three docstrings
-    say the exclusion is read off the probe` (`test/probes.test.mjs:467`) and
-    holds only that none of the three denies it. Delete the sentence 0.16.8
-    wrote at `test/probes.test.mjs:163-166`, "The exclusion itself is read off
-    those same two sources...", leaving that paragraph silent on the reading,
-    and the case passes under a name saying the paragraph says it. The file
-    names its other guards by the refusal they make - `probes: no sentence
-    singles a probe out by a property the pair shares` - and `READING_DENIED`'s
-    docstring says as much at `test/probes.test.mjs:443`, "What is matched is
-    the denial rather than the subject". A reader who goes by the name believes
-    the affirmative half is pinned when only its denial is, which is the same
-    belief about the same paragraphs that 0.16.7 and 0.16.8 were each spent on.
-  - **Goal**: close each claim to what is checked, either by widening the check
-    or by narrowing the sentence, and say which was chosen. For the list: add
-    `const READING_DENIED`, and anything else in the file that states the
-    account, to `EXCLUSION_ACCOUNT` and rewrite the "Nothing else" sentence to
-    say what the list holds and how a later paragraph joins it; or keep three
-    and name the paragraphs that are out of it and on what ground.
-    `docs/development.html`'s "three paragraphs" sentence moves with whichever
-    is taken. For the name: rename the case to the refusal it makes, or hold the
-    affirmation as well - a fixture per docstring for the sentence that affirms
-    the reading, so deleting one fails - and keep the name only if the second is
-    chosen. Neither half needs a new reader; `readingDenials` already takes text
-    rather than a path.
-  - From: UI/UX Override - the marker is no longer a test boundary
+### Code Review Override - the account's membership, and the clone's changelog
 
 #### Found Issues
 
-- [ ] The engagement-mention reader matches against the path it printed, not
-  only against the probe's line
-  - **Issue**: `probes: neither excluded probe names the engagement, in an
-    import or in prose` (`test/probes.test.mjs:525-527`) maps every line of a
-    probe to `` `${file}:${i + 1} ${line.trim()}` `` and then filters that
-    composed string for `engagement`, so the path the reader wrote is part of
-    what the match is made against. For the declared pair it reads right -
-    neither `glyph-tuning` nor `overlay-anchor` holds the word anywhere. A probe
-    whose own name holds it does not: an `engagement-trace` added to
-    `HARNESS_EXCLUSIONS` for importing no engagement reports every one of its
-    lines as a mention, and the message names the file as naming the engagement
-    when no line of it does. The guard's whole subject is text read off a file
-    rather than text the reader supplied, which is the one property the composed
-    string gives up.
-  - **Goal**: filter on the probe's own line and compose the message afterwards,
-    keeping the index - `.filter(...)` before `.map(...)`, or a filter over
-    `line` with `i` carried - so what is matched is the line and nothing the
-    reader added. `node --test test/probes.test.mjs` stays green, and the check
-    that it still catches a mention is the one the changelog already records:
-    add a comment naming the engagement to `test/probes/glyph-tuning.mjs`, see
-    the case fail with the file and line named, and revert.
-  - From: Code Review Override - the new guard's account of itself
+- [ ] Nothing reads `EXCLUSION_ACCOUNT`'s membership, which is why the same
+  paragraph was omitted from it twice
+  - **Issue**: the list at `test/probes.test.mjs:419-425` is hand-kept, and the
+    case below it only holds the paragraphs that are *in* it. Nothing answers
+    whether a paragraph stating the account is missing from it, so the omission
+    has now happened in two consecutive versions: 0.16.8 wrote the list and left
+    out `READING_DENIED`, which its own turn created, and 0.16.9 added
+    `READING_DENIED` and left out `READING_AFFIRMED`, which its own turn created.
+    Both were paragraphs written in the same turn as the edit to the list, and
+    both state the reading in the same words as paragraphs already listed. This
+    review fixed the second instance; the mechanism that produced both is
+    untouched, and the next declaration whose docstring affirms the reading will
+    be unread the same way. The published half is the same shape:
+    `docs/development.html`'s third-reading paragraph enumerates the account
+    member by member - "the declared pair, the import pattern, the function that
+    decides, and the two sets of shapes it reads a denial and an affirmation
+    by" - which 0.16.9 wrote in place of the count "the three paragraphs"
+    precisely because a count goes stale when a paragraph joins. An enumeration
+    goes stale the same way, and nothing reads it against the list.
+  - **Goal**: pin the membership rather than the members. Read every top-level
+    declaration's docstring with the `docstringAbove` the case already has, take
+    the ones `readingAffirmations` answers for, and compare that set against
+    `EXCLUSION_ACCOUNT` in both directions, so a new paragraph affirming the
+    reading has to be listed and a listed one that stops affirming is named. The
+    comparison answers exactly the five current members today, checked by
+    reading every top-level declaration in the file, so the case is green as it
+    stands. Decide and record the cost first: `docstringAbove`'s own docstring
+    (`test/probes.test.mjs:427-434`) argues for bounding the read rather than
+    running it over the whole file, and a future docstring that says "read off a
+    source" about something else would be pulled in - either narrow what counts
+    as the account's subject, or say in the docstring why the false positive is
+    the cheaper half. Whichever is chosen, the `docs/development.html`
+    enumeration wants pinning to the list or replacing with a sentence that no
+    new member can falsify; `publishedExclusions` is the precedent for reading a
+    sentence back out of that page by its shape.
+  - From: Code Review Override - the account's membership, and the clone's
+    changelog
+- [ ] `npm test` cannot pass in a fresh clone - `CHANGELOG.md` points at a file
+  `.gitignore` keeps out of the repository
+  - **Issue**: `CHANGELOG.md:3` reads "> 20 earlier entries in
+    `CHANGELOG-2026.md`, newest first.", and `.gitignore:29` is
+    `CHANGELOG-*.md`, so `git ls-tree HEAD` holds no such file.
+    `test/changelog-roll.test.mjs`'s first case compares its pointers against
+    the year files beside it with a `deepEqual` in both directions, so in a clone
+    it reads one pointer and no file and fails: "CHANGELOG.md points at
+    CHANGELOG-2026.md and the archives beside it are none". The second case
+    already anticipates the clone - "A clone where the roll has never run has no
+    archive, which is an ordinary state rather than a fault. The check above
+    already holds it to having no pointer either" - but the pointer is in the
+    tracked file, so the clone has the pointer without the archive. It passes
+    here only because the working copy still holds the ignored file. Nothing in
+    this turn caused it: `66e5131` ignored and untracked `CHANGELOG-*.md` and
+    `TODO-archive.md` deliberately, and this turn only rewrote the pointer's
+    figure from 19 to 20. `TODO.md`'s own pointer names `TODO-archive.md` the
+    same way, and no test reads that one.
+  - **Goal**: this is a decision rather than a repair, and it is the owner's.
+    Three answers, and the item wants whichever they pick recorded wherever the
+    reason belongs: track the archives again, which undoes `66e5131`; keep them
+    ignored and stop publishing a pointer to them in a tracked file, which means
+    the roll is the automation tool's behaviour and not this repository's to
+    change; or keep both and have `test/changelog-roll.test.mjs` read a pointer
+    whose file is absent as the ignored-archive state rather than as drift, which
+    gives up the half of the check that catches a hand-edited pointer. Do not
+    flip the `.gitignore` unattended - `66e5131` is the owner's own commit and
+    says in its message what it was for.
+  - From: Code Review Override - the account's membership, and the clone's
+    changelog
 
 ## Quick Wins
 
@@ -123,55 +124,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 222 earlier items in `TODO-archive.md`, newest last.
+> 224 earlier items in `TODO-archive.md`, newest last.
 
-- [x] The roadmap note says this turn changed one tracked file, and it changed
-  the changelog in two places
-  - **Issue**: `.claude/current.roadmap.md` line 17 reads "The one change to a
-    tracked file is this turn's `## [Unreleased]` note in `CHANGELOG.md`". The
-    same turn also rolled 17 entries out of `CHANGELOG.md` - 960 lines deleted
-    from a tracked file - and created `CHANGELOG-2026.md`, which is neither
-    ignored nor tracked yet and becomes a tracked file at the next commit. Both
-    files carry the turn's own timestamp, so the roll was not a later edit the
-    sentence predates. The cost is the same one this file has already shown
-    today: it says of itself that it "is what the review requests are written
-    from", and the stale marker bullet in **Where the work has been coming
-    from** is why both of this turn's review requests were scoped on a claim
-    that stopped being true at `1.0.0-alpha.0.15.3`. A run reading "one change"
-    looks at one change.
-  - **Goal**: Say both changes in **What this run did** - the `## [Unreleased]`
-    note and the 17-entry roll with the file it went to. The canvas-marker
-    bullet in the same file belongs to the first item under this header and is
-    not this one's to rewrite.
-  - From: UI/UX Override - the marker is no longer a test boundary
-- [x] Harness Form Reader 1
-  - **Issue**: the third block of `probes: a harness call is read whichever
-    import form it is written in` (`test/probes.test.mjs:368-381`) asserts
-    `callsHarness(name) === false` for each name in `HARNESS_EXCLUSIONS`, and
-    its comment says that is "the one reading the assertions above cannot stand
-    in for" because "nothing else in the file refuses it". Both halves are
-    false. `test/probes.test.mjs:596-600` has asserted the same thing since
-    before this turn -
-    `pair.filter((name) => !callsHarness(name)).sort()` against `pair`, through
-    the same function - and the two-direction `deepEqual` at
-    `test/probes.test.mjs:301` is a third reader. Appending
-    `import { BUILDS } from '../engagement.mjs';` to
-    `test/probes/overlay-anchor.mjs` fails three cases, two of them pre-dating
-    the new one. The misread the item was raised about - `callsHarness`
-    answering `false` for a probe that does import the engagement - is caught by
-    none of the three, including the new block: all three assert `false`, which
-    is what a misread returns. What does catch it is the `forms` loop above the
-    block, and that loop is the whole of the fix.
-  - **Goal**: either drop the `HARNESS_EXCLUSIONS` block and say in the comment
-    that the `forms` loop is what covers the declared pair, since a misread is a
-    property of the pattern rather than of those two files; or keep it and
-    rewrite the comment to what it does - a third reading of a condition two
-    older assertions already hold, named as deliberate duplication rather than
-    as the only reader. Do not leave the comment claiming sole coverage either
-    way: a later reader deleting `test/probes.test.mjs:596-600` would be told by
-    that comment that the new block stands in for it, and a reader deleting the
-    new block would be told the opposite by nothing at all.
-  - From: UI/UX Override - the marker is no longer a test boundary
 - [x] **Exclusion Provenance**: Harness Form Reader 2
   - **Issue**: `HARNESS_IMPORT`'s docstring (`test/probes.test.mjs:158-160`)
     says "test/probes/overlay-anchor.mjs's header says it 'imports nothing from
@@ -243,3 +197,66 @@ the roadmap section each one came from.
     on it would turn the read-off-source design back into a hand-maintained
     list.
   - From: UI/UX Override - the marker is no longer a test boundary
+- [x] Exclusion Provenance 2 - the guard written for the account claims a
+  completeness and an affirmation it does not hold
+  - **Issue**: two claims the new case makes about itself are wider than what it
+    checks. **The list.** `EXCLUSION_ACCOUNT`'s docstring
+    (`test/probes.test.mjs:396`) says of its three declarations "Nothing else in
+    the file states it". `READING_DENIED`'s own docstring, written in the same
+    turn, states the same account at `test/probes.test.mjs:433-435` -
+    "`callsHarness` is what decides, by reading each source, and the `continue`
+    in the harness test above is where that answer is spent; HARNESS_EXCLUSIONS
+    pins it rather than supplying it" - and is not in the list, so nothing reads
+    it. Its omission is a gap rather than a necessity: adding
+    `'const READING_DENIED'` to `EXCLUSION_ACCOUNT` and running
+    `node --test test/probes.test.mjs` leaves the case green, checked. It is
+    also the paragraph a denial is likeliest to reach, being the one written
+    about denials, and `docs/development.html` now publishes the same count -
+    "the three paragraphs that state the account" - so the page inherits the
+    claim. **The affirmation.** The case is titled `probes: all three docstrings
+    say the exclusion is read off the probe` (`test/probes.test.mjs:467`) and
+    holds only that none of the three denies it. Delete the sentence 0.16.8
+    wrote at `test/probes.test.mjs:163-166`, "The exclusion itself is read off
+    those same two sources...", leaving that paragraph silent on the reading,
+    and the case passes under a name saying the paragraph says it. The file
+    names its other guards by the refusal they make - `probes: no sentence
+    singles a probe out by a property the pair shares` - and `READING_DENIED`'s
+    docstring says as much at `test/probes.test.mjs:443`, "What is matched is
+    the denial rather than the subject". A reader who goes by the name believes
+    the affirmative half is pinned when only its denial is, which is the same
+    belief about the same paragraphs that 0.16.7 and 0.16.8 were each spent on.
+  - **Goal**: close each claim to what is checked, either by widening the check
+    or by narrowing the sentence, and say which was chosen. For the list: add
+    `const READING_DENIED`, and anything else in the file that states the
+    account, to `EXCLUSION_ACCOUNT` and rewrite the "Nothing else" sentence to
+    say what the list holds and how a later paragraph joins it; or keep three
+    and name the paragraphs that are out of it and on what ground.
+    `docs/development.html`'s "three paragraphs" sentence moves with whichever
+    is taken. For the name: rename the case to the refusal it makes, or hold the
+    affirmation as well - a fixture per docstring for the sentence that affirms
+    the reading, so deleting one fails - and keep the name only if the second is
+    chosen. Neither half needs a new reader; `readingDenials` already takes text
+    rather than a path.
+  - From: UI/UX Override - the marker is no longer a test boundary
+- [x] The engagement-mention reader matches against the path it printed, not
+  only against the probe's line
+  - **Issue**: `probes: neither excluded probe names the engagement, in an
+    import or in prose` (`test/probes.test.mjs:525-527`) maps every line of a
+    probe to `` `${file}:${i + 1} ${line.trim()}` `` and then filters that
+    composed string for `engagement`, so the path the reader wrote is part of
+    what the match is made against. For the declared pair it reads right -
+    neither `glyph-tuning` nor `overlay-anchor` holds the word anywhere. A probe
+    whose own name holds it does not: an `engagement-trace` added to
+    `HARNESS_EXCLUSIONS` for importing no engagement reports every one of its
+    lines as a mention, and the message names the file as naming the engagement
+    when no line of it does. The guard's whole subject is text read off a file
+    rather than text the reader supplied, which is the one property the composed
+    string gives up.
+  - **Goal**: filter on the probe's own line and compose the message afterwards,
+    keeping the index - `.filter(...)` before `.map(...)`, or a filter over
+    `line` with `i` carried - so what is matched is the line and nothing the
+    reader added. `node --test test/probes.test.mjs` stays green, and the check
+    that it still catches a mention is the one the changelog already records:
+    add a comment naming the engagement to `test/probes/glyph-tuning.mjs`, see
+    the case fail with the file and line named, and revert.
+  - From: Code Review Override - the new guard's account of itself
