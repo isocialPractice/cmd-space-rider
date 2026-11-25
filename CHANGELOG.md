@@ -1,6 +1,92 @@
 # Changelog
 
-> 19 earlier entries in `CHANGELOG-2026.md`, newest first.
+> 20 earlier entries in `CHANGELOG-2026.md`, newest first.
+
+## [1.0.0-alpha.0.16.9] - 2026-11-25
+
+### Fixed
+
+- `probes: neither excluded probe names the engagement, in an import or in
+  prose` in `test/probes.test.mjs` matched against the path it had written
+  rather than against the probe's own line. Every line was mapped to
+  `` `${file}:${i + 1} ${line.trim()}` `` and the composed string filtered for
+  `engagement`, so the text the reader supplied was part of what the match was
+  made against - the one property the guard's subject does not have, its whole
+  subject being text read off a file. The declared pair reads the same either
+  way, neither `glyph-tuning` nor `overlay-anchor` holding the word anywhere,
+  which is what left the order free to be the wrong one. A probe whose own name
+  held it did not: an `engagement-trace` declared in `HARNESS_EXCLUSIONS` for
+  importing no engagement reported every one of its lines as a mention, blank
+  lines included, and the message named the file as naming the engagement when
+  no line of it did. The filter now runs on the line and the message is composed
+  afterwards with the index carried. Checked both ways: against a three-line
+  `engagement-trace` the old order reports three mentions and the new one
+  reports the single line that holds the word, and adding a comment naming the
+  engagement to `test/probes/glyph-tuning.mjs` still fails the case with the
+  file and line named.
+- `EXCLUSION_ACCOUNT`'s docstring said of its three declarations that "nothing
+  else in the file states it", and `READING_DENIED`'s own docstring, written in
+  the same turn, states the same account: "`callsHarness` is what decides, by
+  reading each source, and the `continue` in the harness test above is where
+  that answer is spent; HARNESS_EXCLUSIONS pins it rather than supplying it".
+  It was out of the list, so nothing read it, and it is the paragraph a denial
+  is likeliest to reach, being the one written about denials.
+  `const READING_DENIED` joins the list, which the case takes green, and the
+  docstring now says what puts a paragraph in, a sentence affirming the reading,
+  and names the declarations out of it and on what ground:
+  `publishedExclusions` accounts for the docs copy being pinned, and
+  `docstringAbove`, `flatProse`, `readingDenials` and `readingAffirmations` for
+  how the text is found, flattened and read. Checked by adding
+  `function publishedExclusions` to the list, which fails the case on the
+  affirmation that paragraph has no sentence for.
+- `READING_AFFIRMED`'s own docstring, added below in the same turn as the fix
+  above, opens "Prose affirming what the shapes above refuse: the exclusion read
+  off the probe's own source" and was itself left out of `EXCLUSION_ACCOUNT` - so
+  the omission the entry above corrects was reproduced in the turn that corrected
+  it, and the docstring's ground for what is out of the list, "the ones that say
+  nothing about the reading", was false of it. It states the reading twice, in
+  the same words as two of the four paragraphs that were in the list, and nothing
+  read it: a `rather than read off the probe` clause added to it left the suite
+  green, where the same clause in any listed paragraph fails.
+  `const READING_AFFIRMED` joins the list, taken green, and the ground is now
+  one a reader can check: every other declaration in the file carries no
+  sentence affirming the reading, so the five in the list are every paragraph
+  that states it. Checked by adding such a clause to that docstring - the case
+  fails, names the declaration and quotes the clause back - and by reading every
+  top-level declaration's docstring for an affirmation, which answers these five
+  and nothing else.
+- The case was titled `probes: all three docstrings say the exclusion is read
+  off the probe` and held only that none of the three denied it. Deleting the
+  sentence 0.16.8 wrote into `HARNESS_IMPORT`'s docstring - "The exclusion
+  itself is read off those same two sources" - left that paragraph silent on the
+  reading, denying nothing, and the case green under a name saying the paragraph
+  states it. The count is also one the next paragraph to join the account would
+  leave behind, which is the same way `test/changelog-roll.test.mjs`'s header
+  went stale: it quoted how many entries `CHANGELOG-2026.md` held, the next roll
+  moved the figure, and 0.16.7 took the number out rather than restate it. Both
+  paragraphs joined the account this turn, which is the figure moving again.
+  Renamed to `probes: every docstring in the account says the exclusion
+  is read off the probe`, and the affirmation is now held rather than only its
+  denial refused.
+
+### Added
+
+- The account case asks each docstring to state the reading as well as to refuse
+  the denial, which is what makes its name true of what it checks.
+  `READING_AFFIRMED` reads the one shape the file writes the affirmation in, the
+  alternation carrying both phrasings - the answer "read off" a source, and
+  `callsHarness` "reading each" of them - and `readingAffirmations` takes text
+  rather than a path, the way `readingDenials` and `claimsIn` do. Both readers
+  flatten through one `flatProse` rather than a copy each, because a denial and
+  an affirmation read off differently flattened text could both be false of the
+  same paragraph, which is the one answer the pair must not be able to give. Two
+  fixtures tell a deletion from the sentence it removed: the sentence that states
+  the reading has to be read as an affirmation, and the paragraph left behind by
+  deleting it has to be read as neither an affirmation nor a denial. Checked by
+  deleting that sentence from `HARNESS_IMPORT`'s docstring, which now fails the
+  case and names the declaration where before it passed.
+  `docs/development.html` publishes the same account, with the count out of it
+  and both sets of shapes named rather than the denial's alone.
 
 ## [1.0.0-alpha.0.16.8] - 2026-11-24
 
@@ -5063,168 +5149,3 @@
 - The development and cheatsheet pages both said every probe takes a grid and
   a build, which `overlay-anchor` does not. Both now say it is the probes that
   fly a shot that do, and name the exception.
-
-## [0.7.1-alpha] - 2026-09-25
-
-### Added
-
-- The documentation is now a site under `docs/`, published by GitHub Pages
-  alongside the game. The README had grown to 309 lines, past the 300-line
-  threshold the automation measures it against, so its seven level 2 sections
-  were split one to a page: Features, Getting Started, Usage (CLI), Project
-  Structure, Development, Terminal Requirements and How It Works. The text was
-  moved rather than rewritten - every word of those sections is carried into
-  the pages, checked word by word against the README as it stood before the
-  split - so nothing that was documented has been lost or shortened in the
-  move.
-- `QUICKSTART.md` and `CHEATSHEET.md`, both also site pages. The quickstart is
-  the shortest path to flying, in a browser or a terminal. The cheatsheet is
-  for someone who has already read the documentation and wants the keys, the
-  flags, the scripts and the figures on one screen.
-- `DESIGN_LANGUAGE.md`, recording where the site's look came from. Nothing in
-  it was invented: the palette is the game's own `base16` table, the light
-  theme is the game's own `LIGHT_INK` re-inking of it, and the geometry is read
-  off `icon.svg`, which holds seven shapes and not one curve - which is why
-  nothing on the site is rounded. Two values are not quoted from the game, and
-  both are named there with the reason: `GRAY` (8) reaches only 2.82:1 on black
-  and `LIGHT_INK[8]` only 3.06:1 on paper, so neither carries text, and muted
-  text uses a compliant tone in each scheme instead. Every text pair on the
-  site was measured and reaches at least 4.5:1.
-- `.nojekyll` at the published root, so nothing on the site is dropped for
-  beginning with an underscore.
-- The touch overlay's geometry is pinned in `test/browser-shell.test.mjs`. Four
-  checks resolve the `#stick`, `#fire` and `#boost` rules the way a browser does
-  - `vw` and `vh` against the viewport, `aspect-ratio:1` taking the height off
-  the resolved width, `max-width` capping both - then walk eight device shapes:
-  two phones in portrait, four in landscape and a tablet each way. Each box is
-  converted to the character rows it covers and checked against the rows the HUD
-  and the footer own. Run against the rules as they stood before the fix below,
-  they reproduce that fault's measured figures exactly - 55.4px of gap at a
-  667px viewport, and the stick in row 19 of a 66x20 grid - which is how the
-  assertions were checked before being trusted.
-- `test/hud-row.test.mjs` covers the fourth thing drawn on the shared HUD row.
-  The file was written for three tenants - the combo counter left-aligned, the
-  debug label and the NEW BEST banner centred on it - and the warp banner has
-  since become a fourth, drawn after the counter and so the one that would cover
-  it. The counter and the banner are now walked together across the supported
-  widths at three chain lengths and two warp levels, and the both-builds check
-  covers three stagings rather than one. The margin held on arithmetic alone
-  until now: the counter ends at column 9, and an eighteen-column banner starts
-  at column 21 on the 60-column floor.
-
-### Changed
-
-- `README.md` is now a front door rather than a manual: 116 lines and 6,815
-  characters, down from 309 and 23,059. Each section keeps a short stand-in -
-  the install block, the flag list, the five keys that matter, the npm scripts
-  - and its heading links to the page carrying the full text.
-- The on-screen controls are anchored to the character grid rather than to the
-  window. `handleResize` publishes `--footerpx` - the band at the foot of the
-  viewport holding the footer's two rows and whatever the grid leaves unpainted
-  below them - and the three control rules read it. No viewport unit can know
-  how tall two character rows are, because that depends on the font the fitter
-  settled on.
-- `DESIGN_LANGUAGE.md` and `docs/assets/style.css` agree again. The stylesheet
-  opens by saying every value in it comes from the design file, and three things
-  had come apart: the light scheme declared an accent the light table had no row
-  for, it split the rule colour from the decoration colour while the table gave
-  one row for both, and three accent properties were declared in both schemes
-  and used nowhere. The light table now carries the two rows the dark table
-  already had, measured the same way - `#00757f` at 4.88:1 for rules, `#8a8a94`
-  at 3.06:1 for decoration - plus the warn accent at 4.07:1, held to decoration
-  in both schemes since the light value does not reach 4.5:1. The three unused
-  properties are gone from the stylesheet and from both tables, with a note
-  saying why: ten pages of prose have no success state, no error state and no
-  warp transition to colour.
-- Three sizes that were off the declared scales are on them or recorded as
-  exceptions. The lede moves from 18px to 20px, which is the type scale's own
-  step. The collapsed menu's height cap reads `--bar` - the fixed bar's height,
-  declared once as `--s7` plus its 2px border - rather than repeating `56px`.
-  The 10px dropdown caret stays as it is and is now recorded under Type as the
-  one size on the site below the scale's floor, because at 14px it reads as
-  another character of the button's label instead of as a caret.
-
-### Fixed
-
-- The quickstart page split every wrapped list item in "How to survive" into a
-  bullet and a stray paragraph, so four of the six ended mid-sentence - a
-  bullet reading "has about a one" followed by a paragraph reading "in three
-  chance of dropping a powerup". The six items are one list again, each
-  carrying the whole of its sentence.
-- The site home claimed every figure in the documentation comes from a probe.
-  The probes back the measured figures in this repository's comments, tests and
-  changelog; the figures the pages quote - shield costs, point values, timings -
-  are constants in `src/types.ts` and `src/game.ts`. The sentence now says what
-  the probes actually cover, which is what the development page already said.
-- The README's structure tree named `docs/` and the Project Structure page it
-  links to did not list it, while the README claimed the page listed every file.
-  The page's tree now carries `docs/` opened one level, and the README names the
-  directories the page covers: every file under `src/`, `test/` and `docs/`,
-  with the root files the game and the site are built from.
-- The on-screen controls covered the HUD and the footer on a phone held in
-  landscape, which is the orientation a 60x20 tunnel is widest in. BOOST's
-  offset was written as FIRE's width plus a gap, but `max-width` caps FIRE's
-  height at 118px and not the offset, so past a viewport of about 492px the gap
-  grew without bound: 7.5px at 375 wide, 55.4px at 667, 119.9px at 915 and
-  188.8px at 1180, by which point BOOST had floated to the top right corner and
-  onto the shield bar. Separately the stick and FIRE both sat at `6vh`, which is
-  under the footer's two character rows - 22.5px against 36px on a 375-high
-  viewport - so on a short viewport they covered the status strip carrying
-  `SPD`, the powerup badges and `MUTED`. Neither happens at any of the eight
-  shapes the tests now walk.
-- Four site pages opened on an `<h3>` below their `<h1>`, with no level 2
-  between. `usage.html`, `development.html`, `how-it-works.html` and
-  `getting-started.html` were made from README sections that had `###`
-  subsections, and carried that level through verbatim, so a screen reader
-  walking the outline read level 1 then level 3 - which is what WCAG 1.3.1 is
-  about - and the stylesheet drew the same rank of section two ways, since `h2`
-  carries a section rule and `h3` does not. On `getting-started.html`
-  "Prerequisites" landed on `h4`, which the stylesheet sets at 16px in
-  `--text-strong`: indistinguishable from a bold paragraph. Each of the four is
-  promoted one rank. The `id` attributes are untouched, and all 51 in-site
-  anchors were checked to still resolve.
-- Five links on `docs/quickstart.html` and `docs/cheatsheet.html` reached their
-  own siblings by deployed URL rather than by file name, so opening either page
-  from a clone with no network left the local copy. They came across from
-  `QUICKSTART.md` and `CHEATSHEET.md`, where the absolute form is right because
-  GitHub renders those files at another path: the two markdown files keep it,
-  and the pages are relative, as `DESIGN_LANGUAGE.md` says the site is
-  throughout.
-- `docs/getting-started.html` still gave `git clone <repository-url>`, the
-  placeholder the README carried before the split - on the one page the README's
-  install block sends a reader to for the rest of the detail. All three files
-  now give the same command.
-- `docs/project-structure.html` listed none of the files the site is made of:
-  `QUICKSTART.md`, `CHEATSHEET.md`, `DESIGN_LANGUAGE.md`, and `.nojekyll`, which
-  is the file the publish depends on. Its `docs/` entry did not open either, so
-  the stylesheet, the menu script and the site icon appeared nowhere. The root
-  block now carries the four files, and `docs/` is opened one level the way
-  `src/` and `test/` already were.
-- The `0.7.0-alpha` entry below said light mode re-inks 26 indices. `LIGHT_INK`
-  holds 24, and `C` names 24 colours at 24 distinct indices - which is what
-  `test/browser-shell.test.mjs` asserts - so the claim was right and only the
-  figure was wrong, which is the worse way round: a reader checking it against
-  the file finds a table that disagrees and no way to tell which is the error.
-- A comment in `test/powerups.test.mjs` explained the 20-unit tolerance on a
-  drop's z by a frame ordering that runs the other way round. `updatePowerups`
-  is called before `updateBullets`, and `dropPowerup` is called from inside
-  `updateBullets`, so a drop created on a frame is not drifted until the next
-  one. What the tolerance absorbs is one frame of the mine's own `advance`,
-  carried forward by `updateMines` before the bullet takes its last hit point.
-  The assertion was never wrong; the comment a later reader would use to judge
-  whether a tighter tolerance was safe was. The `dropPowerup` doc comment in
-  `src/game.ts` and `index.html` now says when a drop first moves.
-
-### Notes
-
-- The site needed no deploy workflow and none was added. This repository's
-  Pages source is the `main` branch root, which serves every path on the
-  branch, so `docs/` publishes on push and the game keeps the root URL. A
-  workflow would have been ignored rather than run. Whether to move Pages onto
-  Actions instead is queued as a roadmap item rather than done here, since
-  flipping the source on a working site can take it down.
-- The first deploy is confirmed. GitHub's own branch build reports `built` at the
-  commit carrying `docs/`, and the site answers 200. Because Pages serves this
-  repository from the branch root rather than from Actions, the build is
-  GitHub's and `gh api .../pages/builds/latest` is what reports it; `gh run list`
-  has no workflow to report on here and its empty result is not a failure.

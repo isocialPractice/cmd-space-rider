@@ -391,10 +391,27 @@ test('probes: a harness call is read whichever import form it is written in', ()
 });
 
 /**
- * The three declarations whose docstrings account for how a probe comes to be
- * left out of the harness run: the declared pair, the pattern that reads an
- * import, and the function that decides. Nothing else in the file states it, and
- * between them they have to state one account rather than two.
+ * The declarations whose docstrings account for how a probe comes to be left out
+ * of the harness run: the declared pair, the pattern that reads an import, the
+ * function that decides, and the two sets of shapes this case reads for - which
+ * state the account themselves, in the course of saying what they refuse and
+ * what they accept. Between them they have to state one account rather than two.
+ *
+ * What puts a paragraph in this list is a sentence affirming the reading, and a
+ * paragraph has twice been left out of it on no better ground than being written
+ * in the same turn as the list: `READING_DENIED` for a version, under a sentence
+ * saying of three that "nothing else in the file states it", and
+ * `READING_AFFIRMED` in the turn that corrected that. Both are paragraphs a
+ * denial is likeliest to reach, being the ones written about denials, and
+ * neither was read. Every other declaration in the file is out because it
+ * carries no such sentence, the nearest of them being the ones this case is
+ * built out of: `publishedExclusions` accounts for the docs copy being pinned,
+ * and `docstringAbove`, `flatProse`, `readingDenials`, `readingAffirmations` and
+ * this docstring for how the text is found, flattened, read and listed. Each
+ * would be held here to an account it does not make, which is what adding one
+ * shows - the case fails on the affirmation that paragraph has no sentence for.
+ * Membership is still hand-kept, which is what let the same omission happen
+ * twice.
  *
  * Read by name rather than by line, so the account travels with the declaration
  * it belongs to.
@@ -403,15 +420,17 @@ const EXCLUSION_ACCOUNT = [
   'const HARNESS_EXCLUSIONS',
   'const HARNESS_IMPORT',
   'function callsHarness',
+  'const READING_DENIED',
+  'const READING_AFFIRMED',
 ];
 
 /**
  * The docstring directly above a top-level declaration, with nothing but
  * whitespace between the two.
  *
- * Bounded to the three declarations above rather than run over the whole file,
- * which is what lets the fixtures below be written out in full: a guard that
- * reads its own source cannot hold the sentence it refuses.
+ * Bounded to the declarations above rather than run over the whole file, which
+ * is what lets the fixtures below be written out in full: a guard that reads its
+ * own source cannot hold the sentence it refuses.
  */
 function docstringAbove(src, declaration) {
   const at = src.indexOf(`\n${declaration}`);
@@ -437,8 +456,8 @@ function docstringAbove(src, declaration) {
  * which is the inference `callsHarness`'s docstring was written to refuse, and
  * acting on it turns a read-off-source design back into a hand-maintained list.
  * 0.16.8 took such a clause out of HARNESS_IMPORT's docstring - the second
- * correction to those three paragraphs in two versions - and nothing in the
- * suite had read any of them.
+ * correction to these paragraphs in two versions - and nothing in the suite had
+ * read any of them.
  *
  * What is matched is the denial rather than the subject, because the subject is
  * what varies and the true account needs the same words for itself.
@@ -452,22 +471,57 @@ const READING_DENIED = [
 ];
 
 /**
- * Every denial in a stretch of text, read flattened so a clause broken over two
- * comment lines is one sentence.
+ * A docstring or a loose sentence as one line, with the comment furniture gone,
+ * so a clause broken over two comment lines is one sentence to both readers
+ * below.
+ *
+ * Shared rather than written out in each of them: a denial and an affirmation
+ * read off differently flattened text could both be false of the same
+ * paragraph, which is the one answer this pair must not be able to give.
+ */
+const flatProse = (text) => text.replace(/^\s*\*\s?/gm, '').replace(/`/g, '').replace(/\s+/g, ' ');
+
+/**
+ * Every denial in a stretch of text.
  *
  * Takes the text rather than a path, the way `claimsIn` and `callsHarness` do:
  * the clause this was written for is gone from the file, so a reader that could
  * only take the file as it stands would never have been shown to catch anything.
  */
 function readingDenials(text) {
-  const flat = text.replace(/^\s*\*\s?/gm, '').replace(/`/g, '').replace(/\s+/g, ' ');
+  const flat = flatProse(text);
   return READING_DENIED.flatMap((shape) => [...flat.matchAll(shape)].map(([said]) => said));
 }
 
-test('probes: all three docstrings say the exclusion is read off the probe', () => {
+/**
+ * Prose affirming what the shapes above refuse: the exclusion read off the
+ * probe's own source.
+ *
+ * Refusing the denial passes a paragraph that says nothing either way, and that
+ * is how the case below came to be named for an affirmation it did not hold.
+ * Deleting the sentence 0.16.8 wrote into HARNESS_IMPORT's docstring - "The
+ * exclusion itself is read off those same two sources" - leaves that paragraph
+ * silent on the reading and denying nothing, so the case passed under a name
+ * saying the paragraph states it. Both halves are held per docstring now, and
+ * the two fixtures in the case tell the deletion from the sentence it removed.
+ *
+ * One shape, which the alternation is what carries: the account is written
+ * either as the answer being "read off" a source or as `callsHarness` "reading
+ * each" of them, and the file has both. The noun has to follow, so a sentence
+ * about reading something else is not an affirmation of this one.
+ */
+const READING_AFFIRMED = /read(?:s|ing)? (?:off|each) [a-z' ]*(?:probe|source)s?/g;
+
+/** Every affirmation in a stretch of text, flattened the same way. */
+function readingAffirmations(text) {
+  return [...flatProse(text).matchAll(READING_AFFIRMED)].map(([said]) => said);
+}
+
+test('probes: every docstring in the account says the exclusion is read off the probe', () => {
   const src = readFileSync(join(REPO_ROOT, 'test', 'probes.test.mjs'), 'utf8');
   for (const declaration of EXCLUSION_ACCOUNT) {
-    const said = readingDenials(docstringAbove(src, declaration));
+    const paragraph = docstringAbove(src, declaration);
+    const said = readingDenials(paragraph);
     assert.deepEqual(
       said, [],
       `${declaration}'s docstring says a probe's exclusion is not read off the probe -`
@@ -475,6 +529,18 @@ test('probes: all three docstrings say the exclusion is read off the probe', () 
       + ' test skips whatever it answers false for, so the list pins that answer rather than'
       + ' supplying it, and a docstring saying otherwise is what turns the design back into a'
       + ' hand-maintained list'
+    );
+
+    // And the half the name promises, which refusing the denial does not reach:
+    // a paragraph silent on the reading denies nothing, so it passed the check
+    // above under a name saying it states the account.
+    assert.ok(
+      readingAffirmations(paragraph).length,
+      `${declaration}'s docstring never says the exclusion is read off the probe's own`
+      + ' source, so this case holds it to an account it does not make - either the sentence'
+      + ' affirming the reading has gone out of the paragraph, in whichever of the two'
+      + ' phrasings READING_AFFIRMED takes, or the declaration belongs out of'
+      + ' EXCLUSION_ACCOUNT'
     );
   }
 
@@ -491,11 +557,14 @@ test('probes: all three docstrings say the exclusion is read off the probe', () 
 
   // And the sentences that have to keep passing: the one that replaced it, and
   // the true half of HARNESS_EXCLUSIONS's own account, which spends the same
-  // `rather than` on a different object.
+  // `rather than` on a different object. The first is the affirmation's fixture
+  // below as well, declared once so both halves are read off one sentence
+  // rather than off two copies of it that can drift.
+  const states = 'The exclusion itself is read off those same two sources: callsHarness finds'
+    + ' no import in either, the harness run skips them on that reading, and HARNESS_EXCLUSIONS'
+    + ' pins the answer rather than supplying it.';
   const keeps = [
-    'The exclusion itself is read off those same two sources: callsHarness finds no import'
-    + ' in either, the harness run skips them on that reading, and HARNESS_EXCLUSIONS pins'
-    + ' the answer rather than supplying it.',
+    states,
     'The probes that call no harness, declared rather than inferred, so a third one has to'
     + ' be written down here before the suite will accept it.',
     'Whether a probe calls the harness, read off its own source rather than listed here.',
@@ -507,6 +576,29 @@ test('probes: all three docstrings say the exclusion is read off the probe', () 
       + ` correct wording to be written in - ${text}`
     );
   }
+
+  // The affirmation's own pair: the sentence above, and the paragraph deleting
+  // it leaves behind. The deletion is the state the denial half passes and this
+  // half refuses, and it is the one the case was green under while its name
+  // said otherwise.
+  assert.deepEqual(
+    readingAffirmations(states), ['read off those same two sources'],
+    'the sentence that states the reading is not read as an affirmation, so a docstring'
+    + ` could lose it and leave this case green under a name saying it is there - ${states}`
+  );
+
+  const silent = 'The quote has to follow the keyword, which is what keeps this off a'
+    + " sentence. That sentence is this file's, not the probe's:"
+    + ' test/probes/overlay-anchor.mjs never names the engagement at all.';
+  assert.deepEqual(
+    readingDenials(silent), [],
+    `a paragraph silent on the reading is read as denying it - ${silent}`
+  );
+  assert.deepEqual(
+    readingAffirmations(silent), [],
+    'a paragraph silent on the reading is read as stating it, which is the state the'
+    + ` deletion leaves and the whole of what this half is for - ${silent}`
+  );
 });
 
 test('probes: neither excluded probe names the engagement, in an import or in prose', () => {
@@ -519,15 +611,26 @@ test('probes: neither excluded probe names the engagement, in an import or in pr
   // is the whole reason the fixture is drawn from this file - a probe whose
   // header starts naming the engagement is a probe the fixture should quote
   // instead, with every assertion above still passing.
+  //
+  // The filter runs before the message is composed, which is the order the
+  // subject requires: the line is matched as the probe wrote it, and the path is
+  // added afterwards. Composing first put `test/probes/<name>.mjs` into the text
+  // `includes('engagement')` was handed, so a probe whose own name held the word
+  // - an `engagement-trace` declared above for importing no engagement - would
+  // report every one of its lines as a mention, and the message would name the
+  // file as naming the engagement when no line of it did. The declared pair
+  // reads the same either way, neither name holding the word, which is what left
+  // the order free to be the wrong one.
   for (const name of HARNESS_EXCLUSIONS) {
     const file = `test/probes/${name}.mjs`;
     const src = readFileSync(join(REPO_ROOT, 'test', 'probes', `${name}.mjs`), 'utf8');
     const named = src.split('\n')
-      .map((line, i) => `${file}:${i + 1} ${line.trim()}`)
-      .filter((line) => line.includes('engagement'));
+      .map((line, i) => ({ line, at: i + 1 }))
+      .filter(({ line }) => line.includes('engagement'))
+      .map(({ line, at }) => `${file}:${at} ${line.trim()}`);
     assert.deepEqual(
       named, [],
-      `${file} names the engagement, which the three docstrings above say no excluded probe`
+      `${file} names the engagement, which the docstrings above say no excluded probe`
       + ' does - the first of them is where the negative prose fixture comes from, and it'
       + ` comes from there because no probe line said it - ${named.join(' | ')}`
     );
