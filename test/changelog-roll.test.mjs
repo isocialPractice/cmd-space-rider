@@ -39,6 +39,30 @@
 // each one holds its own year, and the rolled entries are the older end of the
 // split rather than a slice out of the middle.
 //
+// **An archive this repository does not carry is read as absent on purpose, and
+// that is the third of three answers.** `66e5131` untracked `CHANGELOG-2026.md`
+// and `TODO-archive.md` and ignored both, to keep their size out of the history.
+// The pointer naming the archive is in `CHANGELOG.md`, which is tracked, so a
+// clone gets the pointer and no file - and the first check below read that as
+// the hand edit it is written to catch. `npm test` could not pass in a fresh
+// clone, and passed here only because the working copy still holds the ignored
+// file. The three answers were to track the archives again, which undoes that
+// commit; to stop publishing a pointer at all, which is the automation tool's
+// behaviour and not this repository's to change; or to read a pointer whose file
+// is both absent and excluded as the state every clone is in. The third is
+// taken, because it is the only one of them this repository owns. Either of the
+// others remains open to whoever owns the other two, and taking one costs
+// nothing here: the reading below is off `.gitignore`, so tracking the archives
+// again tightens the check back on its own.
+//
+// What that gives up is narrow and worth naming: a pointer naming an archive
+// that is excluded and absent is no longer read against anything, so a hand
+// edit that invents `CHANGELOG-2019.md` passes anywhere - here as readily as in
+// a clone, the invented file being absent from both. Everywhere the file
+// is present - this working copy, and any clone that has rolled - the count, the
+// year and the split are all read as before, and a pointer naming a file the
+// repository does carry and does not have still fails.
+//
 // Nothing here pairs with test/parity.test.mjs. A changelog is neither build.
 
 import test from 'node:test';
@@ -79,6 +103,66 @@ const yearFiles = () => readdirSync(join(REPO_ROOT))
   .filter((name) => YEAR_FILE.test(name))
   .sort();
 
+/** A `.gitignore` rule's own regex-special characters, which are matched as themselves. */
+const LITERAL = /[.+^${}()|[\]\\]/g;
+
+/** Whether one rule's pattern names a file, `*` and `?` the wildcards it writes. */
+const ruleNames = (pattern, name) => new RegExp(`^${pattern
+  .replace(LITERAL, (char) => `\\${char}`)
+  .replace(/\*/g, '[^/]*')
+  .replace(/\?/g, '[^/]')}$`).test(name);
+
+/**
+ * The root-level filename rules a `.gitignore` carries, in the order it writes
+ * them, each beside whether it negates.
+ *
+ * Only that one form is read: no `/` in the pattern, `*` and `?` as the
+ * wildcards, trailing whitespace dropped the way git drops it. A line in any
+ * other form is dropped here, which leaves it deciding nothing either way.
+ *
+ * The `!` is kept rather than dropped with the line, because this repository
+ * un-ignores by negation - `.gitattributes`, `.nojekyll` and `.gitignore` itself
+ * each have a `!` line and a paragraph of reasoning, and
+ * `test/repo-files.test.mjs` is a whole file about them. A negation read as no
+ * rule at all leaves a broader pattern above it answering for a file git does
+ * not exclude, which is the lenient direction and not the strict one.
+ */
+const ignoreRules = (said) => said
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith('#'))
+  .map((line) => ({ negated: line.startsWith('!'), pattern: line.replace(/^!/, '') }))
+  .filter(({ pattern }) => pattern && !pattern.includes('/'));
+
+/** The lines of this repository's own `.gitignore`, or none where it has none. */
+const ignoreFile = () => (existsSync(join(REPO_ROOT, '.gitignore')) ? lines('.gitignore') : []);
+
+/**
+ * Whether this repository has decided not to carry a file, read off its own
+ * `.gitignore`.
+ *
+ * Read there rather than from `git check-ignore`, for two reasons. The decision
+ * asked about is the repository's, and `check-ignore` answers for the global
+ * excludes file as well - a per-machine setting, which would let one developer's
+ * configuration switch a drift check off for everybody. And a download of the
+ * tree with no `.git` beside it still runs the suite.
+ *
+ * The last rule naming the file decides, which is how git decides it, so a
+ * negation below a broader pattern answers false. No `.gitignore` at all, or one
+ * whose every line is in a form `ignoreRules` does not read, answers false too
+ * and leaves the checks at their strict reading - the safe direction for a file
+ * this cannot parse.
+ *
+ * `said` is the rule lines, injectable so the case below can hold the ordering
+ * to states this repository's own file does not hold.
+ */
+function ignoredByRepo(name, said = ignoreFile()) {
+  let excluded = false;
+  for (const { negated, pattern } of ignoreRules(said)) {
+    if (ruleNames(pattern, name)) excluded = !negated;
+  }
+  return excluded;
+}
+
 /** One file's entries: the version each names, and the date where it has one. */
 function entries(file) {
   return lines(file)
@@ -95,23 +179,52 @@ test('changelog: every pointer and the file it names agree, in both directions',
   const read = pointers();
   const files = yearFiles();
 
-  // Both directions, because each one fails on its own. A pointer naming a file
-  // that is not there sends a reader after entries nothing holds; a file nothing
-  // names is entries no reader is told about, which is the quiet half - the
-  // changelog looks whole and is missing a run of its history.
+  // One direction without condition: a file nothing names is entries no reader
+  // is told about, which is the quiet half - the changelog looks whole and is
+  // missing a run of its history. An archive that is there has to be pointed at
+  // whatever the repository carries, because being there is the whole of what
+  // this half reads.
+  const named = read.map((one) => one.file);
+  const unnamed = files.filter((file) => !named.includes(file));
   assert.deepEqual(
-    read.map((one) => one.file).sort(), files,
-    `CHANGELOG.md points at ${read.map((one) => one.file).join(', ') || 'no archive'} and the`
-    + ` archives beside it are ${files.join(', ') || 'none'} - a pointer without a file sends a`
-    + ' reader after entries nothing holds, and a file without a pointer is history no reader'
-    + ' is told about'
+    unnamed, [],
+    `${unnamed.join(', ')} sits beside CHANGELOG.md with no pointer naming it, and the`
+    + ` pointers it carries name ${named.join(', ') || 'no archive'} - the roll writes one for`
+    + ' every archive it keeps, so a file without a pointer is history no reader is told about'
   );
 
+  // One pointer per archive, which the single `deepEqual` that read both
+  // directions at once used to carry on its own: two pointers naming one file
+  // made the two lists different lengths. Split in two, neither half notices a
+  // line written twice - the half above asks only whether each file is named
+  // somewhere, and the half below walks each pointer by itself - so the
+  // condition is stated rather than left to fall out of a comparison that is no
+  // longer made. A second pointer is a hand edit of exactly the kind this file
+  // exists to catch: the roll rebuilds every pointer from the archive it names
+  // on each pass, and a reader meeting two cannot tell which is current.
+  const twice = [...new Set(named.filter((file, at) => named.indexOf(file) !== at))];
+  assert.deepEqual(
+    twice, [],
+    `CHANGELOG.md carries more than one pointer at ${twice.join(', ')} - the roll writes one`
+    + ' for each archive it keeps and rewrites it in place, so a repeated pointer is a hand'
+    + ' edit, and the two can disagree with nothing saying which a reader goes by'
+  );
+
+  // The other direction only for an archive this repository carries. A pointer
+  // naming a file that is not there sends a reader after entries nothing holds,
+  // unless `.gitignore` excludes that file - in which case the pointer in the
+  // tracked changelog and the absent file beside it are the state every clone is
+  // in, and the header above says why that is read rather than repaired.
   for (const one of read) {
-    assert.ok(
-      existsSync(join(REPO_ROOT, one.file)),
-      `CHANGELOG.md:${one.at} names ${one.file}, which is not beside it`
-    );
+    if (!existsSync(join(REPO_ROOT, one.file))) {
+      assert.ok(
+        ignoredByRepo(one.file),
+        `CHANGELOG.md:${one.at} names ${one.file}, which is not beside it and is not a file`
+        + ' .gitignore excludes - an archive this repository carries and does not have is a'
+        + ' pointer sending a reader after entries nothing holds'
+      );
+      continue;
+    }
     const held = entries(one.file).length;
     assert.equal(
       one.count, held,
@@ -122,13 +235,59 @@ test('changelog: every pointer and the file it names agree, in both directions',
   }
 });
 
+test('changelog: an archive .gitignore negates reads as carried, not as excluded', () => {
+  // What the check above lets through is a pointer whose file is absent and
+  // excluded, so which files count as excluded is the whole of how far it is
+  // relaxed - and a negation is the one rule that narrows the set rather than
+  // widening it. This repository un-ignores by negation three times over, with a
+  // paragraph of reasoning apiece, so the first way anyone here would start
+  // carrying the archives again is a `!` line under `CHANGELOG-*.md`. Read as no
+  // rule at all, the broader pattern above would still answer "excluded", the
+  // check would stay relaxed on a file git does not exclude, and the header's
+  // claim that tracking the archives again tightens it back would be false in
+  // the one form this repository writes that decision in.
+  //
+  // Injected rather than read off `.gitignore`, because the states that matter
+  // are ones this repository's own file does not hold, and because the file it
+  // does hold is what the check above already exercises.
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['CHANGELOG-*.md']), true,
+    'a root-level pattern naming the archive has to read as excluded, which is the state the'
+    + ' relaxed direction above is written for'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['CHANGELOG-*.md', '!CHANGELOG-2026.md']), false,
+    'a `!` line under the pattern that would otherwise swallow the archive is this repository'
+    + ' deciding to carry it, so the pointer has to be held to a file being there again -'
+    + ' reading the negation as no rule leaves the check relaxed on a file git tracks'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['!CHANGELOG-2026.md', 'CHANGELOG-*.md']), true,
+    'the last rule naming a file decides, the way git decides it, so a negation above the'
+    + ' pattern is overridden by it rather than winning on being a negation'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', []), false,
+    'no rule at all excludes nothing, which is what keeps a repository with no .gitignore at'
+    + ' the strict reading'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['# CHANGELOG-*.md', 'docs/CHANGELOG-*.md']), false,
+    'a comment and a rule with a path in it are the forms this does not read, and a line it'
+    + ' cannot parse has to decide nothing rather than exclude'
+  );
+});
+
 test('changelog: a year file holds that year and the changelog keeps the newer end', () => {
   const files = yearFiles();
   if (files.length === 0) {
-    // A clone where the roll has never run has no archive, which is an ordinary
-    // state rather than a fault. The check above already holds it to having no
-    // pointer either.
-    assert.deepEqual(pointers(), [], 'no archive is beside the changelog, so none may be named');
+    // No archive to read, which is an ordinary state rather than a fault, and
+    // now two of them: a clone where the roll has never run, and a clone of a
+    // repository that ignores its archives - here the roll has run and its
+    // output is not carried. The pointer side of both belongs to the check
+    // above, which holds a pointer whose file is absent to naming a file
+    // `.gitignore` excludes. Restating it here would be a second statement of
+    // one condition, and the weaker of the two.
     return;
   }
 

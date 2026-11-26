@@ -1,6 +1,124 @@
 # Changelog
 
-> 20 earlier entries in `CHANGELOG-2026.md`, newest first.
+> 21 earlier entries in `CHANGELOG-2026.md`, newest first.
+
+## [1.0.0-alpha.0.16.10] - 2026-11-26
+
+### Fixed
+
+- `npm test` could not pass in a fresh clone. `CHANGELOG.md:3` carries the
+  roll's pointer at `CHANGELOG-2026.md`, and `66e5131` ignored and untracked
+  `CHANGELOG-*.md` and `TODO-archive.md` to keep their size out of the history -
+  so the pointer is in a tracked file and the archive it names is in no clone.
+  `changelog: every pointer and the file it names agree, in both directions`
+  compared its pointers against the year files beside it with a `deepEqual` in
+  both directions, read one pointer and no file, and failed with "CHANGELOG.md
+  points at CHANGELOG-2026.md and the archives beside it are none". The case
+  after it failed the same way, its no-archive branch asserting that a
+  repository with no year file names none. Both passed here only because the
+  working copy still holds the ignored file. Reproduced by cloning the
+  repository and running the one file: two of three cases failed.
+  Of the three answers - track the archives again, stop publishing a pointer at
+  all, or read a pointer whose file is both absent and excluded as the ordinary
+  clone state - the third is taken, because it is the only one this repository
+  owns: the first undoes the owner's own commit, and the pointer is written by
+  the automation tool that rolls the file. `ignoredByRepo` reads `.gitignore`
+  for the root-level filename rules it can parse - no `/` in the pattern, `*`
+  and `?` as the wildcards, trailing whitespace dropped the way git drops it,
+  and a leading `!` read as the negation it is, the last rule naming a file
+  deciding the way git decides it. A line in any other form decides nothing,
+  and no `.gitignore` at all answers false, which leaves the checks strict. It
+  is read there rather than from
+  `git check-ignore`, which answers for the global excludes file as well: that
+  is per-machine, and would let one developer's configuration switch a drift
+  check off for everybody, where this reads the repository's own decision and a
+  download with no `.git` beside it still runs the suite. The
+  file-has-a-pointer direction is unconditional, and the pointer-has-a-file
+  direction now holds an absent file to being one `.gitignore` excludes. The
+  second case returns on a tree with no archive rather than restating that
+  condition more weakly. One pointer per archive is stated outright, because
+  the single `deepEqual` that read both directions at once carried it for free -
+  two pointers naming one file made the lists different lengths - and neither
+  half of the split notices a line written twice. A repeated pointer is a hand
+  edit of the kind this file exists to catch: the roll rewrites each pointer in
+  place from the archive it names, and two that disagree leave a reader nothing
+  to go by. Checked by duplicating the pointer line against a tree holding the
+  archive: it failed, naming the file.
+  What this gives up is named in the test file's header: a hand edit inventing
+  `CHANGELOG-2019.md` passes anywhere, here as readily as in a clone, because
+  the invented file is absent from both and nothing is there to read it against.
+  Everywhere the file is present the count, the year and the split are
+  read as before. Checked five ways: a fresh clone passes every case; deleting
+  the `CHANGELOG-*.md` rule in that clone fails on the pointer, naming it;
+  un-ignoring the archive with a `!CHANGELOG-2026.md` line under that rule fails
+  the same way, which is the form this repository un-ignores its own dotfiles
+  in; a `CHANGELOG-2025.md` with no pointer fails, naming it; and a pointer
+  stating one entry fewer than the file beside it holds fails as it always did.
+  `changelog: an archive .gitignore negates reads as carried, not as excluded`
+  pins the negation and the ordering on injected rules, since the states that
+  matter are ones this repository's own file does not hold. No figure is
+  written down here on purpose - the roll rewrites the pointer on every pass, so
+  a count quoted in an entry is one a later roll leaves behind, which is the
+  defect `Rolled Changelog Pointer 1` was. Tracking the archives again
+  tightens the check back on its own, so either of the other two answers stays
+  open to whoever owns them.
+
+### Added
+
+- `probes: the account lists every docstring that states the reading` holds
+  `EXCLUSION_ACCOUNT` equal, in both directions, to the declarations this file's
+  own docstrings put in the exclusion account. Membership was the hand-kept half
+  and it is the half that failed twice: `READING_DENIED` was left out of the
+  list in 0.16.8, the version that wrote it, and `READING_AFFIRMED` in 0.16.9,
+  the version that corrected that - both of them paragraphs about denials and so
+  the likeliest to carry one, and neither reachable by the case that reads the
+  account, which opens only what the list names. `accountByAffirmation` walks
+  every top-level declaration with `topLevelDeclarations`, takes the docstring
+  above each, and keeps the ones `readingAffirmations` answers for;
+  `docstringAbove` gained `required: false`, which answers `null` for a
+  declaration carrying no paragraph, most of this file's declarations carrying
+  none. The reading answers exactly the five current members, so the case is
+  green as it stands. Checked both ways: dropping `const READING_AFFIRMED` from
+  the list fails with it named on the left, and adding
+  `function publishedExclusions` fails with it named on the right - and that
+  second one fails the case above it as well, on the affirmation that paragraph
+  has no sentence for. A fixture of three declarations written out as joined
+  lines holds the reader to answering with the affirming one alone, past the
+  silent and the undocumented, since the state it has to read is one this file
+  does not hold.
+  The width is the chosen cost, and `EXCLUSION_ACCOUNT`'s docstring records why.
+  `READING_AFFIRMED` takes either of the two phrasings the file writes the
+  account in, and `HARNESS_IMPORT`'s affirmation names two sources and no probe,
+  so requiring a probe as the object drops a member the account needs; requiring
+  the paragraph to name the harness or the exclusion as well keeps all five
+  while excluding nothing that is out today, so it would pin nothing and would
+  still not tell `publishedExclusions` from a member, that paragraph being about
+  the exclusion throughout. So a docstring that comes to affirm the reading
+  about some other subject is pulled in - which fails loudly, names itself, and
+  is settled by one line, where a paragraph left out is read by nothing and has
+  now happened twice running. Neither affirming phrasing is quoted in that
+  docstring for the same reason: a paragraph outside the list that quoted one
+  would enter the set by its own example, which is why the fixture above is
+  joined lines rather than a template literal - a `const` at column zero inside
+  one reads as this file's own declaration. `docstringAbove`'s docstring now
+  says the read is bounded by the docstring rather than by the list, no test
+  body being a docstring, which is what keeps the written-out fixtures out of
+  it.
+
+### Changed
+
+- `docs/development.html` stops enumerating the account's members. Its
+  third-reading paragraph listed them - "the declared pair, the import pattern,
+  the function that decides, and the two sets of shapes it reads a denial and an
+  affirmation by" - which 0.16.9 wrote in place of the count "the three
+  paragraphs" precisely because a count goes stale when a paragraph joins. An
+  enumeration goes stale the same way, and nothing read it against the list. It
+  now states that which paragraphs those are is read off the file rather than
+  written down, which no new member can falsify, and records the hand-kept
+  membership and the two consecutive omissions as what that replaced. The
+  paragraph on the rolled changelog is updated for the conditional direction
+  above, and says why the exclusion is read off `.gitignore` rather than from
+  `git check-ignore`.
 
 ## [1.0.0-alpha.0.16.9] - 2026-11-25
 
@@ -5084,68 +5202,3 @@
   is reachable by a thumb. The pairing is stated in `overlayVars` now and the
   suite reads both figures back off that map by name, so the same swap fails two
   tests.
-
-## [0.7.2-alpha] - 2026-09-26
-
-### Added
-
-- `test/probes/overlay-anchor.mjs`, which walks the touch overlay over every
-  viewport the game will play at rather than over a list of device shapes. A
-  claim about every viewport is not something a list can support, and both
-  figures quoted under Fixed below come from it: run
-  `npm run probe -- overlay-anchor` to rebuild them. It takes no grid and no
-  build, which is new for a probe here - a terminal has no overlay, and the
-  viewport is the thing being walked rather than a setting.
-- `footerBandPx` and `playBandPx`, the two figures the overlay is laid out
-  against, lifted out of `handleResize` into functions of a fitted grid. The
-  first was already published as `--footerpx`; the second is new and published
-  as `--playpx`. `handleResize` sits below the
-  `// ===== Canvas Setup & Sizing =====` marker `test/helpers.mjs` stops at, so
-  nothing in the suite could execute either figure while it lived there.
-
-### Changed
-
-- The touch controls are sized against the band the game is played in rather
-  than against the viewport. `--ctl` and `--stick` are each solved out of
-  `--playpx`: whatever is left of the band once the offset and the gap are
-  taken, shared between however many controls stand in it, capped as before by
-  a share of the screen width and a pixel ceiling. On the eight device shapes
-  the suite already walked, every control is drawn at exactly the size it was;
-  only viewports too short for the old size shrink.
-- `test/browser-shell.test.mjs` resolves the page's own custom properties
-  instead of restating their arithmetic. Its CSS resolver reads the `:root`
-  block out of the stylesheet and substitutes `var()` until the text stops
-  carrying one, and its viewport model calls `footerBandPx` and `playBandPx`
-  rather than computing the same figures a second way. Six short shapes and
-  two at the floor of what the game plays at join the eight it walked.
-
-### Fixed
-
-- BOOST climbed back onto the HUD on a short viewport, which is the half of
-  the anchoring fault the previous release did not reach. The controls were
-  sized in viewport width while the room for them is measured in character
-  rows, so the two came apart on anything short and wide: BOOST covered rows
-  0-8 at 1180x300 and 820x300, rows 1-8 at 667x300, rows 1-9 at 932x330, and
-  rows 2-9 at 740x330 and 740x320, where rows 0 to 2 are the SCORE / DIST /
-  SHIELD row and the shield bar. The stick had the same fault on a narrow
-  viewport and reached row 2 at 349x160. Walked over every viewport the game
-  will play at, 158,235 of 682,500 placed a control on the HUD or the footer -
-  BOOST at all of them, the stick at 51,843 - against none now.
-- The figure the overlay hangs on was asserted nowhere. `--footerpx` was
-  published from a function the suite cannot execute, and the only check on it
-  was that the call appears in the file; the tests then computed the figure
-  for themselves, so they agreed with a second implementation rather than with
-  the page. Substituting `HUD_ROWS` for `FOOTER_ROWS` in that line left the
-  whole suite green while every control sat a row too high. It now fails two
-  tests.
-- The Project Structure page gave `test/probes/` a line but never opened it,
-  so the six files under it appeared nowhere while the README claimed every
-  file under `src/`, `test/` and `docs/` was listed. The page opens `probes/`,
-  and every tracked file under the three directories is now named on it.
-- The `0.7.1-alpha` entry above described a README sentence that same release
-  had rewritten, quoting the claim as `src/` and `test/` where the shipped
-  README says `src/`, `test/` and `docs/`. The bullet now says what the file
-  says.
-- The development and cheatsheet pages both said every probe takes a grid and
-  a build, which `overlay-anchor` does not. Both now say it is the probes that
-  fly a shot that do, and name the exception.
