@@ -398,20 +398,50 @@ test('probes: a harness call is read whichever import form it is written in', ()
  * what they accept. Between them they have to state one account rather than two.
  *
  * What puts a paragraph in this list is a sentence affirming the reading, and a
- * paragraph has twice been left out of it on no better ground than being written
+ * paragraph had twice been left out of it on no better ground than being written
  * in the same turn as the list: `READING_DENIED` for a version, under a sentence
  * saying of three that "nothing else in the file states it", and
  * `READING_AFFIRMED` in the turn that corrected that. Both are paragraphs a
  * denial is likeliest to reach, being the ones written about denials, and
- * neither was read. Every other declaration in the file is out because it
- * carries no such sentence, the nearest of them being the ones this case is
- * built out of: `publishedExclusions` accounts for the docs copy being pinned,
- * and `docstringAbove`, `flatProse`, `readingDenials`, `readingAffirmations` and
+ * neither was read.
+ *
+ * So what is pinned now is the membership rather than the members.
+ * `accountByAffirmation` below walks every top-level declaration in this file,
+ * takes the docstring above each, and keeps the ones `readingAffirmations`
+ * answers for; `probes: the account lists every docstring that states the
+ * reading` holds that set equal to this list in both directions. A new paragraph
+ * affirming the reading has to be listed before the suite will accept it, and a
+ * listed one whose sentence goes is named from the other side rather than held
+ * to an account it no longer makes. The list stays, because it is what the case
+ * below iterates and what the second direction is compared against. What it is
+ * no longer is the only statement of who belongs.
+ *
+ * The cost is that the reading is wider than the account, and this is the half
+ * chosen deliberately. `READING_AFFIRMED` takes either of the two phrasings the
+ * file writes the account in, and neither is quoted in this paragraph on
+ * purpose: a docstring outside the list that quoted one would be pulled into the
+ * set by its own example, which is the hazard `docstringAbove` records below
+ * from the fixtures' side. Narrowing is no better. `HARNESS_IMPORT`'s
+ * affirmation names two sources and no probe, so requiring a probe as the object
+ * drops a member the account needs; and requiring the paragraph to name the
+ * harness or the exclusion as well keeps all five while excluding nothing that
+ * is out today, so it would pin nothing, and it would still not tell
+ * `publishedExclusions` from a member, that paragraph being about the exclusion
+ * throughout. So a docstring that comes to affirm the reading about some other
+ * subject is pulled in. That is the cheaper of the two errors: a paragraph
+ * wrongly pulled in fails loudly, names itself in the message, and is settled by
+ * one line either way, while a paragraph left out is read by nothing at all -
+ * and that one has already happened twice, in consecutive versions, to the two
+ * paragraphs a denial is likeliest to reach.
+ *
+ * Every other declaration in the file is out because it carries no such
+ * sentence, the nearest of them being the ones this case is built out of:
+ * `publishedExclusions` accounts for the docs copy being pinned, and
+ * `docstringAbove`, `flatProse`, `readingDenials`, `readingAffirmations` and
  * this docstring for how the text is found, flattened, read and listed. Each
  * would be held here to an account it does not make, which is what adding one
- * shows - the case fails on the affirmation that paragraph has no sentence for.
- * Membership is still hand-kept, which is what let the same omission happen
- * twice.
+ * shows - the case fails on the affirmation that paragraph has no sentence for,
+ * and the membership check names it from the other side.
  *
  * Read by name rather than by line, so the account travels with the declaration
  * it belongs to.
@@ -426,17 +456,31 @@ const EXCLUSION_ACCOUNT = [
 
 /**
  * The docstring directly above a top-level declaration, with nothing but
- * whitespace between the two.
+ * whitespace between the two. `required: false` answers `null` for a declaration
+ * carrying none, which is how the membership check walks a file whose
+ * declarations mostly do not.
  *
- * Bounded to the declarations above rather than run over the whole file, which
- * is what lets the fixtures below be written out in full: a guard that reads its
- * own source cannot hold the sentence it refuses.
+ * What bounds the read is the docstring rather than the list of declarations.
+ * The fixtures this case is built out of are written out in full in the test
+ * bodies below - a guard that reads its own source cannot hold the sentence it
+ * refuses - and no test body is a docstring, so running this over every
+ * declaration in the file reaches none of them. What it does reach is every
+ * other paragraph, which is why `EXCLUSION_ACCOUNT` quotes neither affirming
+ * phrasing: a docstring is read whether or not the account is its subject.
  */
-function docstringAbove(src, declaration) {
+function docstringAbove(src, declaration, { required = true } = {}) {
   const at = src.indexOf(`\n${declaration}`);
   assert.ok(at > 0, `${declaration} is not declared at the top level of test/probes.test.mjs`);
   const close = src.lastIndexOf('*/', at);
   const open = src.lastIndexOf('/**', close);
+
+  // Asked for by name, a missing paragraph is a fault: the account names the
+  // declaration whose docstring is to be read. Walked to by the enumerator it is
+  // the ordinary case, most of this file's declarations carrying no docstring at
+  // all, so the two assertions below are skipped rather than reworded.
+  const carries = open >= 0 && close > open && src.slice(close + 2, at).trim() === '';
+  if (!carries && !required) return null;
+
   assert.ok(open >= 0 && close > open, `${declaration} carries no docstring`);
   assert.equal(
     src.slice(close + 2, at).trim(), '',
@@ -445,6 +489,24 @@ function docstringAbove(src, declaration) {
   );
   return src.slice(open, close + 2);
 }
+
+/**
+ * Every top-level declaration in a module, in the form `EXCLUSION_ACCOUNT`
+ * writes them: the keyword and the name, one space between, with `export ` kept
+ * where a declaration carries it.
+ *
+ * Top level is column zero, which is what this file's layout makes of it - a
+ * declaration inside a test body is indented, and a line inside a block comment
+ * opens on the comment's own furniture. The keywords are the ones a module can
+ * hold rather than the ones this file holds today, because a declaration written
+ * in a form this does not list is one the membership check cannot see, and a
+ * paragraph nothing sees is the error that check exists for.
+ */
+const TOP_LEVEL_DECLARATION = /^((?:export )?(?:async function|function|class|const|let|var)) ([A-Za-z_$][\w$]*)/gm;
+
+/** The declarations that pattern finds, in the form `docstringAbove` takes. */
+const topLevelDeclarations = (src) => [...src.matchAll(TOP_LEVEL_DECLARATION)]
+  .map(([, keyword, name]) => `${keyword} ${name}`);
 
 /**
  * Prose denying that a probe's exclusion is read off the probe's own source.
@@ -516,6 +578,23 @@ const READING_AFFIRMED = /read(?:s|ing)? (?:off|each) [a-z' ]*(?:probe|source)s?
 function readingAffirmations(text) {
   return [...flatProse(text).matchAll(READING_AFFIRMED)].map(([said]) => said);
 }
+
+/**
+ * The declarations whose docstrings put them in the exclusion account, taken off
+ * the file rather than from a list: every top-level declaration carrying a
+ * docstring `readingAffirmations` answers for.
+ *
+ * `EXCLUSION_ACCOUNT` is held equal to this in both directions by the membership
+ * case below, which is what makes that list a pinning of who belongs rather than
+ * the only statement of it. Its own docstring records why this reading is the
+ * wide one and what the width costs.
+ */
+const accountByAffirmation = (src) => topLevelDeclarations(src)
+  .filter((declaration) => {
+    const paragraph = docstringAbove(src, declaration, { required: false });
+    return paragraph !== null && readingAffirmations(paragraph).length > 0;
+  })
+  .sort();
 
 test('probes: every docstring in the account says the exclusion is read off the probe', () => {
   const src = readFileSync(join(REPO_ROOT, 'test', 'probes.test.mjs'), 'utf8');
@@ -598,6 +677,61 @@ test('probes: every docstring in the account says the exclusion is read off the 
     readingAffirmations(silent), [],
     'a paragraph silent on the reading is read as stating it, which is the state the'
     + ` deletion leaves and the whole of what this half is for - ${silent}`
+  );
+});
+
+test('probes: the account lists every docstring that states the reading', () => {
+  // Membership was the hand-kept half, and it is the half that failed twice:
+  // `READING_DENIED` was left out of the list in the version that wrote it, and
+  // `READING_AFFIRMED` in the version that corrected that - both of them
+  // paragraphs about denials, and so the likeliest to carry one. Neither
+  // omission was reachable by the case above, which opens only what the list
+  // names: a paragraph that is not listed is a paragraph it never reads.
+  //
+  // Both directions, because each fails on its own. A paragraph affirming the
+  // account and not listed is the omission that has twice happened; a listed
+  // declaration whose sentence has gone is the case above holding a paragraph to
+  // an account it no longer makes, which that case's own message offers as one
+  // of its two answers and nothing else decides between.
+  const src = readFileSync(join(REPO_ROOT, 'test', 'probes.test.mjs'), 'utf8');
+  const found = accountByAffirmation(src);
+  const listed = [...EXCLUSION_ACCOUNT].sort();
+  assert.deepEqual(
+    found, listed,
+    `the docstrings in this file that state the exclusion is read off the probe's own source`
+    + ` are ${found.join(', ') || 'none'} and EXCLUSION_ACCOUNT lists ${listed.join(', ')} - a`
+    + ' paragraph on the left and not the right states the account with nothing reading it,'
+    + ' which is how READING_DENIED and READING_AFFIRMED were each left out in the version'
+    + ' that wrote them; one on the right and not the left has lost the sentence the case'
+    + ' above holds it to, and belongs either out of the list or back in the paragraph'
+  );
+
+  // And the reader shown to catch the omission rather than only to agree with
+  // the list as it stands, which is the standard the sole-claim reader is held
+  // to below: the state it has to read is one this file does not hold, a
+  // paragraph that states the account and is not listed.
+  //
+  // Written as lines joined rather than as a block, because a `const` at column
+  // zero inside a template literal is one `topLevelDeclarations` reads as this
+  // file's own - the fixture would enter the set above and fail the comparison
+  // it is here to support. That is the same hazard `docstringAbove` records, met
+  // from a third side.
+  const module = [
+    '', // docstringAbove finds a declaration at the start of a line.
+    '/** Prose read off each probe, which is what puts a paragraph in the account. */',
+    'const AFFIRMS = 1;',
+    '',
+    '/** A paragraph saying nothing about where the answer comes from. */',
+    'const SILENT = 2;',
+    '',
+    'const UNDOCUMENTED = 3;',
+  ].join('\n');
+  assert.deepEqual(
+    accountByAffirmation(module), ['const AFFIRMS'],
+    'the membership reader does not answer with exactly the declaration whose docstring'
+    + ' states the account - a reading that misses the affirming paragraph, or takes a silent'
+    + ' or undocumented declaration for one, makes the comparison above agree with the list'
+    + ' for a reason that has nothing to do with what the file says'
   );
 });
 

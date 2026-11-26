@@ -8,78 +8,6 @@ its origin survives archiving into `## Complete`.
 
 ### Create and Deploy GitHub Pages Override
 
-### Code Review Override - the account's membership, and the clone's changelog
-
-#### Found Issues
-
-- [ ] Nothing reads `EXCLUSION_ACCOUNT`'s membership, which is why the same
-  paragraph was omitted from it twice
-  - **Issue**: the list at `test/probes.test.mjs:419-425` is hand-kept, and the
-    case below it only holds the paragraphs that are *in* it. Nothing answers
-    whether a paragraph stating the account is missing from it, so the omission
-    has now happened in two consecutive versions: 0.16.8 wrote the list and left
-    out `READING_DENIED`, which its own turn created, and 0.16.9 added
-    `READING_DENIED` and left out `READING_AFFIRMED`, which its own turn created.
-    Both were paragraphs written in the same turn as the edit to the list, and
-    both state the reading in the same words as paragraphs already listed. This
-    review fixed the second instance; the mechanism that produced both is
-    untouched, and the next declaration whose docstring affirms the reading will
-    be unread the same way. The published half is the same shape:
-    `docs/development.html`'s third-reading paragraph enumerates the account
-    member by member - "the declared pair, the import pattern, the function that
-    decides, and the two sets of shapes it reads a denial and an affirmation
-    by" - which 0.16.9 wrote in place of the count "the three paragraphs"
-    precisely because a count goes stale when a paragraph joins. An enumeration
-    goes stale the same way, and nothing reads it against the list.
-  - **Goal**: pin the membership rather than the members. Read every top-level
-    declaration's docstring with the `docstringAbove` the case already has, take
-    the ones `readingAffirmations` answers for, and compare that set against
-    `EXCLUSION_ACCOUNT` in both directions, so a new paragraph affirming the
-    reading has to be listed and a listed one that stops affirming is named. The
-    comparison answers exactly the five current members today, checked by
-    reading every top-level declaration in the file, so the case is green as it
-    stands. Decide and record the cost first: `docstringAbove`'s own docstring
-    (`test/probes.test.mjs:427-434`) argues for bounding the read rather than
-    running it over the whole file, and a future docstring that says "read off a
-    source" about something else would be pulled in - either narrow what counts
-    as the account's subject, or say in the docstring why the false positive is
-    the cheaper half. Whichever is chosen, the `docs/development.html`
-    enumeration wants pinning to the list or replacing with a sentence that no
-    new member can falsify; `publishedExclusions` is the precedent for reading a
-    sentence back out of that page by its shape.
-  - From: Code Review Override - the account's membership, and the clone's
-    changelog
-- [ ] `npm test` cannot pass in a fresh clone - `CHANGELOG.md` points at a file
-  `.gitignore` keeps out of the repository
-  - **Issue**: `CHANGELOG.md:3` reads "> 20 earlier entries in
-    `CHANGELOG-2026.md`, newest first.", and `.gitignore:29` is
-    `CHANGELOG-*.md`, so `git ls-tree HEAD` holds no such file.
-    `test/changelog-roll.test.mjs`'s first case compares its pointers against
-    the year files beside it with a `deepEqual` in both directions, so in a clone
-    it reads one pointer and no file and fails: "CHANGELOG.md points at
-    CHANGELOG-2026.md and the archives beside it are none". The second case
-    already anticipates the clone - "A clone where the roll has never run has no
-    archive, which is an ordinary state rather than a fault. The check above
-    already holds it to having no pointer either" - but the pointer is in the
-    tracked file, so the clone has the pointer without the archive. It passes
-    here only because the working copy still holds the ignored file. Nothing in
-    this turn caused it: `66e5131` ignored and untracked `CHANGELOG-*.md` and
-    `TODO-archive.md` deliberately, and this turn only rewrote the pointer's
-    figure from 19 to 20. `TODO.md`'s own pointer names `TODO-archive.md` the
-    same way, and no test reads that one.
-  - **Goal**: this is a decision rather than a repair, and it is the owner's.
-    Three answers, and the item wants whichever they pick recorded wherever the
-    reason belongs: track the archives again, which undoes `66e5131`; keep them
-    ignored and stop publishing a pointer to them in a tracked file, which means
-    the roll is the automation tool's behaviour and not this repository's to
-    change; or keep both and have `test/changelog-roll.test.mjs` read a pointer
-    whose file is absent as the ignored-archive state rather than as drift, which
-    gives up the half of the check that catches a hand-edited pointer. Do not
-    flip the `.gitignore` unattended - `66e5131` is the owner's own commit and
-    says in its message what it was for.
-  - From: Code Review Override - the account's membership, and the clone's
-    changelog
-
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -124,45 +52,8 @@ assertions stay in `test/`.
 Finished items, archived from `## Current` with the `From:` line recording
 the roadmap section each one came from.
 
-> 224 earlier items in `TODO-archive.md`, newest last.
+> 226 earlier items in `TODO-archive.md`, newest last.
 
-- [x] **Exclusion Provenance**: Harness Form Reader 2
-  - **Issue**: `HARNESS_IMPORT`'s docstring (`test/probes.test.mjs:158-160`)
-    says "test/probes/overlay-anchor.mjs's header says it 'imports nothing from
-    test/engagement.mjs' - prose, unquoted, and no match". That probe's header
-    never mentions `engagement.mjs`; grepping it for `engagement` returns
-    nothing, and its imports are `node:fs`, `node:path`, `../helpers.mjs` and
-    `../page-style.mjs`. The sentence quoted is this same test file's own
-    `HARNESS_EXCLUSIONS` docstring at `test/probes.test.mjs:92-94`. The comment
-    on the fixtures that pattern is pinned against
-    (`test/probes.test.mjs:356-357`) carries the same error from the other side:
-    "Both of these are real lines from probes" is true only of the second
-    fixture, which is `test/probes/frame-rate.mjs:15`.
-  - **Goal**: name the real source of the first fixture in both places - the
-    `HARNESS_EXCLUSIONS` docstring in `test/probes.test.mjs`, not the probe -
-    and narrow the fixture comment to the one line that does come from a probe.
-    A reader sent to `overlay-anchor.mjs` to see the prose the pattern must not
-    match finds no such prose, and may conclude the negative fixture is pinned
-    by a probe file when nothing pins it at all.
-  - From: UI/UX Override - the marker is no longer a test boundary
-- [x] Rolled Changelog Pointer 1
-  - **Issue**: `test/changelog-roll.test.mjs:13-14` states "`CHANGELOG-2026.md`
-    holds 17 of 2026's 66 entries". It holds 18 of 67: `grep -c '^## \['` reads
-    18 in the archive and 49 in `CHANGELOG.md`, and `CHANGELOG.md:3` says 18.
-    The archive pass rolled `0.6.2-alpha` out later in the same turn, which the
-    run's own log records watching ("the archive pass rolled one more entry and
-    rewrote the pointer from 17 to 18 on its own"), so the header was left
-    quoting a figure the turn had already seen move. That header is the file's
-    argument for keeping the year name and it is made entirely out of counts, so
-    a wrong count is the one thing in it a later reader cannot check against the
-    file without finding the argument wrong too. The same figure was corrected
-    in `CHANGELOG.md` by this review, which leaves the two disagreeing.
-  - **Goal**: give the header a figure that cannot go stale, or state the count
-    as of a named version rather than in the present tense. The surrounding
-    argument does not need the exact number - "a fraction of 2026's entries"
-    carries it - and the paragraph already explains why no file holds all of a
-    year, which is the point the count was reached for.
-  - From: UI/UX Override - the marker is no longer a test boundary
 - [x] **Exclusion Provenance 1** - the corrected docstring now says the exclusion
   could not be read off the probe, which the same file denies twice
   - **Issue**: the correction to `HARNESS_IMPORT`'s docstring closes on a
@@ -260,3 +151,70 @@ the roadmap section each one came from.
     add a comment naming the engagement to `test/probes/glyph-tuning.mjs`, see
     the case fail with the file and line named, and revert.
   - From: Code Review Override - the new guard's account of itself
+- [x] Nothing reads `EXCLUSION_ACCOUNT`'s membership, which is why the same
+  paragraph was omitted from it twice
+  - **Issue**: the list at `test/probes.test.mjs:419-425` is hand-kept, and the
+    case below it only holds the paragraphs that are *in* it. Nothing answers
+    whether a paragraph stating the account is missing from it, so the omission
+    has now happened in two consecutive versions: 0.16.8 wrote the list and left
+    out `READING_DENIED`, which its own turn created, and 0.16.9 added
+    `READING_DENIED` and left out `READING_AFFIRMED`, which its own turn created.
+    Both were paragraphs written in the same turn as the edit to the list, and
+    both state the reading in the same words as paragraphs already listed. This
+    review fixed the second instance; the mechanism that produced both is
+    untouched, and the next declaration whose docstring affirms the reading will
+    be unread the same way. The published half is the same shape:
+    `docs/development.html`'s third-reading paragraph enumerates the account
+    member by member - "the declared pair, the import pattern, the function that
+    decides, and the two sets of shapes it reads a denial and an affirmation
+    by" - which 0.16.9 wrote in place of the count "the three paragraphs"
+    precisely because a count goes stale when a paragraph joins. An enumeration
+    goes stale the same way, and nothing reads it against the list.
+  - **Goal**: pin the membership rather than the members. Read every top-level
+    declaration's docstring with the `docstringAbove` the case already has, take
+    the ones `readingAffirmations` answers for, and compare that set against
+    `EXCLUSION_ACCOUNT` in both directions, so a new paragraph affirming the
+    reading has to be listed and a listed one that stops affirming is named. The
+    comparison answers exactly the five current members today, checked by
+    reading every top-level declaration in the file, so the case is green as it
+    stands. Decide and record the cost first: `docstringAbove`'s own docstring
+    (`test/probes.test.mjs:427-434`) argues for bounding the read rather than
+    running it over the whole file, and a future docstring that says "read off a
+    source" about something else would be pulled in - either narrow what counts
+    as the account's subject, or say in the docstring why the false positive is
+    the cheaper half. Whichever is chosen, the `docs/development.html`
+    enumeration wants pinning to the list or replacing with a sentence that no
+    new member can falsify; `publishedExclusions` is the precedent for reading a
+    sentence back out of that page by its shape.
+  - From: Code Review Override - the account's membership, and the clone's
+    changelog
+- [x] `npm test` cannot pass in a fresh clone - `CHANGELOG.md` points at a file
+  `.gitignore` keeps out of the repository
+  - **Issue**: `CHANGELOG.md:3` reads "> 20 earlier entries in
+    `CHANGELOG-2026.md`, newest first.", and `.gitignore:29` is
+    `CHANGELOG-*.md`, so `git ls-tree HEAD` holds no such file.
+    `test/changelog-roll.test.mjs`'s first case compares its pointers against
+    the year files beside it with a `deepEqual` in both directions, so in a clone
+    it reads one pointer and no file and fails: "CHANGELOG.md points at
+    CHANGELOG-2026.md and the archives beside it are none". The second case
+    already anticipates the clone - "A clone where the roll has never run has no
+    archive, which is an ordinary state rather than a fault. The check above
+    already holds it to having no pointer either" - but the pointer is in the
+    tracked file, so the clone has the pointer without the archive. It passes
+    here only because the working copy still holds the ignored file. Nothing in
+    this turn caused it: `66e5131` ignored and untracked `CHANGELOG-*.md` and
+    `TODO-archive.md` deliberately, and this turn only rewrote the pointer's
+    figure from 19 to 20. `TODO.md`'s own pointer names `TODO-archive.md` the
+    same way, and no test reads that one.
+  - **Goal**: this is a decision rather than a repair, and it is the owner's.
+    Three answers, and the item wants whichever they pick recorded wherever the
+    reason belongs: track the archives again, which undoes `66e5131`; keep them
+    ignored and stop publishing a pointer to them in a tracked file, which means
+    the roll is the automation tool's behaviour and not this repository's to
+    change; or keep both and have `test/changelog-roll.test.mjs` read a pointer
+    whose file is absent as the ignored-archive state rather than as drift, which
+    gives up the half of the check that catches a hand-edited pointer. Do not
+    flip the `.gitignore` unattended - `66e5131` is the owner's own commit and
+    says in its message what it was for.
+  - From: Code Review Override - the account's membership, and the clone's
+    changelog
