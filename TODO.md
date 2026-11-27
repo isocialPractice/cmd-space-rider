@@ -140,6 +140,53 @@ its origin survives archiving into `## Complete`.
     CRT constants would come from if they are included.
   - From: UI/UX Override - the five readings a stub DOM cannot take
 
+### Code Review Override - two figures that disagree with what they are read off
+
+#### Found Issues
+
+- [ ] The depth ramp item's far-to-near figure disagrees with its own four means
+  - **Issue**: `TODO.md:19-21` states the four bands' mean linear luminance as
+    0.00211, 0.01720, 0.16064 and 0.46728 far-to-near and then closes "far wall
+    to near wall is 167x". Those four means give 221.46x. The means are the half
+    corroborated: all seven contrast figures in the same item derive from them
+    exactly - 1.04:1, 1.34:1, 4.21:1 and 10.35:1 against black, and 1.29:1,
+    3.13:1 and 2.46:1 band against band, each reproducing to the stated
+    precision - so 167x is the stray, and it is the same number the item gives
+    at `TODO.md:32` as a count, "band 1 was `#00005f` 167 times". Not fixed
+    here: the figure is a browser reading this review cannot retake, and
+    choosing between correcting the ratio and correcting the means is a
+    measurement call rather than an arithmetic one.
+  - **Goal**: re-derive the far-to-near figure from the four means, or retake it
+    if it was measured over something other than the band means, and say which
+    it is. Whichever lands, 167x taken at face value makes the far pair look
+    three times better separated than the means say it is, which is the opposite
+    of what the rest of the item argues.
+  - From: Code Review Override - two figures that disagree with what they are read off
+- [ ] `ignoredByRepo` reads a leading-whitespace rule the lenient way its docstring refuses
+  - **Issue**: `test/changelog-roll.test.mjs:131` opens `ignoreRules` with
+    `.map((line) => line.trim())`. `trim()` drops leading whitespace as well as
+    trailing, and git does not: a `.gitignore` line `  CHANGELOG-2026.md` is a
+    pattern for a file whose name begins with two spaces, so git leaves
+    `CHANGELOG-2026.md` tracked. Checked against git in a scratch repository
+    rather than argued - `git check-ignore -v` reports only the unindented rule,
+    while the parser answers `true` for both. The answer is spent at
+    `test/changelog-roll.test.mjs:221` as `assert.ok(ignoredByRepo(one.file))`,
+    where `true` passes, so a `CHANGELOG.md` pointer naming an absent archive
+    would be accepted as excluded-on-purpose when git excludes nothing - the
+    hand edit that check exists to catch. That is the lenient direction, and the
+    docstring at `:151-153` claims the other one: a file it cannot parse
+    "answers false too and leaves the checks at their strict reading - the safe
+    direction". Trailing whitespace is read as git reads it, and the two CRLF
+    lines in this repository's own `.gitignore` parse correctly, so no input in
+    the tree reaches this today.
+  - **Goal**: drop only trailing whitespace, `.replace(/\s+$/, '')` in place of
+    `.trim()`, which keeps the CR handling the real file depends on and leaves a
+    leading-whitespace rule unmatched the way git leaves it. Then either state in
+    the docstring that leading whitespace is read as git reads it, or add the
+    fixture that pins it: the file's own case at `:254-275` passes
+    already-trimmed arrays, so nothing there exercises the trim at all.
+  - From: Code Review Override - two figures that disagree with what they are read off
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
