@@ -1,11 +1,180 @@
 # Changelog
 
-> 22 earlier entries in `CHANGELOG-2026.md`, newest first.
+> 23 earlier entries in `CHANGELOG-2026.md`, newest first.
 
-## [Unreleased]
+## [1.0.0-alpha.0.16.11] - 2026-11-28
+
+### Fixed
+
+- **Two of the rows that tell a player which keys to press were drawn in an ink
+  this repository had already ruled out of carrying text.** `drawFooter`'s
+  control hint row and `drawPauseOverlay`'s `P to resume` were `C.GRAY`, index
+  8, which resolves to `#555555` on the `#000000` the renderer leaves unpainted
+  behind it: **2.82:1**, under the 3:1 a large-text minimum asks for, before
+  anything is laid over it. A browser pass at 1400x900 read it at 2.38:1 on
+  average and **2.12:1** at the worst cell with `#crt` up, which is on out of
+  the box, and 1.64:1 on the scanlined pixel rows against 2.38:1 on the
+  untouched ones. Both rows are now `C.WHITE`, at **9.04:1** dark and
+  **7.85:1** light, so each clears 3:1 in both schemes with the overlay up.
+  `DESIGN_LANGUAGE.md` reached the same verdict for the documentation site
+  before the game did - it rules `GRAY` out of carrying text there at 2.82:1,
+  rules `LIGHT_INK[8]` out at 3.06:1, and picks `WHITE` at 9.04:1 for the
+  site's body text - so the site held to a figure the renderer did not, and
+  this is the game catching up rather than a new policy. What is given up is
+  the hierarchy, those rows having been deliberately fainter than the HUD above
+  them; the trade is stated beside the change, because a hint nobody can read
+  is quieter than intended rather than quiet by design. `GRAY` keeps the sites
+  that carry no instruction: the spent cells of the shield bar, the fading end
+  of a particle, the ghost ship, an unselected menu row beside a cyan selected
+  one, an eliminated pilot's name in the versus standings. Both builds, and the
+  figures are recorded at both drawing sites in each. Two sites that do carry
+  an instruction were missed and still draw it at 2.82:1: the title screen's
+  key list, where the key names are `BRIGHT_CYAN` and the half of each line
+  saying what the key does is not, in both builds; and each versus half's own
+  key legend row, which `drawVersus` lays down itself rather than calling
+  `drawFooter`, and which `versusHintRow` writes to the rule the footer's own
+  forms follow. `TODO.md` carries both as a code review override.
+- **`ignoredByRepo` read a leading-whitespace `.gitignore` rule the lenient way
+  its own docstring refused.** `ignoreRules` opened with
+  `.map((line) => line.trim())`, and `trim()` drops leading whitespace as well
+  as trailing where git drops only trailing: `  CHANGELOG-2026.md` is a pattern
+  for a file whose name begins with two spaces, so git leaves
+  `CHANGELOG-2026.md` tracked. Checked against git in a scratch repository
+  rather than argued - `git check-ignore -v` reported only the unindented rule
+  while the parser answered `true` for both. The answer is spent on the relaxed
+  branch of `changelog: every pointer and the file it names agree, in both
+  directions`, where `true` passes, so a `CHANGELOG.md` pointer naming an
+  absent archive would have been accepted as excluded-on-purpose while git
+  excluded nothing - the hand edit that check exists to catch. That is the
+  lenient direction, and `ignoredByRepo`'s docstring claimed the strict one.
+  Now `.replace(/\s+$/, '')`, which still takes the `\r` of a CRLF line and
+  leaves an indented rule unmatched the way git leaves it; both docstrings say
+  what is read, and a new case pins the two ends of a line apart with five
+  injected fixtures. No input in this tree ever reached it: nothing in this
+  repository's own `.gitignore` is indented, and the file's existing fixtures
+  passed arrays that were already trimmed, so nothing exercised either end.
+- **The depth ramp item's far-to-near figure disagreed with its own four
+  means.** `TODO.md` stated the four bands' mean linear luminance as 0.00211,
+  0.01720, 0.16064 and 0.46728 far-to-near and then closed "far wall to near
+  wall is 167x", where those means give **221x**. The means are the
+  corroborated half - all seven contrast figures in the same item derive from
+  them exactly - and 167 is the count of `#00005f` readings the same item gives
+  for band 1 three lines later, so the ratio is the stray. Re-derived rather
+  than retaken, and the item says which it is. Taken at face value, 167x made
+  the far pair look three times better separated than the means say, which is
+  the opposite of what the rest of the item argued.
+
+### Added
+
+- **`test/palette-contrast.test.mjs` - the contrast readings as arithmetic,
+  because the browser they were taken in is the one place they will not be
+  taken again.** A glyph the renderer draws is one `PALETTE` hex over another
+  at a coverage the glyph fixes - `U+2591` a quarter, `U+2592` a half, `U+2593`
+  three quarters, `U+2588` all of it - so relative luminance and the WCAG ratio
+  are closed-form from `themePalette` and run on every change rather than when
+  an agent with a Chromium passes through. Three cases. **The depth ramp**:
+  the four bands are read off `drawTunnel`'s own four lines rather than
+  restated, each weighed at its glyph's coverage, over all sixteen arrangements
+  of the pulse - independent because `pulse` is a function of the row, so two
+  rows in two bands are at different phases of it on one frame. Every
+  arrangement climbs far to near, the span is held to 181.5x-1223.3x, and the
+  tightest band-to-band pair is pinned at **1.0930:1 between bands 1 and 2** as
+  an expected value rather than a floor, no floor worth writing admitting it.
+  **The text inks**: the thirteen inks the renderer writes text in, derived by
+  paren-matching every `putString`, `putStringCenter` and `drawBanner` call in
+  the page and held equal to the table in both directions, each with its ratio
+  against `THEME_BG` in both schemes. **The CRT alphas**: `.26` and `.55`, and
+  the 1px band in a 3px repeat, read off `#crt` through `test/page-style.mjs`
+  rather than restated. Each of the four guards was shown to fail on the thing
+  it pins - a re-inked `LIGHT_INK[8]`, a band given the inks of the one behind
+  it, a fifth wall glyph, a moved scanline alpha - rather than only to pass.
+- **The one input path nothing here can execute, written down where it is read
+  instead of where it is hit.** `padKeys`' docstring and
+  `docs/development.html` now both say that the gamepad poll is stub-only and
+  what that leaves unchecked: the stub proves the mapping - the sectors and
+  deadzone `stickKeys` decides a thumb by, `A` resolving by mode, the release
+  rule `padFireKey` holds a press under - and proves neither that a real pad
+  reports `mapping: 'standard'`, which is the condition the early return turns
+  on, nor that its left stick lands on the axes `PAD_STICK_X` and
+  `PAD_STICK_Y` name. Nor can an unattended run close it, which is why every
+  previous pass reached this wall and recorded it only in machine output
+  `.gitignore` keeps out of the repository: `navigator.getGamepads()` answers
+  four null slots in a headless and a headed Chromium alike, with no
+  `gamepadconnected` event behind it, and Chromium only surfaces a pad once a
+  button on it has been physically pressed. A pad held against a browser by a
+  person is the only thing that closes it. The page's own "Two readings do not
+  survive that move and are not faked" is now three.
+
+### Changed
+
+- **The depth ramp's far pair is accepted, and the figures are recorded where
+  the ramp is chosen.** Nothing about the drawing moved. Band 1 takes
+  `DARK_BLUE` or `BLUE` and band 2 takes `BLUE` or `BRIGHT_BLUE`, so the pulse
+  overlaps the ramp by one rung and the two bands carry the same ink whenever
+  band 1 is on its brighter half and band 2 on its dimmer one - separated then
+  by coverage alone, a quarter of a cell against a half, which is 1.0930:1 and
+  the tightest the ramp ever gets. Against the backdrop the four bands run
+  1.01:1-1.04:1, 1.13:1-1.76:1, 2.70:1-4.40:1 and 7.33:1-17.13:1. Of the three
+  answers the finding left open - accept it and say so, give the far bands inks
+  that cannot coincide, or lift the far end off black - the first is taken: a
+  corridor whose far end fades into the dark is aerial perspective, the
+  screenshot the reading came from shows it reading that way, and the depth is
+  carried by the near end at 2.70:1 and up. The comment above those four lines
+  in both builds now says the far pair is below the threshold a difference can
+  be seen at and is deliberately so, which stops the next reader treating the
+  four as four distinguishable bands, and records both alternatives with what
+  each would cost so the next reader does not have to re-derive them. The four
+  glyphs stay four: `test/warp.test.mjs` walks outward from `tunnelSpan` over
+  that exact set.
 
 ### Notes
 
+- Six items, all of them findings an earlier turn's review agents queued: four
+  under `### UI/UX Override - the five readings a stub DOM cannot take` and two
+  under `### Code Review Override - two figures that disagree with what they
+  are read off`, both `#### Found Issues` and so both tier 1. **987 of 987
+  tests passing, nothing skipped**, against 983 before - the four new cases are
+  the three in `test/palette-contrast.test.mjs` and the indented-rule case in
+  `test/changelog-roll.test.mjs`. Every file was handed back LF, which
+  `.gitattributes` pins here. Across the five source and documentation files the
+  work touched - `index.html`, `src/render.ts`,
+  `test/changelog-roll.test.mjs` and the two pages - `git diff --numstat`
+  reports 233 insertions against 8 deletions, and nearly all of the insertions
+  are prose: the behaviour that moved is four `C.GRAY` tokens becoming
+  `C.WHITE`, two in each build, and one `.trim()` becoming a `.replace`.
+  `TODO.md`'s own figures are not comparable with those, its diff being mostly
+  the archiver rolling six finished items out to `TODO-archive.md`. The new case
+  file is 496 lines, 241 of them comment or docstring
+  and 12 of them assertions, which is the ratio this suite's files already run
+  at and for the reason they do - the figures are the deliverable, and a figure
+  with no account of how it was taken is a figure the next reader re-measures.
+- `.gitignore` still reads as `w/mixed` under `git ls-files --eol` while the
+  index holds it as `lf`. Two CRLF lines of thirty, predating every turn that
+  has recorded it, costing no diff because `.gitattributes` normalizes on
+  checkin - recorded rather than repaired, the file being the owner's. Reading
+  which two they are turned out to matter to the fix above: they are
+  `"CHANGELOG-*.md \r"` and `"TODO-archive.md \r"`, the repository's two archive
+  rules, and each carries a trailing space as well as the `\r`. So the trailing
+  half of the old `trim()` was load-bearing on this very file and only the
+  leading half was wrong, which is why the fix drops one end rather than
+  neither. The `\r` itself never reaches a rule - `lines` splits on `/\r?\n/`
+  and has eaten it already - but the space does, and `^CHANGELOG-[^/]*\.md $`
+  matches no archive. Checked by stripping nothing and running the file: the
+  first case still passed, because `CHANGELOG-2026.md` is present in this
+  working copy and `existsSync` short-circuits before `ignoredByRepo` is asked,
+  so the break would have surfaced only in a clone - exactly the failure
+  0.16.10 was spent on. The new case is what catches it here.
+- The code review of this turn corrected the first entry above, which had
+  claimed the two re-inked rows were the only screen text telling a player
+  which keys to press and that `GRAY` now carries no instruction anywhere.
+  Three further findings are queued under
+  `### Code Review Override - what the new prose claims and the code does not`,
+  all of the same shape: a sentence this turn wrote that a reader would act on
+  and the tree does not support. No source behaviour was touched, and 987 of
+  987 still pass.
+- The entries below under **Notes** were written by the 11-27-26 review turn,
+  which applied no version and left them under `## [Unreleased]`. This version
+  drains that section, so they ship here.
 - A review turn. `## Current` was empty and carried no pause marker, and the
   only level 3 header under it is
   `### Create and Deploy GitHub Pages Override`, which is excluded from the
@@ -5032,120 +5201,3 @@
   own box together with the bar's padding into one token that named neither, so a
   change to `--s2` moved the wide `--bar` and left the narrow one declaring a
   height nothing drew.
-
-## [0.7.4-alpha] - 2026-09-28
-
-### Added
-
-- `test/probes.test.mjs`, the first coverage the measurement rig has. Four
-  checks: every probe takes exactly the flags `test/probes/probes.mjs` lists for
-  it, read off the parameters its own `run()` destructures; the table names
-  every flag the rig parses and no others; a refused flag exits non-zero with a
-  message naming it; and naming no probe prints the table. The last two are
-  spawned end to end, because a non-zero exit is what `CHEATSHEET.md`,
-  `docs/cheatsheet.html` and `docs/development.html` all promise a caller.
-- `test/probes/probes.mjs`, the probe table in a module something can import.
-  `test/probes/run.mjs` reads `process.argv` at the top level and awaits the
-  probe it names, so nothing could read the table without running a probe -
-  which is why the table went unchecked for as long as it did.
-- Four checks in `test/docs-site.test.mjs`, all decided from the stylesheet as
-  text and none needing a browser: the caret button draws the same border box as
-  the link beside it, the bar draws the height `--bar` declares and the scroll
-  offset clears it, every dropdown button is named by an `aria-label`, and the
-  sheet resolves to the scheme it is written in. A browser was the only thing
-  that had ever checked the first two, and neither was right.
-- `--clear` in `docs/assets/style.css`: what it takes to clear the fixed bar,
-  as `--bar` plus a `--s2` gap. The scroll offset for an in-page anchor and the
-  page frame's top padding both read it.
-
-### Changed
-
-- `declarationsFor` in `test/page-style.mjs` folds the top-level cascade only.
-  A rule inside an at-rule is left out rather than folded in, because the module
-  has no viewport and no colour scheme to test a prelude against. A caller that
-  wants a conditional block walks `rules` and reads `at` itself, which is what
-  `test/docs-site.test.mjs` already does for the rule that reveals a dropdown.
-- `--bar` is declared once per layout rather than once. Wide it is a menu entry
-  - a `--s5` line box with `--s2` above and below it inside a 1px border - in
-  the bar's own `--s2` padding under its 2px bottom border, which is 60px.
-  Narrow the menu hangs off the bottom of the bar instead of sitting in it, so
-  the bar is the MENU button and stays at `--s7` plus 2px, 50px.
-- The menu's links and its dropdown buttons state their line box as `--s5`
-  rather than inheriting the body's 1.65. That is the one term in the bar's
-  height that was not already a token, and it is what makes the link and the
-  caret beside it the same height.
-- The spacing scale's 64px step is gone from the stylesheet. `--s8` had exactly
-  two readers, the scroll offset and the page frame's top padding, and both read
-  `--clear` now; `DESIGN_LANGUAGE.md` records the scale as `--s1` through
-  `--s7` and says why.
-- `test/probes/run.mjs` imports the table instead of declaring it, and its
-  header says where the table went and what reads it.
-
-### Fixed
-
-- The fixed bar drew 83.09px on a desktop against the 50px `--bar` declared.
-  `.menu` is a `ul` and its entries are `li`, so `p, ul, ol, table, pre` gave
-  the menu a 16px bottom margin and `li` gave each entry 8px, and both landed
-  inside a bar that reasoned about neither. Measured in chromium at every width
-  from 861px to 1920px; 860px and below were correct all along, which is why the
-  one rule that reads `--bar` - the collapsed menu's `max-height` - never looked
-  wrong. The nav's lists state their own spacing now, with the `--s2` between
-  the open phone menu's entries restated as the menu's `gap`. The drawn bar is
-  60.00px at every one of those widths and `--bar` resolves to 60px.
-- Seven of the eight in-page anchors the nav carries parked their heading
-  underneath the bar. `scroll-padding-top` was `--s8`, 64px, picked to clear a
-  50px bar and 19px short of the 83px one: at 1280x900 `usage.html#controls` was
-  19.15px behind it, `development.html#tests` 19.06px, and
-  `getting-started.html#play-in-terminal` 13.75px, with roughly the top half of
-  each `h2` hidden and nothing on screen saying why. All eight clear the bar
-  now, by 7.94px to 9.34px. `.wrap`'s top padding was the same miscalculation
-  and was 2px under the bar on a phone.
-- The caret buttons drew a shorter box than the link beside them. Their only
-  flex item is the 10px `::after`, so the line box came to 16.50px where the
-  link's was 23.10px, and the border boxes to 34.50px against 41.09px -
-  `.has-sub`'s `align-items: center` then centred the shorter one, so moving the
-  pointer or the focus from a page link onto its own caret shrank and re-centred
-  the outlined box. On `docs/usage.html` it showed with no interaction at all:
-  the current page's underline was painted at y 49.09 and the caret's bottom
-  border at y 45.80. Both are 42px now at every wide width measured. The glyph
-  is still 10px - that is its font size, not its box.
-- The Reference button announced the caret glyph as part of its name. CSS
-  generated content is not in the DOM but does take part in the accessible name,
-  and Reference is the one group whose button carries its own text, so its name
-  was computed from contents: read out of the accessibility tree in chromium it
-  was `"Reference v"` closed and `"Reference ^"` open, which reads the
-  decoration aloud and re-reads the name on every toggle that `aria-expanded`
-  already carries. It carries `aria-label="Reference"` now, the same mechanism
-  the three caret-only buttons already used, and
-  `getByRole('button', { name: 'Reference', exact: true })` matches it.
-- `test/page-style.mjs` recorded the at-rule preludes every rule sits inside and
-  then folded rules regardless of them. On `index.html` this could not show -
-  one `:root`, no `@media` - but on `docs/assets/style.css`, which
-  `test/docs-site.test.mjs` points the same module at, `styleSheet(css).properties`
-  came back as the light scheme: `--page` resolved to `#f2f2f4` where the base
-  block declares `#000000`. The doc comment called those "the custom properties
-  the sheet declares on `:root`", which is the dark scheme, so the function and
-  its own description disagreed.
-- The probe rig's flag table was the contract and nothing checked it. Its own
-  comment says "a probe gaining or losing an argument is a line changed here
-  rather than a flag silently ignored", and nothing in `test/` reached it:
-  dropping `count` from the destructuring in `test/probes/column.mjs` left
-  `npm run probe -- column --grid 80x24 --build browser --count 6` accepted,
-  still printing "contact: 24 placements" and still reporting a figure a caller
-  reads as a narrowed walk, with all 460 tests green. That mutation now fails
-  the suite, naming the probe and what it destructures against what the table
-  lists.
-- `docs/cheatsheet.html` is the page `CHEATSHEET.md` is published as, and it was
-  two edits behind it. This release's paragraph naming `test/probes/probes.mjs`
-  and `test/probes.test.mjs` was missing from the page entirely, and 0.7.3's
-  "and which flags each probe takes" was missing from the sentence above it, so
-  the site's Probes section had said neither. Both are on the page now, and
-  every prose paragraph of `CHEATSHEET.md` and of `QUICKSTART.md` is carried by
-  the page it is published as. Nothing in the suite compares the two, which is
-  why it went twice.
-
-### Notes
-
-- 468 tests, from 460. All eight new ones were checked by mutation: each fix was
-  reverted in turn and the assertion written for it failed, including the two
-  that only a browser had ever caught.

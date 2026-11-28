@@ -164,6 +164,105 @@ its origin survives archiving into `## Complete`.
   - From: UI/UX Override - the two re-inked hint rows, and the depth ramp left
     alone
 
+### Code Review Override - what the new prose claims and the code does not
+
+#### Resolve Issues
+
+- [ ] Hint Row Ink 2
+  - **Issue**: the re-ink is sound and the account of it is not. Four places
+    written this turn say the two rows that moved were all the screen text
+    telling a player which keys to press, and that `GRAY` now carries none:
+    `index.html`'s and `src/render.ts`'s comments above `drawFooter`'s hint row
+    ("GRAY stays everywhere it is not carrying words a player has to read"),
+    `TEXT_CONTRAST`'s docstring in `test/palette-contrast.test.mjs` ("the two
+    rows on screen that tell a player which keys to press" and "What GRAY still
+    draws is quiet by design and carries no instruction"), and the release note,
+    which the review corrected in place. Two sites still draw an instruction in
+    `GRAY` at 2.82:1. `index.html:4740` draws each versus half's key legend row
+    there - `drawVersus` lays its own footer row down instead of calling
+    `drawFooter`, and `versusHintRow`'s own docstring calls it "the rule the
+    footer's own two forms follow, over three", so it is the same row the fix
+    moved, missed in the one mode where it is the only control legend on screen.
+    `index.html:3889` and `src/menu.ts:317` draw the title screen's key list,
+    where `BRIGHT_CYAN` carries the key names at 17.13:1 and `GRAY` carries the
+    half of each line that says what the key does - ` - steer ship`,
+    ` - boost  |  `, ` - fire pulse cannon`, ` - barrel roll` - and the whole
+    `Dodge obstacles / Collect energy orbs / Survive!` row, that row having no
+    cyan half at all. Both are reached before a player has pressed anything.
+  - **Goal**: decide whether those two sites move as well, then make the prose
+    true of whatever is decided. The versus legend is the narrower call of the
+    two, being the same row under a different draw path; the title list is a
+    legend whose keys already clear 3:1 and whose descriptions do not, so it may
+    want a different answer from the row it sits above. If any of it moves, the
+    light figure wants taking with the dark one, the way the completed item
+    asked. Whatever lands, the sentence that says where `GRAY` is left has to
+    name what it is actually left on, in all four places at once - two of them
+    are a comment in each build of one function, and the repository has spent
+    four versions on one decision stated twice and drifting.
+  - From: UI/UX Override - the five readings a stub DOM cannot take
+
+- [ ] Pad Poll Record 1
+  - **Issue**: the record says the opposite of what the suite does on the one
+    sentence a reader would act on. `index.html:5150` has "The polling is below
+    the canvas marker, so nothing calls it either", and
+    `docs/development.html:48` has "The polling itself is below the marker, so
+    no case calls it either". Three cases call it and assert what it returns:
+    `test/browser-wiring.test.mjs:455`, `:475` and `:488` - "a pad's A button
+    fires pilot 1 in a round and nobody else", "takes the rematch on a settled
+    round" and "launches a run from the title screen". Each sets `dom.gamepads`
+    through `page().pad(padSnapshot(...))`, and `test/helpers.mjs:456` gives the
+    stub `navigator.getGamepads: () => dom.gamepads`, so `index.html:5639`
+    passes its own `typeof navigator?.getGamepads !== 'function'` guard, polls,
+    and `p.padFire` is read back off it. The file's own header lists "the
+    gamepad poll" among what it drives. What is true is the narrower claim the
+    same docstring makes four lines earlier - that no run of the suite has
+    executed this against hardware - and `docs/development.html` opens the
+    paragraph on the broader "the one input path nothing here reaches at all",
+    which the rest of its own sentences then contradict.
+  - **Goal**: say what is actually uncovered. The poll runs against a stub
+    table of pads; what no case can reach is a device - that `mapping:
+    'standard'` is reported, that the left stick lands on `PAD_STICK_X` and
+    `PAD_STICK_Y`, and that a pad appears in `getGamepads()` at all without a
+    person pressing a button on it. The published page is the half that matters,
+    since a reader there cannot check it against the suite, and
+    `.claude/commit-mode.request` is already `update`, so the uncorrected
+    sentence publishes with 0.16.11.
+  - From: UI/UX Override - the five readings a stub DOM cannot take
+
+- [ ] Contrast Suite 1
+  - **Issue**: four comments tell a reader the new file pins figures it does not
+    pin, and one of them points at the wrong build. `index.html`'s and
+    `src/render.ts`'s comments above the depth ramp close with "Every figure
+    above is arithmetic over themePalette, and test/palette-contrast.test.mjs
+    holds all of it", and the figures above them include the four bands against
+    the backdrop at 1.01:1-1.04:1, 1.13:1-1.76:1, 2.70:1-4.40:1 and
+    7.33:1-17.13:1. The file asserts the tightest band-to-band pair at
+    1.0930:1 and the far-to-near span at 181.5x-1223.3x and nothing else about
+    the ramp, so six of those eight numbers are held nowhere. The two comments
+    above the hint row close with "holds every figure above against
+    themePalette, in both schemes", and the figures above them include the CRT
+    composite at 2.38:1 average, 2.12:1 worst cell and 1.64:1 on a scanlined
+    row - which the file's own header says it deliberately does not assert,
+    "because the arithmetic does not reproduce what the browser measured". So
+    the comment and the test it names disagree about what the test is for.
+    `src/render.ts` has the pointer wrong as well: its hint-row comment reads
+    "holds every figure above against the palette, in both schemes" and gives a
+    light-mode figure, where that file reads `themePalette`
+    and `THEME_BG` out of `index.html` and says in its own header that
+    "`themePalette` and the light scheme are the browser build's alone". `src/`
+    has no `themePalette`, no `THEME_BG` and no light scheme, and nothing in the
+    suite weighs the terminal build's text inks.
+  - **Goal**: make each pointer name what is behind it. The honest form is that
+    the file holds the two ramp figures and the thirteen ink figures, and that
+    the band-against-backdrop ranges and the composite are published and not
+    pinned - or pin the band ranges, which is the same `over()` and `contrast()`
+    the file already has and would make the sentence true as written. In
+    `src/render.ts` the pointer wants saying for what it is: the figures are the
+    browser build's palette, a terminal's inks are its emulator's, and a reader
+    of that file is being sent to a case about `index.html`.
+  - From: UI/UX Override - the five readings a stub DOM cannot take
+
+
 ## Quick Wins
 
 Small, self-contained changes that build on state and rendering the engine
@@ -242,7 +341,7 @@ the roadmap section each one came from.
     same measurement taken, which this pass did not take: every figure here is
     the dark scheme.
   - From: UI/UX Override - the five readings a stub DOM cannot take
-- [x] Nothing records that the gamepad poll is unreadable by an unattended run
+- [x] **Pad Poll Record**: Nothing records that the gamepad poll is unreadable by an unattended run
   - **Issue**: `pollGamepads` is the one input path no run of this agent can
     verify, and the repository does not say so anywhere a reader would look.
     Checked this pass rather than assumed: `navigator.getGamepads()` returned
@@ -273,7 +372,7 @@ the roadmap section each one came from.
     and where the result is recorded - a pad held against a browser is a minute
     of someone's time and would close this outright.
   - From: UI/UX Override - the five readings a stub DOM cannot take
-- [x] Both contrast readings above are arithmetic, and the suite could hold them
+- [x] **Contrast Suite**: Both contrast readings above are arithmetic, and the suite could hold them
   - **Issue**: a proposal rather than a defect, raised because the two readings
     that found something this pass were taken in a browser and a browser is the
     one place they will never be taken again. Neither actually needs one. A
