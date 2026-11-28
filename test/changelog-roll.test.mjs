@@ -120,6 +120,22 @@ const ruleNames = (pattern, name) => new RegExp(`^${pattern
  * wildcards, trailing whitespace dropped the way git drops it. A line in any
  * other form is dropped here, which leaves it deciding nothing either way.
  *
+ * **Trailing whitespace and leading whitespace are not the same decision, and
+ * `trim()` made them one.** Git drops the trailing kind and keeps the leading
+ * kind, so `  CHANGELOG-2026.md` is a pattern for a file whose name opens with
+ * two spaces and leaves `CHANGELOG-2026.md` tracked - checked against
+ * `git check-ignore -v` in a scratch repository, which reports only the
+ * unindented rule. Trimmed both ends, this answered `true` for the indented
+ * form as well, and `ignoredByRepo`'s answer is spent on the relaxed direction
+ * of the first check below: a `CHANGELOG.md` pointer naming an absent archive
+ * would have been accepted as excluded-on-purpose where git excludes nothing,
+ * which is the hand edit that check exists to catch. That is the lenient
+ * direction, and the header below claims the strict one. So only the trailing
+ * end is dropped, which still takes the `\r` of a CRLF line - this repository's
+ * own `.gitignore` has two of them, though `lines` splits on `\r?\n` and has
+ * already eaten both by the time a rule gets here. A line of nothing but
+ * whitespace comes out empty and is filtered with the blanks, as before.
+ *
  * The `!` is kept rather than dropped with the line, because this repository
  * un-ignores by negation - `.gitattributes`, `.nojekyll` and `.gitignore` itself
  * each have a `!` line and a paragraph of reasoning, and
@@ -128,7 +144,7 @@ const ruleNames = (pattern, name) => new RegExp(`^${pattern
  * not exclude, which is the lenient direction and not the strict one.
  */
 const ignoreRules = (said) => said
-  .map((line) => line.trim())
+  .map((line) => line.replace(/\s+$/, ''))
   .filter((line) => line && !line.startsWith('#'))
   .map((line) => ({ negated: line.startsWith('!'), pattern: line.replace(/^!/, '') }))
   .filter(({ pattern }) => pattern && !pattern.includes('/'));
@@ -150,7 +166,10 @@ const ignoreFile = () => (existsSync(join(REPO_ROOT, '.gitignore')) ? lines('.gi
  * negation below a broader pattern answers false. No `.gitignore` at all, or one
  * whose every line is in a form `ignoreRules` does not read, answers false too
  * and leaves the checks at their strict reading - the safe direction for a file
- * this cannot parse.
+ * this cannot parse. An indented rule is one of those forms, because git keeps
+ * leading whitespace and so does `ignoreRules`: the pattern it names is not the
+ * file, so nothing here excludes and the strict reading stands. `ignoreRules`'
+ * own header has the reading and what the lenient direction cost.
  *
  * `said` is the rule lines, injectable so the case below can hold the ordering
  * to states this repository's own file does not hold.
@@ -275,6 +294,64 @@ test('changelog: an archive .gitignore negates reads as carried, not as excluded
     ignoredByRepo('CHANGELOG-2026.md', ['# CHANGELOG-*.md', 'docs/CHANGELOG-*.md']), false,
     'a comment and a rule with a path in it are the forms this does not read, and a line it'
     + ' cannot parse has to decide nothing rather than exclude'
+  );
+});
+
+test('changelog: an indented ignore rule names an indented file, the way git reads it', () => {
+  // The two ends of a line are two decisions and `trim()` made them one. Git
+  // drops trailing whitespace from a `.gitignore` rule and keeps leading
+  // whitespace, so an indented rule is a pattern for an indented filename and
+  // leaves the unindented file tracked - confirmed with `git check-ignore -v` in
+  // a scratch repository, which reported only the rule written at the margin.
+  //
+  // Which direction that is matters more than the parsing. `ignoredByRepo`'s
+  // answer is spent on the relaxed branch of the first check above, where `true`
+  // passes: read leniently, a pointer naming an absent archive that git does not
+  // exclude is accepted as excluded-on-purpose, which is the hand edit that
+  // check is written to catch. Nothing in this repository's own `.gitignore` is
+  // indented, so no input in the tree ever reached it, and the header above
+  // claimed the strict reading throughout.
+  //
+  // Injected for the same reason the negation fixtures are: these are states the
+  // real file does not hold, and the case above passes arrays that were already
+  // trimmed, so nothing exercised either end of a line at all.
+  //
+  // The trailing half, though, is load-bearing on the real file, which is why
+  // one end is dropped rather than neither. This repository's `.gitignore` holds
+  // its two archive rules as `"CHANGELOG-*.md \r"` and `"TODO-archive.md \r"` -
+  // a trailing space as well as the CR, which is the `w/mixed` that
+  // `git ls-files --eol` reports. The CR never reaches a rule, `lines` having
+  // split on `/\r?\n/` already; the space does, and `^CHANGELOG-[^/]*\.md $`
+  // names no archive. Strip nothing and the first case above still passes here,
+  // because `CHANGELOG-2026.md` is present in this working copy and `existsSync`
+  // short-circuits before `ignoredByRepo` is asked - so the break would surface
+  // only in a clone, which is the failure 0.16.10 was spent on. This case is
+  // what catches it from inside the repository.
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['  CHANGELOG-2026.md']), false,
+    'leading whitespace is part of the pattern git matches, so an indented rule names a file'
+    + ' whose own name is indented and excludes nothing - answering true here is the lenient'
+    + ' direction, and the relaxed branch above spends that answer on a pointer'
+  );
+  assert.equal(
+    ignoredByRepo('  CHANGELOG-2026.md', ['  CHANGELOG-2026.md']), true,
+    'and the file it does name is the indented one, which is what makes the reading a reading'
+    + ' rather than the rule being thrown away'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['CHANGELOG-2026.md   ']), true,
+    'trailing whitespace git drops, so the rule still names the file - dropping neither end'
+    + ' would swing the same check the other way and refuse a pointer git does exclude'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['CHANGELOG-*.md', '   ', '']), true,
+    'a line of nothing but whitespace comes out empty and is filtered with the blanks rather'
+    + ' than becoming a pattern that matches nothing and shadows the rule above it'
+  );
+  assert.equal(
+    ignoredByRepo('CHANGELOG-2026.md', ['CHANGELOG-*.md', '  !CHANGELOG-2026.md']), true,
+    'an indented negation is an indented pattern too, so it does not reach the file and the'
+    + ' rule above it still decides - a `!` only un-ignores from the margin'
   );
 });
 

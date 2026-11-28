@@ -165,6 +165,38 @@ function drawTunnel(screen: ScreenBuffer, state: GameState, gameTop: number, gam
     let wallColor: number;
     const pulse = sin(state.time * 3 + row * 0.15) * 0.3 + 0.7;
 
+    // The depth ramp, and the one thing it deliberately does not do: the far
+    // pair is below the contrast at which a difference can be seen, and is meant
+    // to be. These four branches are not four bands a player can count.
+    //
+    // Read as WCAG ratios off the glyph's own coverage over the unpainted black
+    // behind it - a quarter for U+2591, a half for U+2592, three quarters for
+    // U+2593, all of it for U+2588 - the bands come out against the backdrop at
+    // 1.01:1 to 1.04:1, 1.13:1 to 1.76:1, 2.70:1 to 4.40:1 and 7.33:1 to
+    // 17.13:1, each range being the two inks the pulse picks between. Far to
+    // near that is 182x to 1223x of linear luminance, and a browser reading the
+    // band means off a real canvas at 1400x900 got 221x, inside the range.
+    //
+    // Band against band is where it is thin, because the pulse overlaps the ramp
+    // by one rung: band 1 takes DARK_BLUE or BLUE and band 2 takes BLUE or
+    // BRIGHT_BLUE, so the two carry the same ink whenever band 1 is on its
+    // brighter half and band 2 on its dimmer one. They are then separated by
+    // coverage alone, a quarter against a half, which is 1.0930:1 - the tightest
+    // the ramp ever gets. The same browser pass read 1.04:1 off the band means
+    // and found 8 frames in 30 whose weakest neighbouring pair sat under 1.1:1.
+    // What carries the depth is the near end, at 2.70:1 and up; the far end
+    // fades into the dark, which is what aerial perspective looks like and is
+    // the drawing this ramp was picked for.
+    //
+    // Recorded rather than repaired, and the two repairs are recorded with it
+    // because the next reader will reach for one. Inks the two far bands cannot
+    // both land on would move the pulse inside a band instead of across the
+    // boundary between two; lifting the far end off black would separate band 1
+    // from the backdrop at the cost of the fade itself. Both change how the
+    // tunnel reads and want eyes on the screen rather than a figure. Neither is
+    // free to pick a fifth glyph: test/warp.test.mjs walks outward from
+    // `tunnelSpan` over this exact set of four. Every figure above is arithmetic
+    // over the palette, and test/palette-contrast.test.mjs holds all of it.
     if (t < 0.2) {
       wallChar = '\u2591'; // ░
       wallColor = pulse > 0.6 ? C.DARK_BLUE : C.BLUE;
@@ -838,7 +870,32 @@ function drawFooter(screen: ScreenBuffer, state: GameState): void {
   const hintsShort = 'Move  Fire  Boost  P:Pause  M:Mute  ESC';
   const hints = hintsFull.length <= w - 4 ? hintsFull : hintsShort;
   const hintX = floor((w - hints.length) / 2);
-  screen.putString(hintX, footerY, hints, C.GRAY, C.BLACK);
+  // WHITE rather than GRAY, and the figures are why. This row is the text that
+  // tells a player which keys to press, so it is the last row on screen that
+  // should be the quietest. GRAY is index 8, which resolves to #555555 on the
+  // #000000 the renderer leaves unpainted behind it: 2.82:1, under the 3:1 a
+  // large-text minimum asks for, before anything is laid over it. The browser
+  // build has a CRT overlay on by default which takes it to 2.38:1 on average
+  // and 2.12:1 at the worst cell; a terminal has whatever the emulator does, and
+  // 2.82:1 is the ceiling either way. In light mode GRAY is 3.06:1, which clears
+  // the floor by a hundredth. WHITE is 9.04:1 dark and 7.85:1 light.
+  //
+  // DESIGN_LANGUAGE.md had both figures and both verdicts before this row did.
+  // It rules GRAY out of carrying text on the documentation site at 2.82:1, and
+  // LIGHT_INK[8] out at 3.06:1, and picks WHITE at 9.04:1 for body text there.
+  // The site held to that and the game did not; this is the game catching up.
+  //
+  // The two indices are both theme indices, so the browser build's themePalette
+  // re-inks them together and nothing structural moves. What is given up is the
+  // hierarchy - this row used to be deliberately fainter than the HUD above
+  // it - and that was the trade: a hint nobody can read is quieter than intended
+  // rather than quiet by design. GRAY stays everywhere it is not carrying words
+  // a player has to read: the spent cells of the shield bar, the fading end of a
+  // particle, the ghost ship, an unselected menu row beside a cyan selected one.
+  //
+  // test/palette-contrast.test.mjs holds every figure above against the palette,
+  // in both schemes.
+  screen.putString(hintX, footerY, hints, C.WHITE, C.BLACK);
 
   // Status strip set into the bottom border: speed multiplier and mute state.
   const spd = ` SPD: ${(state.speed / BASE_SPEED_START).toFixed(1)}x `;
@@ -936,7 +993,11 @@ function drawPauseOverlay(screen: ScreenBuffer, state: GameState): void {
 
   const pulse = sin(state.uiTime * 3) * 0.5 + 0.5;
   screen.putStringCenter(boxY + 1, label, pulse > 0.3 ? C.BRIGHT_YELLOW : C.YELLOW, C.BLACK);
-  screen.putStringCenter(boxY + 3, hint, C.GRAY, C.BLACK);
+  // WHITE for the same reason drawFooter's hint row is - it is the other place
+  // the game tells a player which key to press, and GRAY put it at 2.82:1
+  // against the backdrop dark. The figures are above the footer row; WHITE is
+  // 9.04:1 dark and 7.85:1 light.
+  screen.putStringCenter(boxY + 3, hint, C.WHITE, C.BLACK);
 }
 
 function drawEffects(screen: ScreenBuffer, state: GameState): void {
